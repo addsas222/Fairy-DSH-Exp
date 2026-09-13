@@ -34,7 +34,7 @@
 | 包 | 版本 | 许可证 | 来源 |
 | --- | --- | --- | --- |
 | `kokoro-js`（内含 `@huggingface/transformers`） | 1.2.1 | Apache-2.0 | hexgrad/kokoro（Kokoro-82M 权重另见其模型卡） |
-| `@mintplex-labs/piper-tts-web`（内含 `onnxruntime-web`） | 1.0.5 | MIT | Mintplex-Labs 对 diffusion-studio/vits-web 的 fork；Piper 模型 MIT（Rhasspy） |
+| `@realtimex/piper-tts-web`（内含 `onnxruntime-web`） | 1.1.1 | MIT | RealTimeX 对 diffusion-studio/vits-web 的 fork（另两个 fork 的 onnxruntime 基址已失效）；Piper 模型 MIT（Rhasspy） |
 
 引擎默认从 HuggingFace 拉取模型/音色；不可达时可在设置里填 `resourceBase`
 镜像，或改用其他 provider。

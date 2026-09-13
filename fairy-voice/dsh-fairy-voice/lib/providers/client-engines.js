@@ -25,8 +25,11 @@ export const KOKORO_WEB_DEFAULTS = {
   voice: 'af_heart',
   resourceBase: '',
 };
+/* @realtimex/piper-tts-web 而非上游两个 fork：它们把 onnxruntime-web 基址钉在
+ * cdnjs 的 1.18.0 目录上，而该目录没有 1.19+ 才有的 ort-wasm-simd-threaded
+ * 加载器（实测 404），会让引擎每次初始化都失败。 */
 export const PIPER_WEB_DEFAULTS = {
-  moduleUrl: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm',
+  moduleUrl: 'https://cdn.jsdelivr.net/npm/@realtimex/piper-tts-web@1.1.1/+esm',
   voiceId: 'en_US-hfc_female-medium',
   resourceBase: '',
 };

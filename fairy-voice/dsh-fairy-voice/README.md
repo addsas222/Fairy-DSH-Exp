@@ -56,8 +56,13 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 `client-side`，客户端按自己选中的引擎 id 走本地合成）：
 
 - `moduleUrl` 默认指向 jsDelivr 的 ESM 构建，且**钉精确版本**（`kokoro-js@1.2.1`、
-  `@mintplex-labs/piper-tts-web@1.0.5`）；离线或自托管时改成自己的地址即可。
+  `@realtimex/piper-tts-web@1.1.1`）；离线或自托管时改成自己的地址即可。
   该地址会在页面内执行代码，**只填可信来源**。
+- piper 选用 `@realtimex/piper-tts-web` 而非另外两个 fork（`@diffusionstudio/vits-web`、
+  `@mintplex-labs/piper-tts-web`）：后两者把 onnxruntime-web 基址钉在 cdnjs 的 1.18.0
+  目录，而该目录没有 1.19+ 才有的 `ort-wasm-simd-threaded` 加载器（实测 404），
+  引擎每次初始化都会失败。客户端会在初始化前探测该 URL，基址不可用时直接给出
+  可读错误而不是静默降级。
 - `resourceBase`（可选）是模型/音色下载的镜像基址：填了之后，加载与合成期间
   发往 `huggingface.co`（含 `cdn-lfs*.huggingface.co`、`cas-bridge.xethub.hf.co`）
   的请求会被改写到该基址，其余请求不受影响。家在 HuggingFace 不可达的网络

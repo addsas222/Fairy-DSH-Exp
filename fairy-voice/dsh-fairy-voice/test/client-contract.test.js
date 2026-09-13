@@ -315,7 +315,7 @@ test('browser engines are pinned, single-threaded, and can be mirrored', () => {
   // Exact versions: the repo pins every dependency, and a floating major would
   // drift behind the CDN without touching this repo.
   assert.match(source, /kokoro-js@1\.2\.1\/\+esm/);
-  assert.match(source, /@mintplex-labs\/piper-tts-web@1\.0\.5\/\+esm/);
+  assert.match(source, /@realtimex\/piper-tts-web@1\.1\.1\/\+esm/);
   // No SharedArrayBuffer on harness pages: hold the thread count at 1 for the
   // window in which an engine sizes its pool (piper reads it in init()).
   assert.match(source, /Object\.defineProperty\(navigator, 'hardwareConcurrency', \{ configurable: true, get: \(\) => 1 \}\)/);
@@ -325,6 +325,10 @@ test('browser engines are pinned, single-threaded, and can be mirrored', () => {
   // load or synthesis call is in flight.
   assert.match(source, /const MIRROR_HOSTS = /);
   assert.match(source, /withResourceMirror\(config\.resourceBase, /);
+  // Two forks ship a dead onnxruntime base (cdnjs 1.18.0 lacks the 1.19+
+  // threaded loader); fail with that base named instead of degrading silently.
+  assert.match(source, /ort-wasm-simd-threaded\.mjs/);
+  assert.match(source, /引擎的 onnxruntime 基址不可用/);
   assert.match(source, /if \(mirrorDepth === 0 && unmaskedFetch\) \{/);
 });
 

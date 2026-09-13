@@ -293,6 +293,21 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           const module = await importLocalEngineModule(config.moduleUrl);
           const api = typeof module?.TtsSession === 'function' ? module : module?.default ?? null;
           if (typeof api?.TtsSession !== 'function') throw new Error('piper-tts-web 未导出 TtsSession。');
+          // Two upstream forks pin onnxruntime-web at a cdnjs 1.18.0 directory
+          // that lacks the 1.19+ threaded loader (measured 404). Fail with the
+          // base named instead of degrading for a reason nobody can see.
+          if (typeof api.ONNX_BASE === 'string' && api.ONNX_BASE) {
+            const loaderUrl = `${api.ONNX_BASE}ort-wasm-simd-threaded.mjs`;
+            const reachable = await fetch(loaderUrl, { method: 'HEAD' })
+              .then((response) => response.ok)
+              .catch((error) => {
+                diagnostics.warn('local-engine.ort-probe', { engine: 'piper-web' }, error);
+                return true; // A probe failure is not evidence of a dead base.
+              });
+            if (!reachable) {
+              throw new Error(`引擎的 onnxruntime 基址不可用（${loaderUrl}）。请改用 @realtimex/piper-tts-web 或自托管模块。`);
+            }
+          }
           // One session for the whole read: the model and voice download once
           // inside init() and every group reuses the same inference session.
           const session = await withResourceMirror(config.resourceBase, () => withSingleThreadHint(async () => {
@@ -1008,7 +1023,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         label: 'Piper（浏览器内 WASM）',
         key: 'piperWeb',
         fields: [
-          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm' },
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/@realtimex/piper-tts-web@1.1.1/+esm' },
           { name: 'voiceId', label: '音色 ID', placeholder: 'en_US-hfc_female-medium' },
           { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
         ]
