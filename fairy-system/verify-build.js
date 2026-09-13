@@ -68,7 +68,7 @@ const packages = [
   {
     dir: path.join(dshRoot, 'fairy-memory', 'dsh-fairy-memory'),
     name: 'dsh-fairy-memory',
-    sourceRoot: null,
+    sourceRoot: 'src',
     // Provider credentials are host-side settings; neither face may build auth
     // material or reach into agent internals.
     forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],

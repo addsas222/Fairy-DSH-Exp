@@ -28,6 +28,7 @@
     "dsh-fairy-contracts": "link:../../fairy-contracts"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "bundle": "node scripts/bundle.mjs"
   }
 }

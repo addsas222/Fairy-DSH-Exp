@@ -59,6 +59,10 @@ function createFixture() {
       mkdirSync(join(source, 'src', 'client'), { recursive: true });
       writeFileSync(join(source, 'src', 'client', 'index.js'), 'export function apply() {}\n');
     }
+    // Every fixture package gets a source tree: packages that build declare
+    // `sourceRoot: 'src'` and the verifier checks that it exists.
+    mkdirSync(join(source, 'src'), { recursive: true });
+    writeFileSync(join(source, 'src', 'index.js'), 'export function apply() {}\n');
     writeFileSync(join(source, 'lib', 'index.js'), 'export function apply() {}\n');
     writeFileSync(join(source, 'lib', 'client.js'), `window.__ModuleLoader__.load({ id: ${JSON.stringify(name)}, factory: () => ({}) });\n`);
     linkDirectory(relative(nodeModules, source), join(nodeModules, name));
