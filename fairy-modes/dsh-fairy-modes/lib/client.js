@@ -63,6 +63,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const diagnostics = createFairyDiagnostics('dsh-fairy-modes');
 
     const CHIP_SLOT = 'conversation.session.header.utilities';
+    const SETTINGS_SLOT = 'settings.section';
     const STATE_URL = '/fairy-modes/state';
     const SET_URL = '/fairy-modes/set';
     /* Our own change notification: the projection frame covers the normal path,
@@ -75,6 +76,24 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       { value: 'ptc', label: '建造·PTC' },
       { value: 'create', label: '创造·回忆' },
       { value: 'off', label: '关闭' },
+    ];
+    /* New-session default: a browser preference, not host state. The chip reads
+     * it here and applies it once per session through the same bridge the menu
+     * uses, so the host stays the single owner of a session's mode. */
+    const DEFAULT_KEY = 'dsh.fairyModes.default.v1';
+    const APPLIED_PREFIX = 'dsh.fairyModes.applied.';
+    /** The modes the bridge accepts; local because the browser half loads alone. */
+    const MODE_VALUES = ['off', 'ptc', 'create'];
+    const DEFAULT_MODE_OPTIONS = [
+      { value: '', label: '不设置（新会话保持 off）' },
+      { value: 'ptc', label: '建造·PTC' },
+      { value: 'create', label: '创造·回忆' },
+      { value: 'off', label: '关闭·off' },
+    ];
+    const MODE_SEMANTICS = [
+      { term: '极简', text: '官方 plan-mode，与下面的会话模式正交：在输入框输入 /plan（或点会话头 chip 的「探查·极简」）切换。' },
+      { term: '建造·PTC', text: '用 run_code 编排脚本系列，一次调用完成多步执行；先规划命令序列再执行。' },
+      { term: '创造·回忆', text: '先调用 session_recall 回忆本项目全部历史，再回答；技能制作写 SKILL.md，插件制作运行 fairy-system/scaffold-plugin.js。' },
     ];
 
     const chipButton = {
@@ -95,6 +114,114 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       background: 'transparent', color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
       font: 'var(--dsw-font-xs-strong-13, 12px system-ui)', textAlign: 'left', cursor: 'pointer',
     };
+    const card = {
+      display: 'grid', gap: '8px', padding: '12px',
+      border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))', borderRadius: '10px',
+      font: 'var(--dsw-font-xs-strong-13, 12px system-ui)',
+      color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+    };
+    const cardNote = {
+      margin: 0, color: 'var(--dsw-alias-label-secondary, rgba(200,200,200,0.9))', lineHeight: '1.6',
+    };
+    const cardField = { display: 'grid', gap: '4px' };
+    const cardSelect = {
+      padding: '5px 8px', border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))',
+      borderRadius: '6px', background: 'var(--dsw-alias-bg-layer-1, #1f1f1f)',
+      color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+      font: 'var(--dsw-font-xs-strong-13, 12px system-ui)',
+    };
+
+    /** Browser storage is absent in some embeds (and under tests): treat it as empty. */
+    function storageOf(kind) {
+      try {
+        return typeof window === 'object' && window !== null ? window[kind] ?? null : null;
+      } catch (error) {
+        diagnostics.warn('storage', { kind }, error);
+        return null;
+      }
+    }
+
+    function readStored(storage, key) {
+      if (storage === null) return null;
+      try {
+        return storage.getItem(key);
+      } catch (error) {
+        diagnostics.warn('storage-read', { key }, error);
+        return null;
+      }
+    }
+
+    /** `null` clears the key; returns whether the write landed. */
+    function writeStored(storage, key, value) {
+      if (storage === null) return false;
+      try {
+        if (value === null) storage.removeItem(key);
+        else storage.setItem(key, value);
+        return true;
+      } catch (error) {
+        diagnostics.warn('storage-write', { key }, error);
+        return false;
+      }
+    }
+
+    function normalizeStoredMode(value) {
+      const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      return MODE_VALUES.includes(mode) ? mode : undefined;
+    }
+
+    /** The configured new-session mode, or undefined when unset/unreadable. */
+    function defaultMode() {
+      return normalizeStoredMode(readStored(storageOf('localStorage'), DEFAULT_KEY));
+    }
+
+    function isApplied(sessionId) {
+      return readStored(storageOf('sessionStorage'), `${APPLIED_PREFIX}${sessionId}`) !== null;
+    }
+
+    function markApplied(sessionId) {
+      return writeStored(storageOf('sessionStorage'), `${APPLIED_PREFIX}${sessionId}`, '1');
+    }
+
+    /** A failed application must stay retryable, so its mark is dropped again. */
+    function clearApplied(sessionId) {
+      return writeStored(storageOf('sessionStorage'), `${APPLIED_PREFIX}${sessionId}`, null);
+    }
+
+    /**
+     * Apply the configured new-session default, once per session.
+     *
+     * The bridge state carries the folded fairyMode projection, where `off` is
+     * both "never chosen" and "chosen off": the fold keeps no event count, so
+     * that value is the only observable the browser has. A session already
+     * handled in this tab is left alone by its own mark, which a manual chip
+     * selection sets too.
+     *
+     * @param sessionId - the session the chip is showing.
+     * @param state - the `/fairy-modes/state` payload the chip just read.
+     */
+    // ponytail: `off` 无法区分「从未设置」与「显式关闭」，当次会话的手动选择由本地已应用标记兜住；升级路径：让 /fairy-modes/state 返回事件计数（需改 bridge）。
+    async function applyDefaultMode(sessionId, state) {
+      if (typeof sessionId !== 'string' || sessionId === '') return;
+      if ((state?.mode ?? 'off') !== 'off') return;
+      const mode = defaultMode();
+      if (mode === undefined || isApplied(sessionId)) return;
+      markApplied(sessionId);
+      try {
+        const response = await fetch(SET_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, mode }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || result?.ok === false) {
+          clearApplied(sessionId);
+          diagnostics.warn('apply-default', { sessionId, mode, status: response.status, error: result?.error });
+        }
+      } catch (error) {
+        clearApplied(sessionId);
+        diagnostics.warn('apply-default', { sessionId, mode }, error);
+      }
+    }
 
     /**
      * The bridge snapshot, refreshed on session change and on the change event.
@@ -111,7 +238,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             const response = await fetch(`${STATE_URL}?sessionId=${encodeURIComponent(sessionId)}`);
             if (!response.ok) return;
             const value = await response.json();
-            if (live) setState(value);
+            if (!live) return;
+            setState(value);
+            await applyDefaultMode(sessionId, value);
           } catch (error) {
             diagnostics.warn('state', { sessionId }, error);
           }
@@ -182,6 +311,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           diagnostics.warn('set', { sessionId, mode: value }, error);
           return;
         }
+        // A manual choice owns this session: the new-session default must not
+        // re-apply behind it.
+        markApplied(sessionId);
         window.dispatchEvent(new CustomEvent(EVENT_CHANGED, { detail: { sessionId, mode: value } }));
       };
 
@@ -236,10 +368,71 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       });
     }
 
+    /**
+     * The settings card: mode semantics, plus the browser-side default the chip
+     * applies to sessions that carry no mode yet. Nothing here is host state, so
+     * the card needs no endpoint and no settings scope — only the preference.
+     */
+    function ModesSettingsSection() {
+      const [value, setValue] = React.useState(() => defaultMode() ?? '');
+      const change = (event) => {
+        const next = normalizeStoredMode(event.target.value) ?? '';
+        setValue(next);
+        writeStored(storageOf('localStorage'), DEFAULT_KEY, next === '' ? null : next);
+      };
+      return jsx.jsx('div', {
+        'data-dsh-fairy-modes-settings': 'true',
+        style: card,
+        children: [
+          jsx.jsx('p', {
+            style: cardNote,
+            children: '会话模式是记录在会话日志里的协作状态，不是进程开关；建造与创造互斥，极简（官方 plan-mode）与它们正交。',
+          }),
+          jsx.jsx('dl', {
+            style: { display: 'grid', gap: '6px', margin: 0 },
+            children: MODE_SEMANTICS.map(item => jsx.jsx('div', {
+              key: item.term,
+              style: { display: 'grid', gap: '2px' },
+              children: [
+                jsx.jsx('dt', { style: { fontWeight: 600 }, children: item.term }),
+                jsx.jsx('dd', { style: { ...cardNote, margin: 0 }, children: item.text }),
+              ],
+            })),
+          }),
+          jsx.jsx('label', {
+            htmlFor: 'dsh-fairy-modes-default',
+            style: cardField,
+            children: [
+              jsx.jsx('span', { children: '新会话默认模式' }),
+              jsx.jsx('select', {
+                id: 'dsh-fairy-modes-default',
+                'data-dsh-fairy-modes-default': 'true',
+                value,
+                onChange: change,
+                style: cardSelect,
+                children: DEFAULT_MODE_OPTIONS.map(option => jsx.jsx('option', {
+                  key: option.value === '' ? 'none' : option.value,
+                  value: option.value,
+                  children: option.label,
+                })),
+              }),
+            ],
+          }),
+          jsx.jsx('p', {
+            style: cardNote,
+            children: '默认值只作用于还没有模式记录的新会话；本会话里手动切换过（或已应用过默认值）后不再重复应用。',
+          }),
+        ],
+      });
+    }
+
     function apply(ctx) {
       return diagnostics.guard('apply', () => {
-        const dispose = injectModesSlot(ctx, CHIP_SLOT, { id: 'fairy-modes-chip', order: 20 }, FairyModesChip);
-        ctx.effect(() => () => { if (typeof dispose === 'function') dispose(); }, 'dsh-fairy-modes chip registration');
+        const disposers = [
+          injectModesSlot(ctx, SETTINGS_SLOT, { id: 'fairy-modes', order: 29, label: () => '模式' }, ModesSettingsSection),
+          injectModesSlot(ctx, CHIP_SLOT, { id: 'fairy-modes-chip', order: 20 }, FairyModesChip),
+        ].filter((dispose) => typeof dispose === 'function');
+        ctx.effect(() => () => { for (const dispose of disposers) dispose(); }, 'dsh-fairy-modes slot registrations');
       }, { surface: 'client' });
     }
 

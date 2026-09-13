@@ -37,6 +37,9 @@ node --check "$DSH_ROOT/fairy-startup/dsh-fairy-startup/lib/index.js"
 node --check "$DSH_ROOT/fairy-startup/dsh-fairy-startup/lib/client.js"
 node --check "$DSH_ROOT/fairy-voice/dsh-fairy-voice/lib/index.js"
 node --check "$DSH_ROOT/fairy-voice/dsh-fairy-voice/lib/client.js"
+for provider_file in "$DSH_ROOT/fairy-voice/dsh-fairy-voice/lib/providers"/*.js; do
+  node --check "$provider_file"
+done
 node --check "$DSH_ROOT/fairy-persona/dsh-fairy-persona/lib/index.js"
 node --check "$DSH_ROOT/fairy-persona/dsh-fairy-persona/lib/client.js"
 node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/index.js"

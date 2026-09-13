@@ -10,7 +10,10 @@ window.__ModuleLoader__.load({
     const SETTINGS_SECTION = 'settings.section';
     const CHIP_SLOT = 'conversation.session.header.utilities';
     const NONE_LABEL = '不使用人格包（部署默认）';
-    const CHIP_TOOLTIP = '在设置→人格中切换';
+    const CHIP_TOOLTIP = '点击切换人格包';
+    /* The input only carries the id; the host is the one that judges it, so a
+     * rejected id comes back on the result line instead of a disabled button. */
+    const SCAFFOLD_PLACEHOLDER = '新人格包 id（小写字母、数字、连字符）';
 
     /* The persona selection lives on the host (it applies deployment-wide), so
      * the client keeps no copy of it: every surface reads this one catalog,
@@ -91,10 +94,24 @@ window.__ModuleLoader__.load({
       const [preview, setPreview] = React.useState(null);
       const [busy, setBusy] = React.useState(false);
       const [error, setError] = React.useState(null);
+      const [roots, setRoots] = React.useState([]);
+      const [newId, setNewId] = React.useState('');
+      const [creating, setCreating] = React.useState(false);
+      const [result, setResult] = React.useState(null);
       const selectedId = draft === null ? state.activeId : draft;
 
       React.useEffect(() => {
         refresh().catch((failure) => { setError(failure.message); });
+      }, []);
+
+      React.useEffect(() => {
+        let alive = true;
+        request('/fairy-persona/roots').then((value) => {
+          if (alive) setRoots(Array.isArray(value?.roots) ? value.roots : []);
+        }, (failure) => {
+          if (alive) setError(failure.message);
+        });
+        return () => { alive = false; };
       }, []);
 
       React.useEffect(() => {
@@ -120,6 +137,22 @@ window.__ModuleLoader__.load({
           setError(failure.message);
         }).finally(() => {
           setBusy(false);
+        });
+      };
+
+      const create = () => {
+        setCreating(true);
+        setError(null);
+        setResult(null);
+        return request('/fairy-persona/scaffold', { method: 'POST', body: { id: newId.trim() } }).then((value) => {
+          setResult({ ok: true, text: `已创建：${value.path}` });
+          setNewId('');
+          // The pack exists; a failed re-read only leaves the list one scan stale.
+          return refresh().catch((failure) => { setError(failure.message); });
+        }, (failure) => {
+          setResult({ ok: false, text: failure.message });
+        }).finally(() => {
+          setCreating(false);
         });
       };
 
@@ -161,6 +194,41 @@ window.__ModuleLoader__.load({
               children: busy ? '切换中…' : '切换人格'
             })
           ] }),
+          jsx.jsxs('div', { className: 'dsh-fairy-persona-roots', 'data-dsh-fairy-persona-roots': roots.join(' | '), children: [
+            jsx.jsx('span', { className: 'dsh-fairy-persona-label', children: '扫描根' }),
+            roots.length
+              ? roots.map(root => jsx.jsx('code', { key: root, className: 'dsh-fairy-persona-root', children: root }))
+              : jsx.jsx('p', { className: 'dsh-fairy-persona-hint', children: '扫描根尚未就绪。' }),
+            jsx.jsx('p', { className: 'dsh-fairy-persona-hint', children: '用文件管理器打开上述目录即可直接新增或编辑人格包；改动后重新打开本面板即可看到。' })
+          ] }),
+          jsx.jsxs('div', { className: 'dsh-fairy-persona-scaffold', children: [
+            jsx.jsx('span', { className: 'dsh-fairy-persona-label', children: '新建人格包' }),
+            jsx.jsxs('div', { className: 'dsh-fairy-persona-inline', children: [
+              jsx.jsx('input', {
+                className: 'dsh-fairy-persona-input',
+                type: 'text',
+                value: newId,
+                placeholder: SCAFFOLD_PLACEHOLDER,
+                disabled: creating || !state.ready,
+                'data-dsh-fairy-persona-scaffold-input': 'true',
+                onChange: (event) => { setNewId(event.target.value); }
+              }),
+              jsx.jsx('button', {
+                className: 'dsh-fairy-persona-button',
+                type: 'button',
+                disabled: creating || !state.ready || newId.trim() === '',
+                'data-dsh-fairy-persona-scaffold-submit': 'true',
+                onClick: create,
+                children: creating ? '创建中…' : '创建'
+              })
+            ] }),
+            jsx.jsx('p', {
+              className: 'dsh-fairy-persona-result',
+              'data-ok': result ? String(result.ok) : '',
+              'data-dsh-fairy-persona-scaffold-result': result ? result.text : '',
+              children: result ? result.text : '在扫描根的首个（用户根）生成模板包：persona.yml / prompt.md / tone.json。'
+            })
+          ] }),
           jsx.jsx('p', { className: 'dsh-fairy-persona-status', 'data-error': error ? 'true' : 'false', children: error || (state.activeId ? `已启用：${state.activeName || state.activeId}` : '未启用人格包，使用部署默认人格。') })
         ] })
       ] });
@@ -168,19 +236,73 @@ window.__ModuleLoader__.load({
 
     function PersonaChip() {
       const state = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+      const [open, setOpen] = React.useState(false);
+      const [error, setError] = React.useState(null);
+      const rootRef = React.useRef(null);
       React.useEffect(() => {
-        refresh().catch(() => {});
+        refresh().catch((failure) => { setError(failure.message); });
       }, []);
+      React.useEffect(() => {
+        if (!open) return undefined;
+        const onPointerDown = (event) => {
+          if (!rootRef.current || !rootRef.current.contains(event.target)) setOpen(false);
+        };
+        const onKeyDown = (event) => { if (event.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+          document.removeEventListener('mousedown', onPointerDown);
+          document.removeEventListener('keydown', onKeyDown);
+        };
+      }, [open]);
       // No persona is the deployment-default state, and an empty chip would
-      // only take header space.
+      // only take header space; the settings card is where the first pack is
+      // created, and the chip switches once one is active.
       if (!state.activeId) return null;
-      return jsx.jsx(Tooltip, { label: CHIP_TOOLTIP, children: jsx.jsx('span', {
-        className: 'dsh-fairy-persona-chip',
+      const name = state.activeName || state.activeId;
+      const choose = (id) => {
+        setError(null);
+        // A failure keeps the menu open, so its message is where the click was.
+        selectPersona(id).then(() => { setOpen(false); }, (failure) => { setError(failure.message); });
+      };
+      return jsx.jsxs('span', {
+        ref: rootRef,
+        className: 'dsh-fairy-persona-chip-wrap',
         'data-dsh-fairy-persona-chip': state.activeId,
-        role: 'note',
-        'aria-label': `当前人格：${state.activeName || state.activeId}。${CHIP_TOOLTIP}`,
-        children: state.activeName || state.activeId
-      }) });
+        children: [
+          jsx.jsx(Tooltip, { label: CHIP_TOOLTIP, children: jsx.jsx('button', {
+            className: 'dsh-fairy-persona-chip',
+            type: 'button',
+            'aria-haspopup': 'menu',
+            'aria-expanded': open ? 'true' : 'false',
+            'aria-label': `当前人格：${name}。${CHIP_TOOLTIP}`,
+            onClick: () => setOpen(!open),
+            children: name
+          }) }),
+          open ? jsx.jsxs('div', { className: 'dsh-fairy-persona-menu', role: 'menu', children: [
+            jsx.jsx('button', {
+              className: 'dsh-fairy-persona-menu-row',
+              type: 'button',
+              role: 'menuitemradio',
+              'aria-checked': state.activeId === '' ? 'true' : 'false',
+              'data-dsh-fairy-persona-option': '',
+              onClick: () => choose(''),
+              children: NONE_LABEL
+            }),
+            ...state.packs.map(pack => jsx.jsx('button', {
+              key: pack.id,
+              className: 'dsh-fairy-persona-menu-row',
+              type: 'button',
+              role: 'menuitemradio',
+              'aria-checked': pack.id === state.activeId ? 'true' : 'false',
+              'data-dsh-fairy-persona-option': pack.id,
+              onClick: () => choose(pack.id),
+              children: pack.name
+            })),
+            error ? jsx.jsx('p', { className: 'dsh-fairy-persona-menu-error', children: error }) : null
+          ] }) : null
+        ]
+      });
     }
 
     function ensurePersonaStyles() {
@@ -210,7 +332,23 @@ window.__ModuleLoader__.load({
 .dsh-fairy-persona-button:disabled{cursor:not-allowed;opacity:.5}
 .dsh-fairy-persona-status{min-height:18px;margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5}
 .dsh-fairy-persona-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-.dsh-fairy-persona-chip{display:inline-flex;align-items:center;max-width:132px;height:24px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-fairy-persona-roots{display:grid;gap:6px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2)}
+.dsh-fairy-persona-root{display:block;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6;word-break:break-all}
+.dsh-fairy-persona-scaffold{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2)}
+.dsh-fairy-persona-inline{display:flex;gap:8px}
+.dsh-fairy-persona-input{flex:1;min-width:0;height:30px;padding:0 8px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-0);color:var(--dsw-alias-label-primary);font-size:13px}
+.dsh-fairy-persona-input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.dsh-fairy-persona-result{min-height:18px;margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;word-break:break-all}
+.dsh-fairy-persona-result[data-ok="true"]{color:var(--dsw-alias-state-success-primary, var(--dsw-alias-label-primary))}
+.dsh-fairy-persona-result[data-ok="false"]{color:var(--dsw-alias-state-error-primary)}
+.dsh-fairy-persona-chip-wrap{position:relative;display:inline-flex}
+.dsh-fairy-persona-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:60;display:grid;min-width:152px;max-height:280px;overflow:auto;padding:4px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 10px 28px rgba(0,0,0,.28)}
+.dsh-fairy-persona-menu-row{display:block;width:100%;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.4;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-fairy-persona-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.dsh-fairy-persona-menu-row[aria-checked="true"]{background:var(--dsw-alias-interactive-bg-hover);font-weight:600;color:var(--dsw-alias-brand-primary)}
+.dsh-fairy-persona-menu-error{margin:4px;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:1.5}
+.dsh-fairy-persona-chip{display:inline-flex;align-items:center;max-width:132px;height:24px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-fairy-persona-chip:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary)}
 `;
       (document.head || document.documentElement).appendChild(style);
     }

@@ -12,6 +12,14 @@ window.__ModuleLoader__.load({
     const SETTINGS_AUTO = 'dsh.fairyVoice.autoRead.v4';
     const SETTINGS_VOLUME = 'dsh.fairyVoice.volume';
     const SETTINGS_RATE = 'dsh.fairyVoice.rate.v1';
+    const SETTINGS_BRIEF_THRESHOLD = 'dsh.fairyVoice.briefThreshold.v1';
+    const SETTINGS_ALWAYS_CONTROLS = 'dsh.fairyVoice.alwaysShowControls.v1';
+    const EVENT_ALWAYS_CONTROLS = 'fairy-voice-always-controls';
+    const AUDITION_TEXT = '你好，我是 Fairy。这是一段朗读示例。';
+    const STT_ENDPOINT = '/fairy-voice';
+    /** The client ctx of the app that applied us; the composer slot carries no
+     * write face, so recognized text is inserted through ctx.bail. */
+    let voiceClientCtx = null;
     const PCM_SAMPLE_RATE = 32000;
     const PCM_BYTES_PER_SAMPLE = 2;
     const PLAYBACK_GROUP_SIZE = 4;
@@ -30,6 +38,8 @@ window.__ModuleLoader__.load({
     const VOICE_REPORT_DELAY_MS = 4500;
     const VOICE_REPORT_COOLDOWN_MS = 15000;
     const VOICE_BRIEF_THRESHOLD = 260;
+    /** Live brief threshold: the settings card owns it, playback reads it. */
+    const briefThreshold = { value: VOICE_BRIEF_THRESHOLD };
     const AVAILABILITY_TTL_MS = 30_000;
     const VOICE_STYLE_ID = 'dsh-fairy-voice-controls-style';
     const BROWSER_SPEECH_RATE = 1.0;
@@ -346,6 +356,171 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 
     // The client-side transport boundary keeps local TTS and Voice Brain HTTP
     // details out of playback policy and the settings UI.
+    let scratchAudioContext = null;
+
+    function scratchContext() {
+      if (!scratchAudioContext || scratchAudioContext.state === 'closed') {
+        scratchAudioContext = new AudioContext({ sampleRate: PCM_SAMPLE_RATE });
+      }
+      return scratchAudioContext;
+    }
+
+    async function playSamplesOnce(samples, sampleRate) {
+      const context = scratchContext();
+      if (context.state === 'suspended') await context.resume();
+      const buffer = context.createBuffer(1, samples.length, sampleRate);
+      buffer.getChannelData(0).set(samples);
+      applyPcmEdgeRamp(buffer.getChannelData(0));
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.start();
+      await new Promise((resolve) => { source.onended = resolve; });
+    }
+
+    function pcmBytesToSamples(bytes) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const count = Math.floor(bytes.byteLength / 2);
+      const samples = new Float32Array(count);
+      for (let index = 0; index < count; index += 1) samples[index] = view.getInt16(index * 2, true) / 32768;
+      return samples;
+    }
+
+    async function speakSampleWithSystem(text = AUDITION_TEXT) {
+      if (!window.speechSynthesis) throw new Error('当前浏览器不支持系统朗读。');
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-CN';
+      utterance.rate = BROWSER_SPEECH_RATE;
+      await new Promise((resolve) => {
+        utterance.onend = resolve;
+        utterance.onerror = resolve;
+        window.speechSynthesis.speak(utterance);
+      });
+    }
+
+    /* ---- speech input (STT) -------------------------------------------- */
+
+    function speechRecognitionCtor() {
+      return typeof window === 'undefined'
+        ? null
+        : (window.SpeechRecognition || window.webkitSpeechRecognition || null);
+    }
+
+    function sttProviderId(config) {
+      return typeof config?.provider === 'string' && config.provider ? config.provider : 'browser';
+    }
+
+    function sttLanguage(config) {
+      const provider = sttProviderId(config);
+      const providers = config?.providers || {};
+      const raw = provider === 'openai' ? providers.openai?.language : providers.browser?.lang;
+      return typeof raw === 'string' && raw.trim() ? raw.trim() : 'zh-CN';
+    }
+
+    /** Browser recognition: resolves with text when the engine delivers it. */
+    async function startBrowserSpeech(lang) {
+      const Recognition = speechRecognitionCtor();
+      if (!Recognition) throw new Error('当前浏览器不支持语音识别；请改用 OpenAI Whisper 或自定义 HTTP 提供方。');
+      const recognition = new Recognition();
+      recognition.lang = lang;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      let settle = () => {};
+      const result = new Promise((resolve) => { settle = resolve; });
+      recognition.onresult = (event) => settle(String(event?.results?.[0]?.[0]?.transcript ?? '').trim());
+      recognition.onerror = (event) => settle('');
+      recognition.onend = () => settle('');
+      try {
+        recognition.start();
+      } catch (error) {
+        throw error instanceof Error ? error : new Error('无法启动语音识别。');
+      }
+      return {
+        stop: async () => {
+          try { recognition.stop(); } catch (error) { reportAudioLifecycleFailure('speech stop', error); }
+          return await result;
+        },
+        cancel: () => { try { recognition.abort(); } catch (error) { reportAudioLifecycleFailure('speech abort', error); } },
+      };
+    }
+
+    /** Recorder path: the clip is uploaded to the host, which owns the key. */
+    async function startRecordedSpeech(lang) {
+      const media = navigator.mediaDevices;
+      if (!media?.getUserMedia || typeof MediaRecorder !== 'function') throw new Error('当前浏览器不支持录音。');
+      const stream = await media.getUserMedia({ audio: true });
+      const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      const mimeType = preferred.find((type) => typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (event) => { if (event?.data?.size) chunks.push(event.data); };
+      const ended = new Promise((resolve) => { recorder.onstop = () => resolve(); });
+      const stopTracks = () => { for (const track of stream.getTracks()) track.stop(); };
+      recorder.start();
+      return {
+        stop: async () => {
+          if (recorder.state !== 'inactive') {
+            try { recorder.stop(); } catch (error) { reportAudioLifecycleFailure('recorder stop', error); }
+          }
+          await ended;
+          stopTracks();
+          if (!chunks.length) return '';
+          const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+          const response = await fetch(`${STT_ENDPOINT}/stt`, {
+            method: 'POST',
+            headers: { 'content-type': blob.type || 'audio/webm', ...(lang ? { 'x-fairy-language': lang } : {}) },
+            body: blob,
+          });
+          const value = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(value?.error?.message || '语音识别失败。');
+          return String(value?.text ?? '').trim();
+        },
+        cancel: () => {
+          if (recorder.state !== 'inactive') {
+            try { recorder.stop(); } catch (error) { reportAudioLifecycleFailure('recorder cancel', error); }
+          }
+          stopTracks();
+        },
+      };
+    }
+
+    /** Insert recognized text through the composer's sanctioned slash event. */
+    function insertTranscript(cordisCtx, input, text) {
+      const draft = typeof input?.draft === 'string' ? input.draft : '';
+      const draftRev = input?.draftRev;
+      const separator = draft && !/\s$/.test(draft) ? ' ' : '';
+      if (typeof cordisCtx?.bail === 'function' && typeof draftRev === 'number') {
+        const span = { start: draft.length, end: draft.length, draftRev };
+        if (cordisCtx.bail('slash/input-insert-text', { text: `${separator}${text}`, span }) === true) return true;
+      }
+      // The harness refused the event (or exposes no draft revision): write the
+      // composer directly and report it, so a broken insertion is visible.
+      const field = document.querySelector('textarea, [contenteditable="true"]');
+      if (!field) return false;
+      const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      if (setter) setter.call(field, `${field.value || ''}${separator}${text}`);
+      else field.textContent = `${field.textContent || ''}${separator}${text}`;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      diagnostics.warn('stt.insert-fallback', {});
+      return true;
+    }
+
+    function useAlwaysShowControls() {
+      const read = () => localStorage.getItem(SETTINGS_ALWAYS_CONTROLS) === 'true';
+      return React.useSyncExternalStore((notify) => {
+        // Test doubles (and locked-down embeds) may not carry the event API.
+        if (typeof window.addEventListener !== 'function') return () => {};
+        window.addEventListener(EVENT_ALWAYS_CONTROLS, notify);
+        window.addEventListener('storage', notify);
+        return () => {
+          window.removeEventListener(EVENT_ALWAYS_CONTROLS, notify);
+          window.removeEventListener('storage', notify);
+        };
+      }, read, read);
+    }
+
     function createLocalTtsTransport(fetchImpl = fetch) {
       const request = (operation, url, options) => {
         const startedAt = diagnostics.start();
@@ -383,6 +558,29 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           return request('providers.request', LOCAL_TTS_ENDPOINT + '/providers', { cache: 'no-store', signal }).then(async (response) => {
             const value = await response.json().catch(() => null);
             if (!response.ok || !Array.isArray(value)) throw new Error('无法读取提供方可用性。');
+            return value;
+          });
+        },
+        sttProviders(signal) {
+          return request('stt.providers.request', STT_ENDPOINT + '/stt-providers', { cache: 'no-store', signal }).then(async (response) => {
+            const value = await response.json().catch(() => null);
+            if (!response.ok || !Array.isArray(value)) throw new Error('无法读取识别提供方可用性。');
+            return value;
+          });
+        },
+        sttConfig(signal) {
+          return request('stt.config.request', STT_ENDPOINT + '/stt-config', { cache: 'no-store', signal }).then(async (response) => {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(value?.error?.message || '无法读取语音输入配置。');
+            return value;
+          });
+        },
+        saveSttConfig(patch, signal) {
+          return request('stt.config.save', STT_ENDPOINT + '/stt-config', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch), signal
+          }).then(async (response) => {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(value?.error?.message || '保存语音输入配置失败。');
             return value;
           });
         },
@@ -906,6 +1104,16 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     function VoiceBrainSection() {
+      const [threshold, setThreshold] = React.useState(() => {
+        const stored = Number(localStorage.getItem(SETTINGS_BRIEF_THRESHOLD));
+        return Number.isFinite(stored) && stored > 0 ? stored : VOICE_BRIEF_THRESHOLD;
+      });
+      const changeThreshold = (raw) => {
+        const next = Math.max(0, Math.min(5000, Math.round(Number(raw) || 0)));
+        setThreshold(next);
+        briefThreshold.value = next;
+        localStorage.setItem(SETTINGS_BRIEF_THRESHOLD, String(next));
+      };
       const [configured, setConfigured] = React.useState(false);
       const [apiKey, setApiKey] = React.useState('');
       const [busy, setBusy] = React.useState(false);
@@ -960,6 +1168,15 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '连接状态' }),
             jsx.jsx('span', { className: 'dsh-fairy-voice-brain-value', children: configured ? '已配置 · deepseek-v4-flash' : '未配置' })
           ] }),
+          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
+            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '简报触发字数' }),
+            jsx.jsx('input', {
+              className: 'dsh-fairy-voice-brain-input', type: 'number', min: '0', max: '5000', step: '20',
+              'data-dsh-fairy-brief-threshold': 'true', value: String(threshold),
+              onChange: (event) => changeThreshold(event.target.value), 'aria-label': '简报触发字数'
+            })
+          ] }),
+          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '超过该字数的最终回答会先压成口语简报再朗读；填 0 表示每次都先简报。' }),
           jsx.jsx('input', { className: 'dsh-fairy-voice-brain-input', type: 'password', autoComplete: 'new-password', value: apiKey, onChange: (event) => setApiKey(event.target.value), placeholder: configured ? '输入新 API Key 以替换当前密钥' : '输入 DeepSeek API Key', 'aria-label': 'DeepSeek API Key' }),
           jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
             configured ? jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: clear, children: '移除密钥' }) : null,
@@ -1059,6 +1276,37 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const [busy, setBusy] = React.useState(false);
       const [status, setStatus] = React.useState('正在读取语音引擎配置…');
       const [error, setError] = React.useState(false);
+      const [audition, setAudition] = React.useState({ status: 'idle', error: null });
+      const [alwaysControls, setAlwaysControls] = React.useState(() => localStorage.getItem(SETTINGS_ALWAYS_CONTROLS) === 'true');
+      const toggleAlwaysControls = (next) => {
+        setAlwaysControls(next);
+        localStorage.setItem(SETTINGS_ALWAYS_CONTROLS, String(next));
+        window.dispatchEvent(new CustomEvent(EVENT_ALWAYS_CONTROLS, { detail: next }));
+      };
+      const auditionOnce = async () => {
+        setAudition({ status: 'working', error: null });
+        try {
+          if (provider === 'browser') {
+            await speakSampleWithSystem();
+          } else if (isLocalEngine(provider)) {
+            const engineSettings = localEngineConfig(config, provider);
+            const handle = await openLocalEngine(provider, engineSettings);
+            const clip = await synthesizeLocalEngine(handle, AUDITION_TEXT, engineSettings, scratchContext());
+            await playSamplesOnce(clip.samples, clip.sampleRate);
+          } else {
+            const response = await localTtsTransport.stream(AUDITION_TEXT);
+            if (!response.ok) {
+              const value = await response.json().catch(() => null);
+              throw new Error(value?.error?.message || '试听失败。');
+            }
+            const sampleRate = Number(response.headers?.get?.('x-fairy-sample-rate')) || PCM_SAMPLE_RATE;
+            await playSamplesOnce(pcmBytesToSamples(new Uint8Array(await response.arrayBuffer())), sampleRate);
+          }
+          setAudition({ status: 'idle', error: null });
+        } catch (auditionError) {
+          setAudition({ status: 'error', error: auditionError?.message || '试听失败。' });
+        }
+      };
       // ponytail: availability refreshes on mount, after a save, and on demand.
       // Polling would spend one probe per interval on a value that rarely moves.
       const refreshAvailability = React.useCallback((signal) => localTtsTransport.providers(signal)
@@ -1147,8 +1395,157 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           }) }),
           jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
             jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: () => refreshAvailability(), children: '刷新可用性' }),
+            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy || audition.status === 'working', 'data-dsh-fairy-audition': 'true', onClick: auditionOnce, children: audition.status === 'working' ? '试听中…' : '试听一句' }),
             jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy || !provider, onClick: save, children: busy ? '处理中…' : '保存' })
           ] }),
+          audition.error ? jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': 'true', children: `试听失败：${audition.error}` }) : null,
+          jsx.jsxs('label', { className: 'dsh-fairy-voice-brain-row', children: [
+            jsx.jsx('input', {
+              type: 'checkbox', 'data-dsh-fairy-always-controls': 'true', checked: alwaysControls,
+              onChange: (event) => toggleAlwaysControls(event.target.checked), 'aria-label': '始终显示朗读与语音控件'
+            }),
+            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '始终显示朗读与语音控件（不依赖 H.D.D 视觉模式）' })
+          ] }),
+          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': error ? 'true' : 'false', children: status })
+        ] })
+      ] });
+    }
+
+    const VOICE_STT_PROVIDERS = [
+      {
+        id: 'browser',
+        label: '浏览器识别（免配置）',
+        key: 'browser',
+        fields: [{ name: 'lang', label: '识别语言', placeholder: 'zh-CN' }]
+      },
+      {
+        id: 'openai',
+        label: 'OpenAI Whisper（/audio/transcriptions）',
+        key: 'openai',
+        fields: [
+          { name: 'baseURL', label: '服务地址', placeholder: 'https://api.openai.com/v1' },
+          { name: 'apiKey', label: 'API Key', secret: true },
+          { name: 'model', label: '模型', placeholder: 'whisper-1' },
+          { name: 'language', label: '识别语言', placeholder: 'zh' }
+        ]
+      },
+      {
+        id: 'custom-http',
+        label: '自定义 HTTP 服务',
+        key: 'customHttp',
+        fields: [
+          { name: 'url', label: '请求地址', placeholder: 'http://127.0.0.1:9200/transcribe' },
+          { name: 'headersJson', label: '静态请求头 JSON', placeholder: '{}' },
+          { name: 'responsePath', label: '响应文本路径', placeholder: 'text' }
+        ]
+      }
+    ];
+
+    function sttOption(id) {
+      return VOICE_STT_PROVIDERS.find((entry) => entry.id === id) || VOICE_STT_PROVIDERS[0];
+    }
+
+    function sttDraft(config, id) {
+      const option = sttOption(id);
+      const stored = config?.providers?.[option.key] || {};
+      return Object.fromEntries(option.fields.map((field) => [field.name, typeof stored[field.name] === 'string' ? stored[field.name] : '']));
+    }
+
+    function VoiceSttSection() {
+      const [provider, setProvider] = React.useState(VOICE_STT_PROVIDERS[0].id);
+      const [config, setConfig] = React.useState(null);
+      const [draft, setDraft] = React.useState({});
+      const [availability, setAvailability] = React.useState([]);
+      const [busy, setBusy] = React.useState(false);
+      const [status, setStatus] = React.useState('正在读取语音输入配置…');
+      const [error, setError] = React.useState(false);
+      const refreshAvailability = React.useCallback((signal) => localTtsTransport.sttProviders(signal)
+        .then((value) => { setAvailability(value); })
+        .catch((probeError) => {
+          setAvailability([]);
+          setStatus(probeError?.message || '无法读取识别提供方可用性。');
+          setError(true);
+        }), []);
+      const refresh = React.useCallback(() => {
+        localTtsTransport.sttConfig().then((value) => {
+          const id = sttProviderId(value);
+          setConfig(value);
+          setProvider(id);
+          setDraft(sttDraft(value, id));
+          setStatus('');
+          setError(false);
+        }).catch((loadError) => {
+          setStatus(loadError?.message || '无法读取语音输入配置。');
+          setError(true);
+        });
+        refreshAvailability();
+      }, [refreshAvailability]);
+      React.useEffect(() => { refresh(); }, [refresh]);
+      const selectProvider = (id) => {
+        setProvider(id);
+        setDraft(sttDraft(config, id));
+        setStatus('');
+        setError(false);
+      };
+      const save = async () => {
+        const option = sttOption(provider);
+        setBusy(true); setError(false);
+        try {
+          const value = await localTtsTransport.saveSttConfig({ provider, providers: { [option.key]: draft } });
+          const id = sttProviderId(value);
+          setConfig(value);
+          setProvider(id);
+          setDraft(sttDraft(value, id));
+          setStatus('已保存，下一次语音输入立即生效。');
+          refreshAvailability();
+        } catch (saveError) {
+          setStatus(saveError?.message || '保存失败。');
+          setError(true);
+        } finally { setBusy(false); }
+      };
+      const option = sttOption(provider);
+      const availabilityById = new Map(availability.map((entry) => [entry.id, entry]));
+      const recognitionSupported = typeof window !== 'undefined' && speechRecognitionCtor() !== null;
+      return jsx.jsxs('section', { className: 'dsh-fairy-voice-brain', children: [
+        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-head', children: [
+          jsx.jsx('h2', { className: 'dsh-fairy-voice-brain-title', children: 'Fairy 语音输入' }),
+          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '把说话转成文字并写入输入框（写入后由你确认再发送）。浏览器识别免配置；Whisper 与自定义服务的密钥只保存在本机。' }),
+          recognitionSupported ? null : jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '当前浏览器不支持内置语音识别，请选择 Whisper 或自定义 HTTP 提供方。' })
+        ] }),
+        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: [
+          jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
+            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '提供方' }),
+            jsx.jsx('select', {
+              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-stt-provider': 'true', value: provider,
+              onChange: (event) => selectProvider(event.target.value), 'aria-label': '语音识别提供方',
+              children: VOICE_STT_PROVIDERS.map((entry) => jsx.jsx('option', { value: entry.id, children: entry.label }, entry.id))
+            })
+          ] }),
+          ...option.fields.map((field) => jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
+            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: field.label }),
+            jsx.jsx('input', {
+              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-stt-field': field.name,
+              type: field.secret ? 'password' : 'text', autoComplete: field.secret ? 'new-password' : 'off',
+              value: draft[field.name] ?? '',
+              placeholder: field.secret && draft[field.name] === '***' ? '已保存，输入新值以替换' : field.placeholder || '',
+              onChange: (event) => setDraft((current) => ({ ...current, [field.name]: event.target.value })),
+              'aria-label': field.label
+            })
+          ] }, field.name)),
+          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
+            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: () => refreshAvailability(), children: '刷新可用性' }),
+            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy, onClick: save, children: busy ? '处理中…' : '保存' })
+          ] }),
+          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: VOICE_STT_PROVIDERS.map((entry) => {
+            const current = availabilityById.get(entry.id);
+            return jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
+              jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: entry.label }),
+              jsx.jsx('span', {
+                className: 'dsh-fairy-voice-brain-value', 'data-dsh-fairy-stt-available': entry.id,
+                children: current?.available === true ? '可用' : `不可用 · ${current?.reason || '未检查'}`
+              })
+            ] }, `stt-availability-${entry.id}`);
+          }) }),
           jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': error ? 'true' : 'false', children: status })
         ] })
       ] });
@@ -1519,7 +1916,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume, setSpeechRate };
     }
 
-    function VoiceController({ useSession, sessionId }) {
+    function VoiceController({ useSession, sessionId, input, cordisCtx }) {
       const snapshot = useSession(readVoiceTimeline);
       const sessionKey = String(sessionId ?? snapshot.sessionKey ?? 'empty-chat');
       const activeSessions = activeSessionStore || emptyActiveSessionStore;
@@ -1530,6 +1927,40 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const [autoRead, setAutoRead] = React.useState(() => localStorage.getItem(SETTINGS_AUTO) !== 'false');
       const [volume, setVolume] = React.useState(() => clampVolume(localStorage.getItem(SETTINGS_VOLUME) || '1'));
       const [rate, setRate] = React.useState(() => clampSpeechRate(localStorage.getItem(SETTINGS_RATE) || String(BROWSER_SPEECH_RATE)));
+      const speechRef = React.useRef(null);
+      const [speech, setSpeech] = React.useState({ status: 'idle', error: null });
+      const finishSpeech = React.useCallback(async () => {
+        const active = speechRef.current;
+        if (!active) return;
+        speechRef.current = null;
+        setSpeech({ status: 'working', error: null });
+        try {
+          const text = await active.stop();
+          if (!text) { setSpeech({ status: 'idle', error: null }); return; }
+          const inserted = insertTranscript(cordisCtx || voiceClientCtx, input, text);
+          setSpeech({ status: 'idle', error: inserted ? null : '无法写入输入框，请聚焦输入框后重试。' });
+        } catch (speechError) {
+          setSpeech({ status: 'idle', error: speechError?.message || '语音识别失败。' });
+        }
+      }, [cordisCtx, input]);
+      const startSpeech = React.useCallback(async () => {
+        setSpeech({ status: 'listening', error: null });
+        try {
+          const sttSettings = await localTtsTransport.sttConfig();
+          const lang = sttLanguage(sttSettings);
+          speechRef.current = sttProviderId(sttSettings) === 'browser'
+            ? await startBrowserSpeech(lang)
+            : await startRecordedSpeech(lang);
+        } catch (speechError) {
+          speechRef.current = null;
+          setSpeech({ status: 'idle', error: speechError?.message || '无法启动语音输入。' });
+        }
+      }, []);
+      const toggleSpeech = React.useCallback(() => {
+        if (speechRef.current) { void finishSpeech(); return; }
+        void startSpeech();
+      }, [finishSpeech, startSpeech]);
+      React.useEffect(() => () => { speechRef.current?.cancel?.(); speechRef.current = null; }, []);
       const [audioReady, setAudioReady] = React.useState(false);
       const [baselineReady, setBaselineReady] = React.useState(false);
       const availability = React.useSyncExternalStore(availabilityStore.subscribe, availabilityStore.getSnapshot, availabilityStore.getSnapshot);
@@ -1743,7 +2174,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             // Only final, visibly long answers are sent to the optional cloud
             // brief endpoint. Process reports, reasoning, tools, and short
             // replies always remain local.
-            if (kind === 'final' && Array.from(String(markdown || '')).length >= VOICE_BRIEF_THRESHOLD) {
+            if (kind === 'final' && Array.from(String(markdown || '')).length >= briefThreshold.value) {
               // Resolve the status race on cold start. The normal status
               // effect usually completes first; this bounded wait makes the
               // long-answer path deterministic without delaying short speech.
@@ -1759,7 +2190,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
                 }
               }
             }
-            if (kind === 'final' && voiceBrainConfigured.current && Array.from(String(markdown || '')).length >= VOICE_BRIEF_THRESHOLD) {
+            if (kind === 'final' && voiceBrainConfigured.current && Array.from(String(markdown || '')).length >= briefThreshold.value) {
               dispatchVoiceState({ status: 'briefing', messageId, error: null, sessionKey });
               try {
                 const brief = await createVoiceBrief(markdown, controller.signal);
@@ -1960,6 +2391,17 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         jsx.jsx('span', { className: 'dsh-fairy-voice-waveform', 'data-dsh-fairy-waveform': 'true', 'aria-hidden': 'true', children: waveform }),
         jsx.jsx(Tooltip, { label: `语音音量 ${Math.round(volume * 100)}%`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-volume-input': 'true', disabled: !engineAvailable, min: '0', max: '1', step: '0.05', type: 'range', value: volume, onChange: (event) => setVolume(Number(event.target.value)), 'aria-label': '语音音量', style: { '--dsh-fairy-volume': `${Math.round(volume * 100)}%` } }) }),
         jsx.jsx(Tooltip, { label: `朗读语速 ${rate.toFixed(2)}×`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-rate-input': 'true', disabled: !engineAvailable, min: String(SPEECH_RATE_MIN), max: String(SPEECH_RATE_MAX), step: String(SPEECH_RATE_STEP), type: 'range', value: rate, onChange: (event) => setRate(clampSpeechRate(event.target.value)), 'aria-label': '朗读语速', style: { '--dsh-fairy-volume': `${Math.round(((rate - SPEECH_RATE_MIN) / (SPEECH_RATE_MAX - SPEECH_RATE_MIN)) * 100)}%` } }) }),
+        jsx.jsx(Tooltip, { label: speech.error ? `语音输入：${speech.error}` : speech.status === 'listening' ? '停止并转写' : speech.status === 'working' ? '正在转写…' : '语音输入（转文字）', children: jsx.jsx('button', {
+          type: 'button',
+          className: 'dsh-fairy-voice-auto',
+          'data-dsh-fairy-mic-control': 'true',
+          'data-dsh-fairy-mic-state': speech.error ? 'error' : speech.status,
+          disabled: speech.status === 'working',
+          onClick: toggleSpeech,
+          'aria-label': speech.error ? `语音输入：${speech.error}` : '语音输入',
+          'aria-pressed': speech.status === 'listening',
+          children: jsx.jsx('span', { className: 'dsh-fairy-voice-auto-dot', 'data-dsh-fairy-mic-dot': 'true', 'aria-hidden': 'true' })
+        }) }),
         engine === 'fairy' && state.status === 'error' ? jsx.jsx('span', { title: state.error, style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '12px', maxWidth: '96px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: '朗读失败' }) : null
       ] });
     }
@@ -1982,10 +2424,13 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 
     function SessionScopedVoiceController(props) {
       const hddVisualMode = useHddVisualMode();
+      const alwaysControls = useAlwaysShowControls();
       // In normal DSH mode this slot has no Voice surface or controller
       // lifecycle at all. Switching back to HDD mounts a fresh, session-keyed
       // controller, so mode changes cannot retain audio or DOM ownership.
-      if (!hddVisualMode) return null;
+      // The settings card can lift the gate so the controls stay reachable
+      // for people who keep the visual layer off.
+      if (!hddVisualMode && !alwaysControls) return null;
       // Force a clean controller/ref lifecycle when DSH changes the active
       // session. This prevents playback and seen-message state leaking across
       // conversation providers during the transition frame.
@@ -2038,6 +2483,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     function apply(ctx) {
       return diagnostics.guard('apply', () => {
       ensureVoiceControlStyles();
+      voiceClientCtx = ctx;
+      const storedThreshold = Number(localStorage.getItem(SETTINGS_BRIEF_THRESHOLD));
+      briefThreshold.value = Number.isFinite(storedThreshold) && storedThreshold >= 0 ? storedThreshold : VOICE_BRIEF_THRESHOLD;
       const activeSessions = createActiveSessionStore(ctx.sessions);
       activeSessionStore = activeSessions;
       ctx.effect(() => () => {
@@ -2046,6 +2494,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         clearVoiceSessionStates();
         voiceTimelineStore.clear();
         disposeAvailability();
+        voiceClientCtx = null;
         document.getElementById(VOICE_STYLE_ID)?.remove();
       }, 'dsh-fairy-voice session lifecycle');
       const slotDisposers = [
@@ -2053,6 +2502,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         injectVoiceSlot(ctx, 'conversation.chat.assistant-actions', { id: 'fairy-voice-message-action', order: 20 }, MessageAction),
         injectVoiceSlot(ctx, 'settings.section', { id: 'fairy-voice-brain', order: 30, label: () => '语音简报' }, VoiceBrainSection),
         injectVoiceSlot(ctx, 'settings.section', { id: 'fairy-voice-engine', order: 31, label: () => '语音引擎' }, VoiceEngineSection),
+        injectVoiceSlot(ctx, 'settings.section', { id: 'fairy-voice-stt', order: 32, label: () => '语音输入' }, VoiceSttSection),
       ].filter((dispose) => typeof dispose === 'function');
       ctx.effect(() => () => slotDisposers.forEach((dispose) => dispose()), 'dsh-fairy-voice slot registrations');
       }, { surface: 'client' });

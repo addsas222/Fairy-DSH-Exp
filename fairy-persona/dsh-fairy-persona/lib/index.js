@@ -11,7 +11,7 @@
  * @module dsh-fairy-persona
  */
 
-import { access, readdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,63 @@ const PACK_ID = /^[a-z0-9-]+$/;
 
 /** How much of a pack's prompt the preview endpoint returns. */
 const PROMPT_HEAD_LENGTH = 500;
+
+/**
+ * The tone schema skeleton a scaffolded pack opens with: every key the
+ * renderer reads, holding neutral values, so a fresh pack is already valid.
+ */
+const SCAFFOLD_TONE = {
+  schema_version: '1.0',
+  registers: { operational: 0.5, narrative: 0.5 },
+  formality: 'neutral',
+  humor: { density: 'none', style: '', max_per_turn: 0 },
+  address: { signal: '', policy: 'none', never_in: [] },
+  speech_habits: { openers: [], banned: [] },
+};
+
+/** The neutral opening document a scaffolded pack starts from. */
+const SCAFFOLD_PROMPT = `# 人格文档
+
+在这里描述这个人格包的身份、职责与说话方式。这段文本作为系统提示词的人格段挂载。
+
+## 工作方式
+
+- 先确认目标，再给出步骤；不确定的事实先说明不确定。
+- 只把真实执行过的动作说成已完成，不写客套话。
+- 回答直接、简洁，一次说清一件事。
+`;
+
+/**
+ * A persona.yml scalar the flat reader round-trips: quotes are stripped by the
+ * reader, so they are folded out of the value, and a raw newline would become
+ * a second document line and is folded away too.
+ */
+function yamlScalar(value) {
+  return `"${String(value).replace(/["\r\n]+/g, ' ').trim()}"`;
+}
+
+/**
+ * The three files a scaffolded pack starts from. There is no `voice` block: a
+ * new pack speaks with the deployment default until its author binds one.
+ * @param id - the validated pack id.
+ * @param rawName - the requested display name; the id when absent or blank.
+ * @returns file name to contents, in write order.
+ */
+function scaffoldFiles(id, rawName) {
+  const name = String(rawName ?? '').replace(/[\r\n]+/g, ' ').trim() || id;
+  return new Map([
+    ['persona.yml', [
+      `# ${name} 人格包`,
+      `id: ${id}`,
+      `name: ${yamlScalar(name)}`,
+      'prompt: prompt.md',
+      'tone: tone.json',
+      '',
+    ].join('\n')],
+    ['prompt.md', SCAFFOLD_PROMPT],
+    ['tone.json', `${JSON.stringify(SCAFFOLD_TONE, null, 2)}\n`],
+  ]);
+}
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-persona');
 
@@ -314,6 +371,7 @@ function publicError(code) {
     'invalid-json': '请求体不是合法 JSON。',
     'persona-invalid-id': '人格包 id 只能包含小写字母、数字和连字符。',
     'persona-not-found': '未找到该人格包。',
+    'persona-exists': '该人格包已存在，未覆盖。',
     'persona-not-ready': '人格服务尚未就绪，请稍后重试。',
   };
   return { code, message: messages[code] || '人格操作失败。' };
@@ -323,6 +381,7 @@ function statusFor(code) {
   if (code === 'invalid-json') return 400;
   if (code === 'persona-invalid-id') return 422;
   if (code === 'persona-not-found') return 404;
+  if (code === 'persona-exists') return 409;
   if (code === 'persona-not-ready') return 503;
   return 500;
 }
@@ -475,6 +534,52 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
       return { promptHead: document.prompt.slice(0, PROMPT_HEAD_LENGTH), tone: document.tone };
     },
 
+    /** The scan roots, in precedence order, for a surface that only displays them. */
+    roots() {
+      return roots.map(root => resolve(root));
+    },
+
+    /**
+     * Create a new pack skeleton under the user root (the first scan root), so
+     * the next `list()` scan already serves it: nothing is cached between
+     * requests. The id is validated first and the target directory is created
+     * non-recursively, so an existing pack is never overwritten.
+     * @param request - `{id, name?}`; `name` defaults to the id.
+     * @returns `{ok: true, id, path}` with the created pack directory.
+     */
+    async scaffold(request) {
+      const packId = typeof request?.id === 'string' ? request.id.trim() : '';
+      if (!PACK_ID.test(packId)) throw personaError('persona-invalid-id');
+      const userRoot = resolve(roots[0]);
+      const target = resolve(userRoot, packId);
+      // The id alphabet already rules out traversal; resolving again keeps the
+      // containment guarantee true for a root that reaches the target through
+      // a symlink or a `..` of its own.
+      if (target !== userRoot && !target.startsWith(userRoot + sep)) throw personaError('persona-invalid-id');
+      await mkdir(userRoot, { recursive: true });
+      try {
+        await mkdir(target);
+      } catch (error) {
+        if (error?.code === 'EEXIST') throw personaError('persona-exists', error);
+        throw error;
+      }
+      try {
+        for (const [file, content] of scaffoldFiles(packId, request?.name)) {
+          await writeFile(join(target, file), content, 'utf8');
+        }
+      } catch (error) {
+        // A half-written pack would both scan as broken and block the retry
+        // with "exists"; remove it before reporting the write failure.
+        try {
+          await rm(target, { recursive: true, force: true });
+        } catch (cleanupError) {
+          logger.warn('persona.scaffold.cleanup', { path: target }, cleanupError);
+        }
+        throw error;
+      }
+      return { ok: true, id: packId, path: target };
+    },
+
     /**
      * Re-apply the persisted pack, so a restart keeps the persona. A pack that
      * disappeared from disk only warns: the deployment falls back to no persona.
@@ -527,10 +632,25 @@ export function createFairyPersonaHandlers(service) {
         fail(res, error);
       }
     },
+    roots: async (req, res) => {
+      try {
+        sendJson(res, 200, { roots: service.roots() });
+      } catch (error) {
+        fail(res, error);
+      }
+    },
+    scaffold: async (req, res) => {
+      try {
+        const body = await readJson(req);
+        sendJson(res, 200, await service.scaffold(body));
+      } catch (error) {
+        fail(res, error);
+      }
+    },
   };
 }
 
-const ROUTES = ['list', 'select', 'preview'];
+const ROUTES = ['list', 'select', 'preview', 'roots', 'scaffold'];
 
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {

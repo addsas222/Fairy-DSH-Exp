@@ -255,7 +255,10 @@ test('only mounts the composer voice controller while HDD visual mode is active'
   assert.match(source, /return \(\) => observer\.disconnect\(\)/);
   const scopedController = source.slice(source.indexOf('function SessionScopedVoiceController'), source.indexOf('function MessageAction'));
   assert.match(scopedController, /const hddVisualMode = useHddVisualMode\(\);/);
-  assert.match(scopedController, /if \(!hddVisualMode\) return null;/);
+  // Closed by default; the engine card can lift the gate so the controls stay
+  // reachable when the visual layer is off.
+  assert.match(scopedController, /const alwaysControls = useAlwaysShowControls\(\);/);
+  assert.match(scopedController, /if \(!hddVisualMode && !alwaysControls\) return null;/);
   assert.doesNotMatch(scopedController, /display:\s*none/);
 });
 
@@ -399,6 +402,37 @@ test('releases one-time gesture listeners and plugin-owned styles', () => {
   assert.match(source, /\[audioReady, primeAudio, volume\]/);
   assert.match(source, /style\.setAttribute\('data-plugin', 'dsh-fairy-voice'\)/);
   assert.match(source, /document\.getElementById\(VOICE_STYLE_ID\)\?\.remove\(\)/);
+});
+
+test('speech input ships a mic control, a browser path, and a host upload path', () => {
+  assert.match(source, /'data-dsh-fairy-mic-control': 'true'/);
+  assert.match(source, /'data-dsh-fairy-mic-state': speech\.error \? 'error' : speech\.status/);
+  assert.match(source, /function startBrowserSpeech\(lang\) \{/);
+  assert.match(source, /function startRecordedSpeech\(lang\) \{/);
+  assert.match(source, /MediaRecorder/);
+  assert.match(source, /fetch\(`\$\{STT_ENDPOINT}\/stt`/);
+  assert.match(source, /'x-fairy-language': lang/);
+  // Insertion goes through the composer's sanctioned slash event, with a
+  // reported direct-write fallback instead of a silent one.
+  assert.match(source, /cordisCtx\.bail\('slash\/input-insert-text', \{ text: `\$\{separator}\$\{text}`, span \}\)/);
+  assert.match(source, /diagnostics\.warn\('stt\.insert-fallback', \{\}\)/);
+});
+
+test('the 语音输入 settings card owns provider, fields, and availability', () => {
+  assert.match(source, /id: 'fairy-voice-stt', order: 32, label: \(\) => '语音输入'/);
+  assert.match(source, /'data-dsh-fairy-stt-provider': 'true'/);
+  assert.match(source, /'data-dsh-fairy-stt-field': field\.name/);
+  assert.match(source, /'data-dsh-fairy-stt-available': entry\.id/);
+  assert.match(source, /localTtsTransport\.saveSttConfig\(\{ provider, providers: \{ \[option\.key\]: draft \} \}\)/);
+});
+
+test('the engine card可以试听、可放行常驻控件，简报阈值可调', () => {
+  assert.match(source, /'data-dsh-fairy-audition': 'true'/);
+  assert.match(source, /await speakSampleWithSystem\(\)/);
+  assert.match(source, /pcmBytesToSamples\(new Uint8Array\(await response\.arrayBuffer\(\)\)\), sampleRate\)/);
+  assert.match(source, /'data-dsh-fairy-always-controls': 'true'/);
+  assert.match(source, /'data-dsh-fairy-brief-threshold': 'true'/);
+  assert.match(source, /briefThreshold\.value = next;/);
 });
 
 test('speech rate is user-controlled and drives every engine', () => {

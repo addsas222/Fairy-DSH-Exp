@@ -50,6 +50,33 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 字段：服务地址 / API Key / 模型 / 音色；本机无鉴权服务把 API Key 填任意非空值
 （host 只要求非空，不会对外发送到别处）。
 
+### 语音输入（转文字，STT）
+
+把说话写进输入框（写入后由你确认再发送；不会自动发送）。提供方三选一：
+
+| id | 判定 | 识别方式 |
+| --- | --- | --- |
+| `browser` | 总是可用（需浏览器支持 `SpeechRecognition`） | 浏览器内置识别，`lang` 默认 `zh-CN` |
+| `openai` | 已填 `baseURL` 与 `apiKey` | 浏览器录音（`MediaRecorder`）→ `POST {baseURL}/audio/transcriptions`（multipart，Whisper 形态） |
+| `custom-http` | `url` 合法且 `headersJson` 可解析 | 录音 → `POST {url}` 原始音频 + 静态头，按 `responsePath`（默认 `text`）取文本 |
+
+主机端点：`GET /fairy-voice/stt-providers`、`GET|POST /fairy-voice/stt-config`、
+`POST /fairy-voice/stt`（请求体=原始音频字节，`content-type: audio/*`，可选
+`x-fairy-language`；成功返回 `{ text }`；体上限 8 MiB，超时 60s）。
+写入路径用官方通道 `ctx.bail('slash/input-insert-text', { text, span })`；
+若通道被拒（无 draftRev 或版本差异），退化为直接写输入框并记 `stt.insert-fallback`
+诊断——不静默丢字。
+
+### 朗读与语音控件
+
+- 控件（自动朗读开关 / 麦克风 / 音量 / 语速）默认只在 **H.D.D 视觉模式**下挂载；
+  在 设置 → 语音引擎 勾选「始终显示朗读与语音控件」可放行（持久化于
+  `localStorage['dsh.fairyVoice.alwaysShowControls.v1']`）。
+- 设置 → 语音引擎 有「试听一句」：按当前提供方直接合成一小段并播放
+  （host 走 `/tts`、浏览器引擎走本地合成、系统朗读走 `speechSynthesis`）。
+- 设置 → 语音简报 可调「简报触发字数」（0 = 每次都先简报），值存
+  `localStorage['dsh.fairyVoice.briefThreshold.v1']`。
+
 ### 浏览器内引擎（`kokoro-web` / `piper-web`）
 
 模型完全在浏览器里加载与合成，host 只保存配置（`/tts` 对它们返回 409

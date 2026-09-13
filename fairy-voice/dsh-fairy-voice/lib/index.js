@@ -17,6 +17,12 @@ import {
   createProviderRegistry,
 } from './providers/index.js';
 import { LOCAL_SOVITS_ID } from './providers/local-sovits.js';
+import {
+  STT_DEFAULTS,
+  STT_PROVIDER_CONFIG_FIELDS,
+  STT_PROVIDER_IDS,
+  createSttRegistry,
+} from './providers/stt-index.js';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 
 export const FAIRY_VOICE_SETTINGS_NAMESPACE = 'fairy-voice';
@@ -33,6 +39,14 @@ export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
     kokoroWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
     piperWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
+  }),
+  stt: Object.freeze({
+    provider: STT_DEFAULTS.provider,
+    providers: Object.freeze({
+      browser: Object.freeze({ ...STT_DEFAULTS.providers.browser }),
+      openai: Object.freeze({ ...STT_DEFAULTS.providers.openai }),
+      customHttp: Object.freeze({ ...STT_DEFAULTS.providers.customHttp }),
+    }),
   }),
 });
 
@@ -85,6 +99,27 @@ export const FairyVoiceSettings = z.object({
       bodyTemplate: z.string().default(PROVIDER_CONFIG_DEFAULTS.customHttp.bodyTemplate),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
   }).default({ ...FAIRY_VOICE_SETTINGS_DEFAULTS.providers }),
+  stt: z.object({
+    // Free-form for the same reason as the TTS provider id: an unknown value
+    // must degrade in the registry, not fail namespace registration.
+    provider: z.string().default(STT_DEFAULTS.provider),
+    providers: z.object({
+      browser: z.object({
+        lang: z.string().default(STT_DEFAULTS.providers.browser.lang),
+      }).default({ ...STT_DEFAULTS.providers.browser }),
+      openai: z.object({
+        baseURL: z.string().default(STT_DEFAULTS.providers.openai.baseURL),
+        apiKey: z.string().default(''),
+        model: z.string().default(STT_DEFAULTS.providers.openai.model),
+        language: z.string().default(STT_DEFAULTS.providers.openai.language),
+      }).default({ ...STT_DEFAULTS.providers.openai }),
+      customHttp: z.object({
+        url: z.string().default(''),
+        headersJson: z.string().default(STT_DEFAULTS.providers.customHttp.headersJson),
+        responsePath: z.string().default(STT_DEFAULTS.providers.customHttp.responsePath),
+      }).default({ ...STT_DEFAULTS.providers.customHttp }),
+    }).default({ ...FAIRY_VOICE_SETTINGS_DEFAULTS.stt.providers }),
+  }).default({ ...FAIRY_VOICE_SETTINGS_DEFAULTS.stt }),
 });
 
 /** Every settings field whose value must never reach the browser verbatim. */
@@ -125,16 +160,43 @@ export function createVoiceSettingsBoundary(initial = FAIRY_VOICE_SETTINGS_DEFAU
   return boundary;
 }
 
-/** Wire form: provider section with every sensitive field masked. */
-function sanitizeVoiceSettings(value) {
-  const providers = {};
-  for (const [key, fields] of Object.entries(value?.providers || {})) {
-    providers[key] = Object.fromEntries(Object.entries(fields || {}).map(([name, entry]) => [
+/** Mask one `providers` map; the field-name matcher is provider-agnostic. */
+function maskProviderSections(sections) {
+  const masked = {};
+  for (const [key, fields] of Object.entries(sections || {})) {
+    masked[key] = Object.fromEntries(Object.entries(fields || {}).map(([name, entry]) => [
       name,
       SENSITIVE_FIELD.test(name) && typeof entry === 'string' && entry ? REDACTED : entry,
     ]));
   }
-  return { provider: PROVIDER_IDS.includes(value?.provider) ? value.provider : LOCAL_SOVITS_ID, providers };
+  return masked;
+}
+
+/** Wire form: provider section with every sensitive field masked. */
+function sanitizeVoiceSettings(value) {
+  return {
+    provider: PROVIDER_IDS.includes(value?.provider) ? value.provider : LOCAL_SOVITS_ID,
+    providers: maskProviderSections(value?.providers),
+  };
+}
+
+/** Wire form of the STT section, masked by the same field-name matcher. */
+function sanitizeSttSettings(value) {
+  return {
+    provider: STT_PROVIDER_IDS.includes(value?.stt?.provider) ? value.stt.provider : STT_DEFAULTS.provider,
+    providers: maskProviderSections(value?.stt?.providers),
+  };
+}
+
+/** Keep only writable string fields; a masked secret means "unchanged". */
+function pickKnownFields(fields, allowed) {
+  const picked = {};
+  for (const [name, value] of Object.entries(fields)) {
+    if (!allowed.includes(name) || typeof value !== 'string') continue;
+    if (SENSITIVE_FIELD.test(name) && value === REDACTED) continue;
+    picked[name] = value;
+  }
+  return picked;
 }
 
 /** Inbound write form: known keys only, masked secrets left untouched. */
@@ -152,18 +214,36 @@ function buildVoiceSettingsPatch(body = {}) {
     for (const [key, fields] of Object.entries(providers)) {
       const allowed = PROVIDER_CONFIG_FIELDS[key];
       if (!allowed || !fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
-      const picked = {};
-      for (const [name, value] of Object.entries(fields)) {
-        if (!allowed.includes(name) || typeof value !== 'string') continue;
-        // A masked value means "the operator did not touch this field".
-        if (SENSITIVE_FIELD.test(name) && value === REDACTED) continue;
-        picked[name] = value;
-      }
+      const picked = pickKnownFields(fields, allowed);
       if (Object.keys(picked).length) next[key] = picked;
     }
     if (Object.keys(next).length) patch.providers = next;
   }
   return patch;
+}
+
+/**
+ * Inbound STT write form. Unlike the TTS pair this one is deliberately
+ * forgiving: an unknown provider id or section key is ignored rather than
+ * rejected, so a settings card written against a newer provider list still
+ * saves the fields this host understands. A masked key keeps the stored
+ * secret; an empty string clears it.
+ */
+function buildSttSettingsPatch(body = {}) {
+  const patch = {};
+  if (typeof body.provider === 'string' && STT_PROVIDER_IDS.includes(body.provider)) patch.provider = body.provider;
+  const providers = body.providers;
+  if (providers && typeof providers === 'object' && !Array.isArray(providers)) {
+    const next = {};
+    for (const [key, fields] of Object.entries(providers)) {
+      const allowed = STT_PROVIDER_CONFIG_FIELDS[key];
+      if (!allowed || !fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
+      const picked = pickKnownFields(fields, allowed);
+      if (Object.keys(picked).length) next[key] = picked;
+    }
+    if (Object.keys(next).length) patch.providers = next;
+  }
+  return Object.keys(patch).length ? { stt: patch } : {};
 }
 
 /** Persona voice binding: persona packets describe a provider plus its config. */
@@ -187,6 +267,10 @@ export function personaVoicePatch(voice) {
 }
 
 const MAX_TTS_TEXT_LENGTH = 500;
+/* ponytail: 8 MiB covers a spoken utterance, and 60s covers a natural pause;
+ * dictation far beyond either would need a chunked upload instead. */
+const MAX_STT_BYTES = 8 * 1024 * 1024;
+const STT_TIMEOUT_MS = 60_000;
 const MAX_SENTENCE_LENGTH = 40;
 const TTS_TIMEOUT_MS = 180_000;
 const VOICE_BRIEF_TIMEOUT_MS = 6_500;
@@ -555,6 +639,33 @@ async function readJson(req, maxBytes = 300_000) {
   }
 }
 
+/** Exact media type of a request, lower-cased, with parameters stripped. */
+function requestContentType(req) {
+  const raw = req?.headers?.['content-type'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return String(value || '').split(';')[0].trim().toLowerCase();
+}
+
+/** Optional language override for one utterance; anything else is ignored. */
+function requestLanguage(req) {
+  const raw = req?.headers?.['x-fairy-language'];
+  const value = String(Array.isArray(raw) ? raw[0] : raw ?? '').trim();
+  return /^[\w-]{1,35}$/.test(value) ? value : '';
+}
+
+/** Raw request body reader; the size guard fires before the payload is kept. */
+async function readBuffer(req, maxBytes) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > maxBytes) throw Object.assign(new Error('audio-too-large'), { code: 'audio-too-large' });
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 function publicError(code) {
   const messages = {
     'empty-text': 'Text is required.',
@@ -570,6 +681,8 @@ function publicError(code) {
     'provider-timeout': '语音服务生成超时。',
     'provider-config-invalid': '语音服务配置无效。',
     'provider-unknown': '未知的语音提供方。',
+    'audio-too-large': '音频数据不能超过 8 MiB。',
+    'unsupported-audio-type': '请求体必须是音频数据（audio/*）。',
     'voice-brief-unconfigured': '请先在 Fairy Voice Brain 设置中配置 DeepSeek API Key。',
     'voice-brief-input-too-large': '最终回答过长，已使用原文朗读。',
     'voice-brief-config-invalid': 'Voice Brain 配置文件无效。',
@@ -583,11 +696,24 @@ function publicError(code) {
 function statusFor(code) {
   if (['empty-text', 'text-too-large', 'invalid-json', 'voice-brief-input-too-large', 'provider-config-invalid', 'provider-unknown'].includes(code)) return 400;
   if (['voice-brief-unconfigured', 'voice-brief-config-invalid'].includes(code)) return 422;
+  if (code === 'audio-too-large') return 413;
+  if (code === 'unsupported-audio-type') return 415;
   if (code === 'client-aborted') return 499;
   if (code === 'client-side') return 409;
   if (['local-service-unavailable', 'provider-unavailable'].includes(code)) return 503;
   if (['timeout', 'provider-timeout'].includes(code)) return 504;
   return 502;
+}
+
+/** 409 keeps the shared `client-side` code; the wording is input-specific. */
+function publicSttError(code) {
+  const messages = {
+    'client-side': '浏览器端语音输入',
+    timeout: '语音识别超时。',
+    'provider-failed': '语音识别服务未能完成识别。',
+    'provider-unavailable': '语音识别服务不可用或未配置。',
+  };
+  return messages[code] ? { code, message: messages[code] } : publicError(code);
 }
 
 function createVoiceRequestScope() {
@@ -817,6 +943,91 @@ export function createFairyVoiceHandlers({
   };
 }
 
+/**
+ * STT transport boundary: raw audio in, transcript out. Kept as its own
+ * bundle because it shares no request state with the TTS handlers beyond the
+ * settings boundary (no shared inference pipeline exists to serialize).
+ */
+export function createFairyVoiceSttHandlers({
+  settings = createVoiceSettingsBoundary(),
+  fetchImpl = fetch,
+  stt = createSttRegistry({ fetchImpl }),
+  timeoutMs = STT_TIMEOUT_MS,
+} = {}) {
+  const activeControllers = new Set();
+  return {
+    dispose: () => {
+      for (const controller of activeControllers) controller.abort('disposed');
+      activeControllers.clear();
+    },
+    sttProviders: async (_req, res) => {
+      const startedAt = diagnostics.start();
+      try {
+        sendJson(res, 200, await stt.list(settings.read()));
+      } catch (error) {
+        diagnostics.warn('stt.providers.request', {}, error);
+        sendJson(res, 200, STT_PROVIDER_IDS.map((id) => ({ id, available: false, reason: '检查失败。' })));
+      } finally {
+        diagnostics.metric('stt.providers.request', startedAt, {}, { thresholdMs: 100 });
+      }
+    },
+    sttConfig: async (req, res) => {
+      try {
+        if (req.method === 'GET') {
+          sendJson(res, 200, sanitizeSttSettings(settings.read()));
+          return;
+        }
+        const body = await readJson(req, 20_000);
+        await settings.write(buildSttSettingsPatch(body));
+        sendJson(res, 200, sanitizeSttSettings(settings.read()));
+      } catch (error) {
+        const code = error?.code || (error?.message === 'invalid-json' ? 'invalid-json' : 'provider-config-invalid');
+        diagnostics.warn('stt.config', { code }, error);
+        sendJson(res, statusFor(code), { error: publicError(code) });
+      }
+    },
+    stt: async (req, res) => {
+      const startedAt = diagnostics.start();
+      const scope = createVoiceRequestScope();
+      const controller = scope.controller;
+      activeControllers.add(controller);
+      const totalTimer = scope.timeout(() => scope.cancel('timeout'), timeoutMs);
+      const disconnect = () => controller.abort('client-aborted');
+      const close = () => { if (!res.writableEnded) disconnect(); };
+      req.once('aborted', disconnect);
+      res.once('close', close);
+      try {
+        // The media type is part of the contract, not a hint: a JSON body or a
+        // missing header must fail before any bytes are buffered or forwarded.
+        const contentType = requestContentType(req);
+        if (!contentType.startsWith('audio/')) throw Object.assign(new Error('unsupported media type'), { code: 'unsupported-audio-type' });
+        const audio = await readBuffer(req, MAX_STT_BYTES);
+        const { provider, config } = stt.resolve(settings.read());
+        const result = await provider.transcribe({
+          audio,
+          contentType,
+          language: requestLanguage(req),
+          config,
+          signal: controller.signal,
+        });
+        const text = typeof result?.text === 'string' ? result.text : '';
+        sendJson(res, 200, { text });
+      } catch (error) {
+        const code = error?.code || 'provider-failed';
+        if (!['client-aborted', 'client-side', 'timeout'].includes(code)) diagnostics.warn('stt.request', { code }, error);
+        if (!res.writableEnded) sendJson(res, statusFor(code), { error: publicSttError(code) });
+      } finally {
+        diagnostics.metric('stt.request', startedAt, { aborted: controller.signal.aborted });
+        activeControllers.delete(controller);
+        clearTimeout(totalTimer);
+        req.removeListener('aborted', disconnect);
+        res.removeListener('close', close);
+        scope.cancel('request-complete');
+      }
+    },
+  };
+}
+
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {
   const settings = createVoiceSettingsBoundary();
@@ -835,6 +1046,7 @@ export function apply(ctx) {
     });
   }), 'dsh-fairy-voice persona voice binding');
   ctx.inject(['webServer'], (ws) => ws.effect(() => {
+    const sttHandlers = createFairyVoiceSttHandlers({ settings });
     const unregisterStatus = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/status', handler: handlers.status });
     const unregisterPrepare = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/prepare', handler: handlers.prepare });
     const unregisterTts = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/tts', handler: handlers.tts });
@@ -843,8 +1055,12 @@ export function apply(ctx) {
     const unregisterBrainStatus = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/status', handler: handlers.voiceBrainStatus });
     const unregisterBrainConfig = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/config', handler: handlers.voiceBrainConfig });
     const unregisterBrainBrief = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/brief', handler: handlers.voiceBrief });
+    const unregisterSttProviderList = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/stt-providers', handler: sttHandlers.sttProviders });
+    const unregisterSttConfig = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/stt-config', handler: sttHandlers.sttConfig });
+    const unregisterStt = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/stt', handler: sttHandlers.stt });
     return () => {
       handlers.dispose();
+      sttHandlers.dispose();
       unregisterStatus?.();
       unregisterPrepare?.();
       unregisterTts?.();
@@ -853,6 +1069,9 @@ export function apply(ctx) {
       unregisterBrainStatus?.();
       unregisterBrainConfig?.();
       unregisterBrainBrief?.();
+      unregisterSttProviderList?.();
+      unregisterSttConfig?.();
+      unregisterStt?.();
     };
   }));
   }, { surface: 'host' });

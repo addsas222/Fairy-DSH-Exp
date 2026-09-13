@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { composePersonaText, createFairyPersonaHandlers, createFairyPersonaService } from '../lib/index.js';
+import { composePersonaText, createFairyPersonaHandlers, createFairyPersonaService, parsePersonaYaml } from '../lib/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, 'fixtures');
@@ -58,13 +59,13 @@ function createSettings(active = '') {
   };
 }
 
-function createService({ active = '', reserved = [], logger = recorder() } = {}) {
+function createService({ active = '', reserved = [], logger = recorder(), roots = ROOTS } = {}) {
   const events = [];
   const registry = createRegistry(reserved);
   const settings = createSettings(active);
   const service = createFairyPersonaService(
     { emit: (name, payload) => events.push({ name, payload }) },
-    { roots: ROOTS, logger },
+    { roots, logger },
   );
   service.bind({ settings, systemPrompt: registry });
   return { events, registry, service, settings, logger };
@@ -309,4 +310,126 @@ test('composePersonaText degrades on absent, empty, or malformed tone', () => {
   assert.match(muted, /- 幽默：不使用/);
   assert.match(muted, /- 称呼：不使用/);
   assert.doesNotMatch(muted, /none密度/);
+});
+
+/** A throwaway user root, so scaffold tests never write into the fixtures. */
+const tempUserRoot = () => mkdtemp(join(tmpdir(), 'fairy-persona-user-'));
+
+test('the roots route serves the scan roots, nearest first', async () => {
+  const { service } = createService();
+  const res = createResponse();
+
+  await createFairyPersonaHandlers(service).roots(createRequest(), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { roots: ROOTS.map(root => resolve(root)) });
+  assert.deepEqual(service.roots(), ROOTS.map(root => resolve(root)));
+});
+
+test('scaffold writes a selectable pack under the user root that list serves at once', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const userRoot = join(sandbox, 'personas');
+    const { registry, service } = createService({ roots: [userRoot, join(FIXTURES, 'repo', 'persona-packs')] });
+
+    const created = await service.scaffold({ id: 'my-helper', name: '小助手' });
+
+    assert.deepEqual(created, { ok: true, id: 'my-helper', path: join(userRoot, 'my-helper') });
+    // No voice block: a new pack speaks with the deployment default until bound.
+    assert.deepEqual(parsePersonaYaml(await readFile(join(created.path, 'persona.yml'), 'utf8')), {
+      id: 'my-helper',
+      name: '小助手',
+      prompt: 'prompt.md',
+      tone: 'tone.json',
+    });
+    const tone = JSON.parse(await readFile(join(created.path, 'tone.json'), 'utf8'));
+    assert.deepEqual(Object.keys(tone), ['schema_version', 'registers', 'formality', 'humor', 'address', 'speech_habits']);
+    assert.match(await readFile(join(created.path, 'prompt.md'), 'utf8'), /人格文档/);
+
+    // The next scan already serves it, and the skeleton deploys as-is.
+    assert.ok((await service.list()).some(pack => pack.id === 'my-helper' && pack.name === '小助手'));
+    await service.select('my-helper');
+    assert.match(registry.sections.get(PREFIX).text, /【调色属性（由 tone.json 生成，运行时约束）】/);
+    assert.deepEqual(Object.keys((await service.preview('my-helper')).tone), Object.keys(tone));
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('scaffold defaults the name to the id and folds a hostile name into one parseable document', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const userRoot = join(sandbox, 'personas');
+    const { service } = createService({ roots: [userRoot, join(FIXTURES, 'repo', 'persona-packs')] });
+
+    await service.scaffold({ id: 'plain' });
+    assert.deepEqual(parsePersonaYaml(await readFile(join(userRoot, 'plain', 'persona.yml'), 'utf8')), {
+      id: 'plain',
+      name: 'plain',
+      prompt: 'prompt.md',
+      tone: 'tone.json',
+    });
+
+    // A name carrying a newline or a colon must not become a second YAML line.
+    await service.scaffold({ id: 'quoted', name: 'A\nb: c' });
+    assert.deepEqual(parsePersonaYaml(await readFile(join(userRoot, 'quoted', 'persona.yml'), 'utf8')), {
+      id: 'quoted',
+      name: 'A b: c',
+      prompt: 'prompt.md',
+      tone: 'tone.json',
+    });
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('scaffold refuses an existing pack and an id outside the pack-id alphabet', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const userRoot = join(sandbox, 'personas');
+    const { service } = createService({ roots: [userRoot, join(FIXTURES, 'repo', 'persona-packs')] });
+    await service.scaffold({ id: 'my-helper', name: '小助手' });
+    const before = await readFile(join(userRoot, 'my-helper', 'prompt.md'), 'utf8');
+
+    await assert.rejects(service.scaffold({ id: 'my-helper' }), error => error.code === 'persona-exists');
+    assert.equal(await readFile(join(userRoot, 'my-helper', 'prompt.md'), 'utf8'), before);
+
+    // Traversal, separators, case, spaces, and a missing id never reach the disk.
+    for (const id of ['Fairy', 'my helper', '../escape', 'a/b', '', undefined, 7]) {
+      await assert.rejects(service.scaffold({ id }), error => error.code === 'persona-invalid-id', `id ${String(id)}`);
+    }
+    assert.deepEqual(await readdir(userRoot), ['my-helper']);
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('the scaffold route answers 200, 409, 422, and 400 for its outcomes', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const userRoot = join(sandbox, 'personas');
+    const service = createService({ roots: [userRoot, join(FIXTURES, 'repo', 'persona-packs')] }).service;
+    const handlers = createFairyPersonaHandlers(service);
+
+    const created = createResponse();
+    await handlers.scaffold(createRequest({ id: 'http-pack' }), created);
+    assert.equal(created.statusCode, 200);
+    assert.deepEqual(created.body, { ok: true, id: 'http-pack', path: join(userRoot, 'http-pack') });
+
+    const again = createResponse();
+    await handlers.scaffold(createRequest({ id: 'http-pack' }), again);
+    assert.equal(again.statusCode, 409);
+    assert.deepEqual(again.body, { ok: false, error: { code: 'persona-exists', message: '该人格包已存在，未覆盖。' } });
+
+    const malformed = createResponse();
+    await handlers.scaffold(createRequest({ id: 'Bad_ID' }), malformed);
+    assert.equal(malformed.statusCode, 422);
+
+    const unparseable = createResponse();
+    await handlers.scaffold(Readable.from([Buffer.from('not json')]), unparseable);
+    assert.equal(unparseable.statusCode, 400);
+    assert.equal(unparseable.body.error.code, 'invalid-json');
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
 });
