@@ -1,0 +1,161 @@
+/**
+ * 角色扮演模式的语言规则数据：去AI味词表/句式、回复写作规则、时机门、以及
+ * 风格库与记忆的提示词片段。
+ *
+ * 这些文本按 MaiBot（GPL-3.0，见仓库根 THIRD_PARTY_NOTICES.md）「规划器 → 回复器 →
+ * 去AI味 → 记忆印象」流水线的结构重写，未复制其文本；规则本身是写作常识，
+ * 词表按中文 AI 腔的高频模式自行归纳。
+ *
+ * 纯数据模块：无 IO、无依赖，供 humanizer/pipeline/engine 复用，也便于单测断言。
+ *
+ * @module dsh-fairy-roleplay/rules
+ */
+
+/** 去AI味强度档位，逐层加严；`off` 表示不检查。 */
+export const HUMANIZER_LEVELS = Object.freeze(['off', 'l1', 'l2', 'l3', 'l4']);
+
+/** 档位包含的层数：off=0、l1=1、l2=2、l3=3、l4=4。 */
+export function levelDepth(level) {
+  const index = HUMANIZER_LEVELS.indexOf(typeof level === 'string' ? level.trim().toLowerCase() : '');
+  return index <= 0 ? 0 : index;
+}
+
+/**
+ * L1 命中即删的套话与元话术。`meta` 类是“关于说话本身”的句子（路标词、互动式开场），
+ * 它们不携带信息，只在提醒读者“接下来要说话了”。
+ */
+export const BANNED_PHRASES = Object.freeze([
+  { text: '值得注意的是', kind: 'meta' },
+  { text: '需要注意的是', kind: 'meta' },
+  { text: '综上所述', kind: 'meta' },
+  { text: '总而言之', kind: 'meta' },
+  { text: '总的来说', kind: 'meta' },
+  { text: '让我们来看看', kind: 'meta' },
+  { text: '接下来我们来看', kind: 'meta' },
+  { text: '在当今', kind: 'meta' },
+  { text: '在这个快节奏的时代', kind: 'meta' },
+  { text: '众所周知', kind: 'meta' },
+  { text: '不言而喻', kind: 'meta' },
+  { text: '换句话说', kind: 'meta' },
+  { text: '某种意义上', kind: 'empty' },
+  { text: '某种程度上', kind: 'empty' },
+  { text: '可以说', kind: 'empty' },
+  { text: '毋庸置疑', kind: 'empty' },
+  { text: '不可或缺', kind: 'empty' },
+  { text: '至关重要', kind: 'empty' },
+  { text: '非常关键', kind: 'empty' },
+  { text: '赋能', kind: 'jargon' },
+  { text: '抓手', kind: 'jargon' },
+  { text: '闭环', kind: 'jargon' },
+  { text: '顶层设计', kind: 'jargon' },
+  { text: '底层逻辑', kind: 'jargon' },
+  { text: '拉通', kind: 'jargon' },
+  { text: '对齐颗粒度', kind: 'jargon' },
+  { text: '组合拳', kind: 'jargon' },
+  { text: '生态化布局', kind: 'jargon' },
+  { text: '智能化升级', kind: 'jargon' },
+  { text: '数字化转型', kind: 'jargon' },
+  { text: '深入浅出', kind: 'empty' },
+  { text: '一针见血', kind: 'empty' },
+  { text: '醍醐灌顶', kind: 'empty' },
+  { text: '狠狠地', kind: 'empty' },
+  { text: '稳稳地接住', kind: 'empty' },
+  { text: '深深地', kind: 'empty' },
+  { text: '轻轻地', kind: 'empty' },
+  { text: '缓缓地', kind: 'empty' },
+  { text: '瞬间', kind: 'empty' },
+  { text: '仿佛', kind: 'empty' },
+]);
+
+/** 英文回复额外扫描的 AI 高频词（中文文本不触发）。 */
+export const ENGLISH_SLOP = Object.freeze([
+  'delve into', 'navigate', 'leverage', 'utilize', 'robust', 'seamless',
+  'cutting-edge', 'game-changer', 'paradigm shift', "it's worth noting",
+  "in today's world", 'at the end of the day', 'in conclusion', 'it is important to note',
+]);
+
+/** 命中即改写的句式壳：正则 + 改法。 */
+export const SHELL_PATTERNS = Object.freeze([
+  { rule: 'contrast-shell', pattern: /不是[^。！？\n]{1,24}而是/g, fix: '删掉对比壳，直接说后半句' },
+  { rule: 'sequence-shell', pattern: /首先[^。！？\n]{0,30}其次/g, fix: '拆掉序列结构，改成自然段落顺序' },
+  { rule: 'not-only-shell', pattern: /不仅[^。！？\n]{1,24}而且/g, fix: '拆成两句，各自说清一件事' },
+  { rule: 'meta-shell', pattern: /如果你(愿意|想)[^。！？\n]{0,20}(的话)?[，,]?$/gm, fix: '删掉征求许可的尾巴，直接把话说完' },
+  { rule: 'passive-shell', pattern: /被[^。！？\n]{1,12}(所)?(进行|实施|完成)/g, fix: '改主动语态：谁做了什么' },
+  { rule: 'nominal-shell', pattern: /(进行|实施|开展)了[^。！？\n]{0,10}(的)?(讨论|检查|分析|优化)/g, fix: '动词直用：讨论/检查/分析/优化' },
+  { rule: 'existence-shell', pattern: /[^。！？\n]{2,12}的存在/g, fix: '删掉“的存在”，直接说这个事物做了什么' },
+  { rule: 'process-shell', pattern: /[^。！？\n]{2,12}的过程中/g, fix: '删掉“的过程中”' },
+]);
+
+/** L2 节奏阈值：句长分布与段落同构。 */
+export const RHYTHM = Object.freeze({
+  /** 连续等长句（±该字数）视为节奏单一。 */
+  equalLengthTolerance: 5,
+  /** 连续多少句等长即命中。 */
+  equalRunLength: 3,
+  /** 长句阈值（超过即算长句）。 */
+  longSentenceChars: 30,
+  /** 短句阈值（不足即算短句）。 */
+  shortSentenceChars: 10,
+  /** 单段破折号上限。 */
+  dashesPerParagraph: 2,
+});
+
+/** 回复写作规则：喂给模型的硬约束（也是本包自检的判据来源）。 */
+export const REPLY_RULES = Object.freeze([
+  '短句优先：一句话只表达一个意思，不堆长从句。',
+  '用具体动作词：“看看”不是“进行查看”，“弄”不是“实施相关操作”。',
+  '主动语态：直接说谁做了什么，不用“被…”句式。',
+  '不总结、不升华：说完就停，不加“希望能帮到你”式收尾，不追问“要不要我再…”。',
+  '一个事物一个叫法，不在同一段里换词轮替。',
+  '允许口语、省略、重复和语气词；不必每句语法完整。',
+  '不堆排比，不用“首先…其次…最后”的说明书结构。',
+]);
+
+/** 时机门：什么时候该开口、什么时候闭嘴。 */
+export const TIMING_RULES = Object.freeze([
+  '被点名、被直接提问、或话题明显指向角色时才开口。',
+  '其余情况保持沉默：不产出“我在听”“有什么可以帮你”这类占位回复。',
+  '连续对话里，用户刚说完且期待回应时可以接；用户在自述且没有提问时，短接或不接。',
+  '不确定该不该说话时选择沉默，沉默不扣分，刷存在感扣分。',
+]);
+
+/** 规划器：先判断再说话（Thought → Action 的顺序，不替代角色本身发言）。 */
+export const PLANNER_RULES = Object.freeze([
+  '先判断：当前是否轮到角色说话、用户在等什么、上文有什么约定需要遵守。',
+  '再决定：说什么（内容）、怎么说（语气）、以及是否需要查记忆或风格库。',
+  '需要回顾时先取证据再回答；取不到就说不知道，不编造设定。',
+  '规划文本不出现在回复里；回复里只有角色会说的话。',
+]);
+
+/** 风格学习：从真实对话里抽取「情境 → 表达」对。 */
+export const STYLE_LEARN_INSTRUCTION = Object.freeze([
+  '从给定对话里抽取角色自己的语言习惯，不要学习他人的说话方式。',
+  '每条写成「当 AAAA 时，可以用 BBBB」：AAAA 是场景（≤20 字），BBBB 是可用表达（≤20 字）。',
+  '只输出 JSON 数组，元素形如 {"situation":"…","style":"…"}；没有可学的就输出 []。',
+  '不涉及具体人名与专有名词，不重复已有条目。',
+]);
+
+/** 中期记忆：上下文裁切时的回想摘要。 */
+export const MID_TERM_SUMMARY_INSTRUCTION = Object.freeze([
+  '只总结给定消息，不编造没有出现的信息。',
+  'summary 保留话题脉络、角色设定、已达成的约定与待办，便于之后恢复上下文。',
+  'recall_cues 给 3-5 条自然语言短句，写清“什么情景下会需要这段信息”。',
+  '只输出 JSON 对象 {"summary":"…","recall_cues":["…"]}，不要代码块。',
+]);
+
+/** 聊天印象：把最近互动压成一句可供语义召回的印象。 */
+export const MEMORY_IMPRESSION_INSTRUCTION = Object.freeze([
+  '用一两句自然语言概括最近这段互动：在聊什么、角色的态度、用户在意什么。',
+  '写事实与语气，不写评价；不编造未出现的信息。',
+]);
+
+/**
+ * 把规则数组渲染成提示词块。
+ *
+ * @param title - 块标题。
+ * @param lines - 规则行。
+ * @returns 以标题开头的多行文本。
+ */
+export function renderRuleBlock(title, lines) {
+  return [`## ${title}`, ...lines.map((line) => `- ${line}`)].join('\n');
+}
