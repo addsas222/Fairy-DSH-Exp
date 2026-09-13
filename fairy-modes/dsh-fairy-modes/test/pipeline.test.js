@@ -148,8 +148,11 @@ test('a station change waits for the official gate instead of racing it', async 
   assert.deepEqual(applied, [], 'the mode does not move while the gate is still open');
   assert.equal(state.mode, 'explore', 'the read-only station holds until approval');
   assert.equal(result.advanced, false, 'a blocked advance is not an advance');
+  assert.equal(result.stage, 'explore', 'the report stays on the station that is actually in force');
+  assert.match(result.report, /阶段：探查/, 'the header must not claim the build station was entered');
+  assert.doesNotMatch(result.report, /阶段：建造/, 'a blocked advance never reports the target station');
   assert.match(result.report, /exit_plan_mode/);
-  assert.match(result.report, /批准后再 advance/);
+  assert.match(result.report, /批准后重新发起/, 'the note names the action the caller can repeat');
 });
 
 test('advanced follows the real switch outcome, not the presence of notes', async () => {
