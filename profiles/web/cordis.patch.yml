@@ -91,3 +91,8 @@
     - id: fairy-search
       name: 'dsh-fairy-search'
       inject: [clientModules]
+
+    # 长期记忆:宿主路由 + 设置卡(engine 面由 ponytail preset 挂载)
+    - id: fairy-memory
+      name: 'dsh-fairy-memory'
+      inject: [clientModules]

@@ -24,6 +24,7 @@ const packages = [
   ['dsh-fairy-persona', 'fairy-persona'],
   ['dsh-fairy-modes', 'fairy-modes'],
   ['dsh-fairy-search', 'fairy-search'],
+  ['dsh-fairy-memory', 'fairy-memory'],
 ];
 
 function createFixture() {
@@ -77,7 +78,7 @@ test('accepts complete bundles and profile links', (t) => {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = runVerifier(root);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="8"/);
+  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="9"/);
 });
 
 test('fails before launch when a client bundle is missing', (t) => {

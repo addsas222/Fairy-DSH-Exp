@@ -65,6 +65,15 @@ const packages = [
     forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
     forbiddenClient: [/Authorization/],
   },
+  {
+    dir: path.join(dshRoot, 'fairy-memory', 'dsh-fairy-memory'),
+    name: 'dsh-fairy-memory',
+    sourceRoot: null,
+    // Provider credentials are host-side settings; neither face may build auth
+    // material or reach into agent internals.
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
+    forbiddenClient: [/Authorization/, /DEEPSEEK_API_KEY/],
+  },
 ];
 
 function fail(message) {
@@ -100,7 +109,11 @@ function verifyPackage(contract) {
   const outputs = [...new Set([...targets.values()].map((target) => path.resolve(packageDir, target)))];
   const outputMtime = Math.min(...outputs.map((output) => fs.statSync(output).mtimeMs));
   const manifestMtime = fs.statSync(manifestPath).mtimeMs;
-  if (manifestMtime > outputMtime + 1) {
+  // A package with no `sourceRoot` has no build step: its lib files are the
+  // sources, so "output newer than manifest" could only ever hold by the order
+  // files happened to be written. The check keeps its meaning for the packages
+  // that really do generate lib/* from src/*.
+  if (contract.sourceRoot !== null && manifestMtime > outputMtime + 1) {
     fail(`${manifest.name} manifest is newer than its generated outputs; rebuild and re-verify`);
   }
 

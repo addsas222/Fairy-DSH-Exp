@@ -72,6 +72,19 @@
     - id: fairy-modes-engine
       name: './plugins/fairy-modes.mjs'
 
+# ── 长期记忆(跨会话事实,GBrain 为主) ─────────────────────────────────
+# 记忆工具属 agent 面,与模式引擎同组形态:独立 isolate 域 + preset 内 shim。
+# 引擎本体(设置命名空间 fairy-memory + /fairy-memory/* 路由 + 设置卡)由
+# profile 的 host 行 dsh-fairy-memory 承担;两面读同一份设置。
+- id: fairy-memory
+  name: cordis:group
+  group: true
+  isolate:
+    fairyMemory: true
+  config:
+    - id: fairy-memory-engine
+      name: './plugins/fairy-memory.mjs'
+
 # ── 极简模式(Explore&Check) ─────────────────────────────────────────────
 # 直接复用官方 plan-mode:探查、定案、exit_plan_mode 审批后才进入实施。
 # 主会话 chip 由 dsh-fairy-modes 的客户端读取 `plan` 投影显示。

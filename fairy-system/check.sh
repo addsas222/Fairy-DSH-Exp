@@ -47,6 +47,10 @@ node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/bridge.js"
 node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/client.js"
 node --check "$DSH_ROOT/fairy-search/dsh-fairy-search/lib/index.js"
 node --check "$DSH_ROOT/fairy-search/dsh-fairy-search/lib/client.js"
+node --check "$DSH_ROOT/fairy-memory/dsh-fairy-memory/lib/index.js"
+node --check "$DSH_ROOT/fairy-memory/dsh-fairy-memory/lib/engine.js"
+node --check "$DSH_ROOT/fairy-memory/dsh-fairy-memory/lib/memory-cli.js"
+node --check "$DSH_ROOT/fairy-memory/dsh-fairy-memory/lib/client.js"
 node --check "$ROOT/skill-audit.js"
 node --check "$ROOT/scaffold-plugin.js"
 # runtime/ 是私有资产,公开仓库不含;存在才检查。
@@ -96,4 +100,5 @@ node --test "$DSH_ROOT/fairy-voice/dsh-fairy-voice/test"/*.test.js
 node --test "$DSH_ROOT/fairy-persona/dsh-fairy-persona/test"/*.test.js
 node --test "$DSH_ROOT/fairy-modes/dsh-fairy-modes/test"/*.test.js
 node --test "$DSH_ROOT/fairy-search/dsh-fairy-search/test"/*.test.js
+node --test "$DSH_ROOT/fairy-memory/dsh-fairy-memory/test"/*.test.js
 node --test "$ROOT/test"/*.test.js

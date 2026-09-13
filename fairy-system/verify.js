@@ -32,6 +32,7 @@ const paths = {
   personaPlugin: path.join(dshRoot, 'fairy-persona', 'dsh-fairy-persona'),
   modesPlugin: path.join(dshRoot, 'fairy-modes', 'dsh-fairy-modes'),
   searchPlugin: path.join(dshRoot, 'fairy-search', 'dsh-fairy-search'),
+  memoryPlugin: path.join(dshRoot, 'fairy-memory', 'dsh-fairy-memory'),
   profile: path.join(dshRoot, 'profiles', 'web'),
 };
 
@@ -44,6 +45,7 @@ const publishedPackages = [
   paths.personaPlugin,
   paths.modesPlugin,
   paths.searchPlugin,
+  paths.memoryPlugin,
 ];
 
 function fail(message) {
@@ -110,6 +112,7 @@ function verifyGeneratedArtifactFreshness() {
     [paths.personaPlugin, null],
     [paths.modesPlugin, null],
     [paths.searchPlugin, null],
+    [paths.memoryPlugin, null],
   ]);
   const forbiddenClient = new Map([
     [paths.browserDock, [/child_process/, /playwright-profile/, /Google Chrome\.app/]],

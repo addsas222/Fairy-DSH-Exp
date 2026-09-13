@@ -34,7 +34,8 @@ REPO="$PWD"
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
-            fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search; do
+            fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search \
+            fairy-memory/dsh-fairy-memory; do
   git -C "$REPO" archive HEAD -- "$area" | tar -x -C "$DSH_HOME"
 done
 git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
@@ -44,7 +45,8 @@ git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
-            fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search; do
+            fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search \
+            fairy-memory/dsh-fairy-memory; do
   (cd "$DSH_HOME/$area" && pnpm install --ignore-scripts)
 done
 
@@ -98,7 +100,7 @@ dsh --profile web --no-open --port 0
 
 ```sh
 # 以下命令从仓库根执行；DSH_HOME 已按第 1 节导出（live 布局）
-node fairy-system/verify-build.js                       # 构建契约：8 包，exit 0
+node fairy-system/verify-build.js                       # 构建契约：9 包，exit 0
 node fairy-system/skill-audit.js                        # 技能/插件冗余审计（--self-test 自检）
 ```
 
@@ -173,6 +175,7 @@ fairy    user BROKEN: …      ← 见下
 | `fairy-persona/dsh-fairy-persona/` | 人格包引擎（文档 + 调色属性 + 语音绑定热切换），端点 `/fairy-persona/*` |
 | `fairy-modes/dsh-fairy-modes/` | 三模式引擎（极简/PTC/创造），端点 `/fairy-modes/*`，含 `session_recall` 工具 |
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽（deepseek/exa/perplexity/自定义路由），端点 `/fairy-search/*` |
+| `fairy-memory/dsh-fairy-memory/` | 长期记忆（GBrain 主用；Mem0/自定义 HTTP/本地 Markdown 备选），端点 `/fairy-memory/*` |
 | `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits/openai/elevenlabs-ws/kokoro-web/piper-web/browser/custom-http）+ STT（网上：browser/openai/deepgram/azure/custom-http；本地：whisper-web 浏览器内识别、openai 指向 loopback 服务），端点 `/fairy-voice/*` |
 | `fairy-visual/`、`balance-meter/`、`browser-dock/`、`fairy-startup/` | 视觉舞台、余额、浏览器 Dock、启动动作 |
 | `fairy-contracts/` | 跨插件契约与诊断边界（各插件 `link:` 依赖它） |

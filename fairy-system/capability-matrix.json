@@ -71,6 +71,9 @@
       "conversation.chat.assistant-actions",
       "settings.section"
     ],
+    "memory": [
+      "settings.section"
+    ],
     "messageEdit": [
       "conversation.view",
       "conversation.session.header.actions"

@@ -24,6 +24,9 @@ importers:
       dsh-browser-dock:
         specifier: link:../../browser-dock/dsh-browser-dock
         version: link:../../browser-dock/dsh-browser-dock
+      dsh-fairy-memory:
+        specifier: link:../../fairy-memory/dsh-fairy-memory
+        version: link:../../fairy-memory/dsh-fairy-memory
       dsh-fairy-modes:
         specifier: link:../../fairy-modes/dsh-fairy-modes
         version: link:../../fairy-modes/dsh-fairy-modes

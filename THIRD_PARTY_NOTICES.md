@@ -43,7 +43,7 @@
 
 `fairy-contracts`、`dsh-browser-dock`、`dsh-balance-meter`、
 `dsh-fairy-startup`、`dsh-fairy-visual`、`dsh-fairy-voice`、
-`dsh-fairy-persona`、`dsh-fairy-modes`、`dsh-fairy-search` 是本仓库的原创
+`dsh-fairy-persona`、`dsh-fairy-modes`、`dsh-fairy-search`、`dsh-fairy-memory` 是本仓库的原创
 代码（除其自身依赖外），按根目录 `LICENSE` 和 `NOTICE` 处理。
 
 发布新版本时，应从最终 lockfile 重新核对版本、来源和许可证，并把新增的

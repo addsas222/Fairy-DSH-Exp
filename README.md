@@ -11,6 +11,7 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 - `fairy-persona/`：人格包引擎（人格文档 + 调色属性 + TTS 绑定的热切换）
 - `fairy-modes/`：会话模式引擎（极简 Explore&Check / PTC Build&Work / 创造 Memory&Dream）
 - `fairy-search/`：搜索枢纽（多后端按设置路由 + 控制界面）
+- `fairy-memory/`：长期记忆（GBrain 主用，Mem0 / 自定义 HTTP / 本地 Markdown 备选 + 控制界面）
 - `fairy-system/`：离线检查与验收工具（含 `skill-audit.js` 冗余审计、`scaffold-plugin.js` 插件脚手架）
 - `persona-packs/`：内置人格包（fairy、standard）
 - `profiles/web/`：独立 Web profile 模板
@@ -33,6 +34,8 @@ preset 原地可发现（`dsh --profile web --dump-config` 可核对组合）。
 人格在 设置 → 人格 中选择，与语音引擎（设置 → 语音引擎）按人格包原子绑定；
 人格包格式与扫描根见 `fairy-persona/dsh-fairy-persona/README.md`。
 搜索引擎在 设置 → 搜索引擎 中切换后端（DeepSeek / Exa / Perplexity / 自定义）。
+长期记忆在 设置 → 长期记忆 中选择提供方（GBrain / Mem0 / 自定义 HTTP / 本地 Markdown），
+并显示每个提供方的可用性原因与当前记忆条数。
 语音输入（转文字）在 设置 → 语音输入 中选路线：**本地**用浏览器内 Whisper（音频不出机器）或把
 OpenAI 兼容地址指向本机服务（whisper.cpp / faster-whisper / speaches，loopback 免密钥）；**网上**用
 浏览器识别、Deepgram、Azure 或任意 OpenAI 兼容云端；另有自定义 HTTP 通用模板。
