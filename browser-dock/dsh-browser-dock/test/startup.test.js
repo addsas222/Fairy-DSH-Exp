@@ -29,8 +29,9 @@ test('publishes the dock only after the first presentable frame is complete', as
   const playwright = join(dshHome, 'profiles', 'web', 'node_modules', '.bin', 'playwright-mcp');
   const stateFile = join(dshHome, 'browser-dock', 'state.json');
   await mkdir(dirname(playwright), { recursive: true });
-  await writeFile(playwright, `#!/usr/bin/env node
-const readline = require('node:readline');
+  // npm lays out an extension-less POSIX script plus a `.cmd` for Windows; the
+  // proxy picks whichever its platform can execute, so both shapes are written.
+  await writeFile(`${playwright}.cjs`, `const readline = require('node:readline');
 let navigated = false;
 const blankUrl = 'about:blank';
 const searchUrl = 'https://www.bing.com/search?q=%E7%BB%9D%E5%8C%BA%E9%9B%B6';
@@ -57,8 +58,12 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on('line
     send(message.id, [{ type: 'text', text: 'closed' }]);
   }
 });
+`);
+  await writeFile(playwright, `#!/usr/bin/env node
+require(${JSON.stringify(`${playwright}.cjs`)});
 `, { mode: 0o700 });
   await chmod(playwright, 0o700);
+  await writeFile(`${playwright}.cmd`, `@echo off\r\nnode "%~dp0playwright-mcp.cjs" %*\r\n`);
 
   const child = spawn(process.execPath, [proxyPath], {
     env: { ...process.env, DSH_HOME: dshHome },

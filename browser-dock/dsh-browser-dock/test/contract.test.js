@@ -79,7 +79,10 @@ test('pushes state-file changes and falls back to an 800ms poll', () => {
 });
 
 test('delivers proxy controls by filesystem event with a low-frequency reconciliation fallback', () => {
-  assert.match(proxy, /fs\.watch\(runtimeDir/);
+  // The watched directory must be the resolved long form: a short (8.3) path
+  // component makes libuv assert and abort the proxy on Windows.
+  assert.match(proxy, /fs\.watch\(canonicalDir\(runtimeDir\)/);
+  assert.match(proxy, /fs\.realpathSync\.native\(dir\)/);
   assert.match(proxy, /String\(filename \|\| ''\) === commandFileName/);
   assert.match(proxy, /const commandRescanMs = 5_000/);
   assert.match(proxy, /setInterval\(checkCommands, commandRescanMs\)/);

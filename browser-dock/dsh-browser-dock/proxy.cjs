@@ -15,6 +15,21 @@ process.on('uncaughtExceptionMonitor', (error, origin) => {
 
 const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 const runtimeDir = path.join(dshHome, 'browser-dock');
+
+/**
+ * libuv asserts that the watched directory and the names Windows reports share
+ * a prefix (`fs-event.c`, `!_wcsnicmp(filename, dir, dirlen)`). A short (8.3)
+ * component in `DSH_HOME` - `C:\Users\ADMINI~1\...`, `RUNNER~1` on CI - breaks
+ * that assumption and the assertion aborts this proxy process, leaving the dock
+ * frozen with an orphaned browser child.
+ */
+function canonicalDir(dir) {
+  try {
+    return fs.realpathSync.native(dir);
+  } catch {
+    return dir;
+  }
+}
 const stateFile = path.join(runtimeDir, 'state.json');
 const legacyFrameFile = path.join(runtimeDir, 'frame.jpg');
 const commandFile = path.join(runtimeDir, 'command.json');
@@ -306,7 +321,27 @@ function pollCommands() {
 removeRuntimeFiles();
 publish(inactiveState());
 
-const child = spawn(playwrightCommand, process.argv.slice(2), { stdio: ['pipe', 'pipe', 'pipe'] });
+/* npm writes three shims into `.bin`: an extension-less POSIX shell script plus
+ * `.cmd`/`.ps1` for Windows. Windows cannot execute the extension-less one, so
+ * the platform's own shim is launched instead - with a missing browser start
+ * the dock stayed silent with no error to read. */
+function resolveLauncher(target) {
+  const candidates = process.platform === 'win32'
+    ? [`${target}.cmd`, `${target}.exe`, `${target}.bat`, target]
+    : [target];
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    // `.cmd`/`.bat` are scripts for the command interpreter, not executable
+    // images, and Node refuses to spawn them without a shell.
+    return /[.](?:cmd|bat)$/i.test(candidate)
+      ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', candidate] }
+      : { command: candidate, args: [] };
+  }
+  return { command: target, args: [] };
+}
+
+const launcher = resolveLauncher(playwrightCommand);
+const child = spawn(launcher.command, [...launcher.args, ...process.argv.slice(2)], { stdio: ['pipe', 'pipe', 'pipe'] });
 child.stderr.pipe(process.stderr);
 
 const clientInput = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -363,7 +398,7 @@ try {
   // Commands are atomically renamed into the stable runtime directory. Use
   // directory events for normal low-latency delivery and keep only a slow
   // reconciliation timer for platforms that can drop filesystem events.
-  commandWatcher = fs.watch(runtimeDir, (event, filename) => {
+  commandWatcher = fs.watch(canonicalDir(runtimeDir), (event, filename) => {
     if ((event === 'change' || event === 'rename') && String(filename || '') === commandFileName) checkCommands();
   });
   commandWatcher.on('error', (error) => {
