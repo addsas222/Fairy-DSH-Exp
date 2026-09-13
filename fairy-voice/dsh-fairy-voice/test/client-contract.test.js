@@ -401,6 +401,20 @@ test('releases one-time gesture listeners and plugin-owned styles', () => {
   assert.match(source, /document\.getElementById\(VOICE_STYLE_ID\)\?\.remove\(\)/);
 });
 
+test('speech rate is user-controlled and drives every engine', () => {
+  assert.match(source, /SETTINGS_RATE = 'dsh\.fairyVoice\.rate\.v1'/);
+  assert.match(source, /const SPEECH_RATE_MIN = 0\.5;/);
+  assert.match(source, /const SPEECH_RATE_MAX = 2;/);
+  assert.match(source, /localStorage\.setItem\(SETTINGS_RATE, String\(rate\)\)/);
+  assert.match(source, /'data-dsh-fairy-rate-input': 'true'/);
+  // Web Audio: buffer.duration is rate-independent, so the shared timeline
+  // divides by the rate instead of trusting the buffer length.
+  assert.match(source, /source\.playbackRate\.value = rate;/);
+  assert.match(source, /nextStart = startAt \+ buffer\.duration \/ rate;/);
+  // System speech reads the live rate for every utterance.
+  assert.match(source, /utterance\.rate = rateRef\.current;/);
+});
+
 test('voice controls use a compact icon toggle and custom volume slider', () => {
   assert.equal(embeddedClientDom(source), canonicalClientDom);
   assert.match(source, /function ensureVoiceControlStyles\(\)/);
@@ -538,7 +552,7 @@ async function bootPlaybackClient({ fetchDouble, onBuffer }) {
     constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
     createGain() { return { gain: { value: 1, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, setTargetAtTime() {} }, connect() {}, disconnect() {} }; }
     createBuffer(_channels, length, rate) { onBuffer(rate, length); return { duration: 0.1, length, getChannelData: () => new Float32Array(length) }; }
-    createBufferSource() { return { buffer: null, connect() {}, disconnect() {}, start() {}, stop() {}, onended: null }; }
+    createBufferSource() { return { buffer: null, playbackRate: { value: 1 }, connect() {}, disconnect() {}, start() {}, stop() {}, onended: null }; }
     async resume() { this.state = 'running'; }
     async suspend() { this.state = 'suspended'; }
     async close() { this.state = 'closed'; }
@@ -612,6 +626,42 @@ test('a client-side provider answer falls back to browser speech at rate 1.0', a
   assert.equal(booted.spoken[0].volume, 1);
   assert.equal(booted.spoken[0].lang, 'zh-CN');
   await booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', stop: true } });
+});
+
+test('a host engine dying mid-read hands the remaining sentences to system speech', async () => {
+  const calls = { tts: 0 };
+  const booted = await bootPlaybackClient({
+    onBuffer: () => {},
+    fetchDouble: async (url) => {
+      const json = (value, status = 200, ok = true) => ({ ok, status, json: async () => value });
+      if (url.endsWith('/status')) return json({ available: true, reason: null, provider: 'openai' });
+      if (url.endsWith('/brain/status')) return json({ configured: false, model: 'deepseek-v4-flash' });
+      if (url.endsWith('/prepare')) return json({ sentences: ['一。', '二。', '三。', '四。', '五。'] });
+      if (url.endsWith('/tts')) {
+        calls.tts += 1;
+        // First group streams, second group fails: the read must continue in
+        // the browser for the sentences the host never produced.
+        if (calls.tts > 1) return { ok: false, status: 502, headers: { get: () => null }, json: async () => ({ error: { code: 'provider-failed', message: '语音服务未能生成音频。' } }) };
+        const samples = new Uint8Array(6400);
+        let consumed = false;
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'audio/pcm' : null },
+          body: { getReader: () => ({ read: async () => (consumed ? { done: true } : ((consumed = true), { done: false, value: samples })), releaseLock() {} }) },
+        };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    },
+  });
+  await settleVoiceClient();
+  await settleVoiceClient();
+  const triggered = booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', messageId: 'm9', markdown: '一。二。三。四。五。' } }).catch(() => {});
+  for (let tick = 0; tick < 12; tick += 1) await settleVoiceClient();
+  assert.equal(calls.tts, 2, 'both groups were requested from the host engine');
+  assert.equal(booted.spoken.length, 1, 'the untouched remainder is spoken in the browser');
+  assert.equal(booted.spoken[0].text, '五。');
+  await triggered;
 });
 
 test('PCM playback schedules buffers at the sample rate the host declares', async () => {

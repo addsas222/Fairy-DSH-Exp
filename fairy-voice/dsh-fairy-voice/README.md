@@ -120,5 +120,6 @@ ctx.emit('fairy-persona/change', { packId, voice: { provider, config } })
 - 播放：`/tts` 的 PCM 经 Web Audio 调度；`schedulePcm` 按 `X-Fairy-Sample-Rate` 建缓冲，未声明时用 32 kHz。
 - 浏览器回退：提供方为 `browser`，或 `/tts` 返回 409 `client-side` 时，改用 `window.speechSynthesis` 逐句朗读，`rate = 1.0`，音色优先 `zh`。
 - 中途降级：host 引擎在读到第 k 组时失败，客户端把第 k…n 句交给系统语音读完（`playSystem`），而不是留下半句或静默；本地引擎同理。
+- 语速：输入框左侧控制器的第二个滑杆（0.5×–2×，步进 0.05，持久化于 `localStorage['dsh.fairyVoice.rate.v1']`），对全部提供方统一生效——Web Audio 走 `source.playbackRate`（时间轴按 `buffer.duration / rate` 推进），系统语音走 `utterance.rate`。
 - Blink 长句保活：`speechSynthesis` 在 Chrome/Edge 上约 15 秒会停住，播放期间每 6 秒做一次 `pause()/resume()`（`BROWSER_SPEECH_BUMP_MS`），停止/结束时清掉定时器。
 - 设置卡片「语音引擎」：切换提供方、编辑其字段、保存后刷新可用性并重新探测 `/status`；可用性在挂载、保存和手动刷新时更新（不轮询）。

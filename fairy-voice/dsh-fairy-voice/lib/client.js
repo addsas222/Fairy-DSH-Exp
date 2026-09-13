@@ -11,6 +11,7 @@ window.__ModuleLoader__.load({
     const EVENT_BRAIN_CONFIG = 'fairy-voice-brain-config';
     const SETTINGS_AUTO = 'dsh.fairyVoice.autoRead.v4';
     const SETTINGS_VOLUME = 'dsh.fairyVoice.volume';
+    const SETTINGS_RATE = 'dsh.fairyVoice.rate.v1';
     const PCM_SAMPLE_RATE = 32000;
     const PCM_BYTES_PER_SAMPLE = 2;
     const PLAYBACK_GROUP_SIZE = 4;
@@ -32,6 +33,9 @@ window.__ModuleLoader__.load({
     const AVAILABILITY_TTL_MS = 30_000;
     const VOICE_STYLE_ID = 'dsh-fairy-voice-controls-style';
     const BROWSER_SPEECH_RATE = 1.0;
+    const SPEECH_RATE_MIN = 0.5;
+    const SPEECH_RATE_MAX = 2;
+    const SPEECH_RATE_STEP = 0.05;
     const BROWSER_SPEECH_BUMP_MS = 6_000;
     const LOCAL_TTS_ENDPOINT = '/fairy-voice';
     const MAX_TRACKED_SESSION_STATES = 32;
@@ -505,6 +509,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         samples[index] *= ratio;
         samples[samples.length - 1 - index] *= ratio;
       }
+    }
+
+    function clampSpeechRate(value) {
+      const rate = Number(value);
+      if (!Number.isFinite(rate)) return BROWSER_SPEECH_RATE;
+      return Math.min(SPEECH_RATE_MAX, Math.max(SPEECH_RATE_MIN, rate));
     }
 
     function createWebAudioScheduler({ current, getNextStart }) {
@@ -1166,6 +1176,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           context.suspend().catch((error) => reportAudioLifecycleFailure('suspend', error));
         }, 0);
       }, [clearIdleSuspend]);
+      /* One playback rate for every engine: the Web Audio sources carry it
+       * (buffer.duration is rate-independent, so the timeline divides by it)
+       * and system speech reads it per utterance. */
+      const rateRef = React.useRef(BROWSER_SPEECH_RATE);
+      const setSpeechRate = React.useCallback((value) => { rateRef.current = clampSpeechRate(value); }, []);
       const unlockAudio = React.useCallback(async (initialVolume = 1) => {
         clearIdleSuspend();
         const current = work.current;
@@ -1256,7 +1271,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             const voices = window.speechSynthesis.getVoices();
             utterance.voice = voices.find((voice) => voice.lang.toLowerCase().startsWith('zh')) || null;
             utterance.lang = utterance.voice?.lang || 'zh-CN';
-            utterance.rate = BROWSER_SPEECH_RATE;
+            utterance.rate = rateRef.current;
             utterance.volume = volume;
             utterance.onend = () => { index += 1; speakNext(); };
             utterance.onerror = () => {
@@ -1330,9 +1345,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
               reportAudioResources(current, 'source-ended');
             };
             current.sources.add(source);
+            const rate = rateRef.current;
+            source.playbackRate.value = rate;
             const startAt = Math.max(nextStart, context.currentTime + PLAYBACK_SCHEDULE_LEAD_SECONDS);
             source.start(startAt);
-            nextStart = startAt + buffer.duration;
+            nextStart = startAt + buffer.duration / rate;
             publish({ status: 'playing', messageId, error: null });
           };
           const consumePcm = (incoming, final = false) => {
@@ -1448,9 +1465,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             reportAudioResources(current, 'source-ended');
           };
           current.sources.add(source);
+          const rate = rateRef.current;
+          source.playbackRate.value = rate;
           const startAt = Math.max(nextStart, context.currentTime + PLAYBACK_SCHEDULE_LEAD_SECONDS);
           source.start(startAt);
-          nextStart = startAt + buffer.duration;
+          nextStart = startAt + buffer.duration / rate;
           publish({ status: 'playing', messageId, error: null });
         };
         try {
@@ -1497,7 +1516,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         clearIdleSuspend();
         context?.close().catch((error) => reportAudioLifecycleFailure('close', error));
       }, [clearIdleSuspend, stop]);
-      return { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume };
+      return { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume, setSpeechRate };
     }
 
     function VoiceController({ useSession, sessionId }) {
@@ -1506,10 +1525,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const activeSessions = activeSessionStore || emptyActiveSessionStore;
       const activeSelection = React.useSyncExternalStore(activeSessions.subscribe, activeSessions.getSnapshot, activeSessions.getSnapshot);
       const sessionActive = activeSelection.key === sessionKey;
-      const { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume } = usePlayer(sessionKey);
+      const { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume, setSpeechRate } = usePlayer(sessionKey);
       // Auto-read is the product default. An explicit false remains respected.
       const [autoRead, setAutoRead] = React.useState(() => localStorage.getItem(SETTINGS_AUTO) !== 'false');
       const [volume, setVolume] = React.useState(() => clampVolume(localStorage.getItem(SETTINGS_VOLUME) || '1'));
+      const [rate, setRate] = React.useState(() => clampSpeechRate(localStorage.getItem(SETTINGS_RATE) || String(BROWSER_SPEECH_RATE)));
       const [audioReady, setAudioReady] = React.useState(false);
       const [baselineReady, setBaselineReady] = React.useState(false);
       const availability = React.useSyncExternalStore(availabilityStore.subscribe, availabilityStore.getSnapshot, availabilityStore.getSnapshot);
@@ -1570,6 +1590,10 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         localStorage.setItem(SETTINGS_VOLUME, String(volume));
         setOutputVolume(volume);
       }, [volume, setOutputVolume]);
+      React.useEffect(() => {
+        localStorage.setItem(SETTINGS_RATE, String(rate));
+        setSpeechRate(rate);
+      }, [rate, setSpeechRate]);
       React.useEffect(() => {
         if (audioReady) return undefined;
         const unlockFromGesture = () => {
@@ -1935,6 +1959,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         jsx.jsx(Tooltip, { label: engineAvailable ? autoLabel : availability.reason, children: jsx.jsx('button', { type: 'button', className: 'dsh-fairy-voice-auto', 'data-dsh-fairy-auto-control': 'true', 'data-on': autoRead ? 'true' : 'false', disabled: !engineAvailable, onClick: () => setAutoRead((value) => !value), 'aria-label': autoLabel, 'aria-pressed': autoRead, children: jsx.jsx('span', { className: 'dsh-fairy-voice-auto-dot', 'data-dsh-fairy-auto-dot': 'true', 'aria-hidden': 'true' }) }) }),
         jsx.jsx('span', { className: 'dsh-fairy-voice-waveform', 'data-dsh-fairy-waveform': 'true', 'aria-hidden': 'true', children: waveform }),
         jsx.jsx(Tooltip, { label: `语音音量 ${Math.round(volume * 100)}%`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-volume-input': 'true', disabled: !engineAvailable, min: '0', max: '1', step: '0.05', type: 'range', value: volume, onChange: (event) => setVolume(Number(event.target.value)), 'aria-label': '语音音量', style: { '--dsh-fairy-volume': `${Math.round(volume * 100)}%` } }) }),
+        jsx.jsx(Tooltip, { label: `朗读语速 ${rate.toFixed(2)}×`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-rate-input': 'true', disabled: !engineAvailable, min: String(SPEECH_RATE_MIN), max: String(SPEECH_RATE_MAX), step: String(SPEECH_RATE_STEP), type: 'range', value: rate, onChange: (event) => setRate(clampSpeechRate(event.target.value)), 'aria-label': '朗读语速', style: { '--dsh-fairy-volume': `${Math.round(((rate - SPEECH_RATE_MIN) / (SPEECH_RATE_MAX - SPEECH_RATE_MIN)) * 100)}%` } }) }),
         engine === 'fairy' && state.status === 'error' ? jsx.jsx('span', { title: state.error, style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '12px', maxWidth: '96px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: '朗读失败' }) : null
       ] });
     }
