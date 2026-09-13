@@ -600,7 +600,10 @@ const MARKDOWN_SIGNAL = /[#`*_\[\]>|~\\<]|^ {4,}\S|^[ \t]+\S|&[a-zA-Z#][a-zA-Z0-
 /** Paragraph boundaries for text that contains no markdown control syntax. */
 function speechTextFromParagraphs(markdown) {
   const output = [];
-  for (const block of String(markdown).split(/\n{2,}/)) {
+  // CommonMark counts a whitespace-only line as blank, and CRLF is two line
+  // endings: splitting on a bare run of \n would fuse those paragraphs and drop
+  // the boundary pause the AST path keeps.
+  for (const block of String(markdown).split(/\r?\n[ \t]*\r?\n/)) {
     const text = block.trim();
     if (!text) continue;
     output.push(text);

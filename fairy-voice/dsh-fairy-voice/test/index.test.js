@@ -300,6 +300,13 @@ test('plain prose skips the markdown parser without changing the speech text', a
     '单行纯文本',
     '带空格的段落  \n硬换行\n\n结束。',
     '段落没有终止符\n\n下一段。',
+    // CommonMark counts a whitespace-only line as a blank line, and CRLF is
+    // two line endings for the parser: both must keep the段落 boundary.
+    'a\n \nb',
+    'a\r\n\r\nb',
+    '含制表符的空行\n\t\n下一段。',
+    '多个空行\n\n\n\n收尾。',
+    'a\r\nb\r\n\r\nc',
     '   缩进代码块',
     '实体 &amp; 与 &lt;tag&gt;',
     '数学 a < b 与 x > y',
