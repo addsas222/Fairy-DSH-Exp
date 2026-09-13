@@ -29,6 +29,9 @@ export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
   providers: Object.freeze({
     localSovits: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.localSovits }),
     openai: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.openai }),
+    elevenlabsWs: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.elevenlabsWs }),
+    kokoroWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
+    piperWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
   }),
 });
@@ -51,6 +54,26 @@ export const FairyVoiceSettings = z.object({
       model: z.string().default(PROVIDER_CONFIG_DEFAULTS.openai.model),
       voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.openai.voice),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.openai }),
+    elevenlabsWs: z.object({
+      baseUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.elevenlabsWs.baseUrl),
+      apiKey: z.string().default(''),
+      voiceId: z.string().default(PROVIDER_CONFIG_DEFAULTS.elevenlabsWs.voiceId),
+      modelId: z.string().default(PROVIDER_CONFIG_DEFAULTS.elevenlabsWs.modelId),
+      // Constrained by the provider at request time; unknown values fall back
+      // to a null sample rate instead of failing the namespace.
+      outputFormat: z.string().default(PROVIDER_CONFIG_DEFAULTS.elevenlabsWs.outputFormat),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.elevenlabsWs }),
+    kokoroWeb: z.object({
+      moduleUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.moduleUrl),
+      modelId: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.modelId),
+      dtype: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.dtype),
+      device: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.device),
+      voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.voice),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
+    piperWeb: z.object({
+      moduleUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.moduleUrl),
+      voiceId: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.voiceId),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: z.object({
       url: z.string().default(''),
       // Constrained by the provider at request time, for the same reason as provider.

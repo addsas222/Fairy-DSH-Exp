@@ -164,7 +164,7 @@ fairy    user BROKEN: …      ← 见下
 | `fairy-persona/dsh-fairy-persona/` | 人格包引擎（文档 + 调色属性 + 语音绑定热切换），端点 `/fairy-persona/*` |
 | `fairy-modes/dsh-fairy-modes/` | 三模式引擎（极简/PTC/创造），端点 `/fairy-modes/*`，含 `session_recall` 工具 |
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽（deepseek/exa/perplexity/自定义路由），端点 `/fairy-search/*` |
-| `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits/openai/browser/custom-http），端点 `/fairy-voice/*` |
+| `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits/openai/elevenlabs-ws/kokoro-web/piper-web/browser/custom-http），端点 `/fairy-voice/*` |
 | `fairy-visual/`、`balance-meter/`、`browser-dock/`、`fairy-startup/` | 视觉舞台、余额、浏览器 Dock、启动动作 |
 | `fairy-contracts/` | 跨插件契约与诊断边界（各插件 `link:` 依赖它） |
 | `fairy-system/` | 验证/预检/审计工具（`check.sh`、`verify*.js`、`skill-audit.js`、`scaffold-plugin.js`） |

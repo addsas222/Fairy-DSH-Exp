@@ -2,26 +2,45 @@
  * probe per provider. Settings ownership stays with the host plugin. */
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 import { BROWSER_ID, browserProvider } from './browser.js';
+import { KOKORO_WEB_DEFAULTS, KOKORO_WEB_ID, PIPER_WEB_DEFAULTS, PIPER_WEB_ID, kokoroWebProvider, piperWebProvider } from './client-engines.js';
 import { CUSTOM_HTTP_DEFAULTS, CUSTOM_HTTP_ID, createCustomHttpProvider } from './custom-http.js';
+import { ELEVENLABS_WS_DEFAULTS, ELEVENLABS_WS_ID, createElevenLabsWsProvider } from './elevenlabs-ws.js';
 import { LOCAL_SOVITS_DEFAULTS, LOCAL_SOVITS_ID, createLocalSovitsProvider } from './local-sovits.js';
 import { OPENAI_DEFAULTS, OPENAI_ID, createOpenAiProvider } from './openai.js';
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-voice');
 
-export const PROVIDER_IDS = [LOCAL_SOVITS_ID, OPENAI_ID, BROWSER_ID, CUSTOM_HTTP_ID];
+export const PROVIDER_IDS = [
+  LOCAL_SOVITS_ID,
+  OPENAI_ID,
+  ELEVENLABS_WS_ID,
+  KOKORO_WEB_ID,
+  PIPER_WEB_ID,
+  BROWSER_ID,
+  CUSTOM_HTTP_ID,
+];
 const PROVIDER_CONFIG_KEYS = {
   [LOCAL_SOVITS_ID]: 'localSovits',
   [OPENAI_ID]: 'openai',
+  [ELEVENLABS_WS_ID]: 'elevenlabsWs',
+  [KOKORO_WEB_ID]: 'kokoroWeb',
+  [PIPER_WEB_ID]: 'piperWeb',
   [CUSTOM_HTTP_ID]: 'customHttp',
 };
 export const PROVIDER_CONFIG_DEFAULTS = {
   localSovits: LOCAL_SOVITS_DEFAULTS,
   openai: OPENAI_DEFAULTS,
+  elevenlabsWs: ELEVENLABS_WS_DEFAULTS,
+  kokoroWeb: KOKORO_WEB_DEFAULTS,
+  piperWeb: PIPER_WEB_DEFAULTS,
   customHttp: CUSTOM_HTTP_DEFAULTS,
 };
 export const PROVIDER_CONFIG_FIELDS = {
   localSovits: ['baseURL', 'referenceAudioPath', 'referencePromptPath'],
   openai: ['baseURL', 'apiKey', 'model', 'voice'],
+  elevenlabsWs: ['baseUrl', 'apiKey', 'voiceId', 'modelId', 'outputFormat'],
+  kokoroWeb: ['moduleUrl', 'modelId', 'dtype', 'device', 'voice'],
+  piperWeb: ['moduleUrl', 'voiceId'],
   customHttp: ['url', 'method', 'headersJson', 'bodyTemplate'],
 };
 const AVAILABILITY_TIMEOUT_MS = 3_000;
@@ -37,10 +56,17 @@ export function configKeyForProvider(id) {
   return PROVIDER_CONFIG_KEYS[id] || null;
 }
 
-export function createProviderRegistry({ fetchImpl = fetch, availabilityTimeoutMs = AVAILABILITY_TIMEOUT_MS } = {}) {
+export function createProviderRegistry({
+  fetchImpl = fetch,
+  availabilityTimeoutMs = AVAILABILITY_TIMEOUT_MS,
+  WebSocketImpl,
+} = {}) {
   const PROVIDERS = new Map([
     [LOCAL_SOVITS_ID, createLocalSovitsProvider({ fetchImpl })],
     [OPENAI_ID, createOpenAiProvider({ fetchImpl })],
+    [ELEVENLABS_WS_ID, createElevenLabsWsProvider({ WebSocketImpl })],
+    [KOKORO_WEB_ID, kokoroWebProvider],
+    [PIPER_WEB_ID, piperWebProvider],
     [CUSTOM_HTTP_ID, createCustomHttpProvider({ fetchImpl })],
     [BROWSER_ID, browserProvider],
   ]);

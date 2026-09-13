@@ -32,6 +32,7 @@ window.__ModuleLoader__.load({
     const AVAILABILITY_TTL_MS = 30_000;
     const VOICE_STYLE_ID = 'dsh-fairy-voice-controls-style';
     const BROWSER_SPEECH_RATE = 1.0;
+    const BROWSER_SPEECH_BUMP_MS = 6_000;
     const LOCAL_TTS_ENDPOINT = '/fairy-voice';
     const MAX_TRACKED_SESSION_STATES = 32;
     const { FAIRY_VOICE_CONTROL_ATTRIBUTE } = (() => {
@@ -171,6 +172,94 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     const voiceTimelineStore = createVoiceTimelineStore();
+
+    /* Browser-side neural engines (Kokoro on WebGPU/WASM, Piper on WASM).
+     * The host only stores their configuration — it answers 409 `client-side` —
+     * so the model download, capability check, and synthesis all live here.
+     * Every failure path degrades to system speech rather than to silence. */
+    const LOCAL_ENGINE_IDS = ['kokoro-web', 'piper-web'];
+    const KOKORO_SAMPLE_RATE = 24_000;
+    const localEngineModules = new Map();
+    const localEngineHandles = new Map();
+
+    function isLocalEngine(id) {
+      return LOCAL_ENGINE_IDS.includes(id);
+    }
+
+    function localEngineConfig(settingsValue, id) {
+      const key = id === 'kokoro-web' ? 'kokoroWeb' : 'piperWeb';
+      return settingsValue?.providers?.[key] || {};
+    }
+
+    function importLocalEngineModule(url) {
+      const key = String(url || '').trim();
+      if (!key) return Promise.reject(new Error('未配置引擎模块地址。'));
+      if (!localEngineModules.has(key)) {
+        // Cache the promise: a second read shares one download, and a failure
+        // is evicted so the next attempt can retry.
+        localEngineModules.set(key, import(/* webpackIgnore: true */ key).catch((error) => {
+          localEngineModules.delete(key);
+          throw new Error(`引擎模块加载失败：${error?.message || key}`);
+        }));
+      }
+      return localEngineModules.get(key);
+    }
+
+    function openLocalEngine(id, config) {
+      const key = `${id}|${JSON.stringify(config)}`;
+      if (!localEngineHandles.has(key)) {
+        localEngineHandles.set(key, (async () => {
+          if (id === 'kokoro-web') {
+            const module = await importLocalEngineModule(config.moduleUrl);
+            const KokoroTTS = module?.KokoroTTS || module?.default?.KokoroTTS;
+            if (typeof KokoroTTS?.from_pretrained !== 'function') throw new Error('kokoro-js 未导出 KokoroTTS。');
+            const webgpu = config.device === 'webgpu' && typeof navigator !== 'undefined' && 'gpu' in navigator;
+            // WebGPU wants fp32; WASM wants a quantized dtype. Oversized
+            // choices fail at load and fall back to system speech.
+            const dtype = webgpu
+              ? (config.dtype === 'fp32' || config.dtype === 'fp16' ? config.dtype : 'fp32')
+              : (config.dtype && config.dtype !== 'fp32' ? config.dtype : 'q8');
+            const tts = await KokoroTTS.from_pretrained(config.modelId, { dtype, device: webgpu ? 'webgpu' : 'wasm' });
+            return { kind: 'kokoro', tts, sampleRate: KOKORO_SAMPLE_RATE };
+          }
+          const module = await importLocalEngineModule(config.moduleUrl);
+          const api = typeof module?.predict === 'function' ? module : module?.default ?? null;
+          if (typeof api?.predict !== 'function') throw new Error('piper-tts-web 未导出 predict。');
+          // Pre-download so the first sentence does not stall mid-read.
+          if (typeof api.stored === 'function' && typeof api.download === 'function') {
+            const stored = await api.stored().catch(() => []);
+            if (!Array.isArray(stored) || !stored.includes(config.voiceId)) {
+              // Not fatal: predict() downloads on demand. Reporting keeps this
+              // failure visible instead of swallowing it.
+              await api.download(config.voiceId).catch((error) => {
+                diagnostics.warn('local-engine.predownload', { engine: 'piper-web' }, error);
+              });
+            }
+          }
+          return { kind: 'piper', api, sampleRate: null };
+        })().catch((error) => {
+          localEngineHandles.delete(key);
+          throw error;
+        }));
+      }
+      return localEngineHandles.get(key);
+    }
+
+    async function synthesizeLocalEngine(handle, text, config, context) {
+      if (handle.kind === 'kokoro') {
+        const audio = await handle.tts.generate(text, { voice: config.voice });
+        const samples = audio?.audio ?? audio?.data ?? null;
+        if (!samples || typeof samples.length !== 'number') throw new Error('Kokoro 未返回音频。');
+        return {
+          samples: samples instanceof Float32Array ? samples : Float32Array.from(samples),
+          sampleRate: Number(audio?.sampling_rate || audio?.samplingRate) || handle.sampleRate,
+        };
+      }
+      if (!context?.decodeAudioData) throw new Error('浏览器无法解码音频。');
+      const blob = await handle.api.predict({ text, voiceId: config.voiceId });
+      const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+      return { samples: decoded.getChannelData(0), sampleRate: decoded.sampleRate };
+    }
 
     // The client-side transport boundary keeps local TTS and Voice Brain HTTP
     // details out of playback policy and the settings UI.
@@ -825,6 +914,39 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           { name: 'bodyTemplate', label: '请求体模板', placeholder: '{"text":"{{text}}"}' }
         ]
       },
+      {
+        id: 'elevenlabs-ws',
+        label: 'ElevenLabs（WebSocket 流式）',
+        key: 'elevenlabsWs',
+        fields: [
+          { name: 'apiKey', label: 'API Key', secret: true },
+          { name: 'voiceId', label: '音色 ID', placeholder: '21m00Tcm4TlvDq8ikWAM' },
+          { name: 'modelId', label: '模型', placeholder: 'eleven_multilingual_v2' },
+          { name: 'outputFormat', label: '输出格式', placeholder: 'pcm_32000' },
+          { name: 'baseUrl', label: '服务地址', placeholder: 'wss://api.elevenlabs.io' }
+        ]
+      },
+      {
+        id: 'kokoro-web',
+        label: 'Kokoro（浏览器内 WebGPU/WASM）',
+        key: 'kokoroWeb',
+        fields: [
+          { name: 'moduleUrl', label: '模块地址', placeholder: 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm' },
+          { name: 'modelId', label: '模型 ID', placeholder: 'onnx-community/Kokoro-82M-v1.0-ONNX' },
+          { name: 'device', label: '设备', placeholder: 'wasm 或 webgpu' },
+          { name: 'dtype', label: '精度', placeholder: 'q8（WASM）或 fp32（WebGPU）' },
+          { name: 'voice', label: '音色', placeholder: 'af_heart' }
+        ]
+      },
+      {
+        id: 'piper-web',
+        label: 'Piper（浏览器内 WASM）',
+        key: 'piperWeb',
+        fields: [
+          { name: 'moduleUrl', label: '模块地址', placeholder: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1/+esm' },
+          { name: 'voiceId', label: '音色 ID', placeholder: 'en_US-hfc_female-medium' }
+        ]
+      },
       { id: 'browser', label: '浏览器朗读', key: null, fields: [] }
     ];
 
@@ -1019,6 +1141,55 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           gain.gain.setTargetAtTime(value, context.currentTime, 0.015);
         }
       }, []);
+      const playSystem = React.useCallback((messageId, sentences, volume) => {
+        if (!sentences.length || !window.speechSynthesis) {
+          publish({ status: 'error', messageId, error: 'System speech is unavailable in this browser.' });
+          return Promise.resolve(false);
+        }
+        const current = work.current;
+        let index = 0;
+        // Chrome stops long utterances at ~15s. A pause/resume nudge keeps the
+        // engine awake; it is a no-op for short sentences and for engines that
+        // never hit the bug, so it runs for Blink only.
+        const blink = typeof navigator !== 'undefined' && /\b(Chrome|Chromium|Edg\/|Brave)\b/.test(navigator.userAgent || '');
+        let bump = null;
+        const stopBump = () => { if (bump !== null) { clearInterval(bump); bump = null; } };
+        const startBump = () => {
+          if (!blink || bump !== null) return;
+          bump = setInterval(() => {
+            const synth = window.speechSynthesis;
+            if (!synth?.speaking) return;
+            try { synth.pause(); synth.resume(); } catch (error) { reportAudioLifecycleFailure('speech bump', error); }
+          }, BROWSER_SPEECH_BUMP_MS);
+        };
+        return new Promise((resolve) => {
+          const speakNext = () => {
+            if (current.stopped) { stopBump(); resolve(false); return; }
+            if (index >= sentences.length) {
+              stopBump();
+              publish({ status: 'idle', messageId: null, error: null });
+              resolve(true);
+              return;
+            }
+            const utterance = new SpeechSynthesisUtterance(sentences[index]);
+            const voices = window.speechSynthesis.getVoices();
+            utterance.voice = voices.find((voice) => voice.lang.toLowerCase().startsWith('zh')) || null;
+            utterance.lang = utterance.voice?.lang || 'zh-CN';
+            utterance.rate = BROWSER_SPEECH_RATE;
+            utterance.volume = volume;
+            utterance.onend = () => { index += 1; speakNext(); };
+            utterance.onerror = () => {
+              stopBump();
+              publish({ status: 'error', messageId, error: 'System speech playback failed.' });
+              resolve(false);
+            };
+            publish({ status: 'playing', messageId, error: null });
+            startBump();
+            window.speechSynthesis.speak(utterance);
+          };
+          speakNext();
+        });
+      }, [publish]);
       const play = React.useCallback(async (messageId, sentences, volume) => {
         if (!sentences.length) return false;
         // Keep the work object captured before the user-gesture unlock. Stop
@@ -1128,10 +1299,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             reader.releaseLock();
           }
         };
+        let playedGroups = 0;
         try {
           for (let index = 0; index < sentences.length; index += PLAYBACK_GROUP_SIZE) {
             publish({ status: 'loading', messageId, error: null });
             await streamRawAudio(sentences.slice(index, index + PLAYBACK_GROUP_SIZE).join('\n'));
+            playedGroups += 1;
             if (current.stopped) return false;
           }
           await waitForPlayback();
@@ -1149,49 +1322,101 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         } catch (error) {
           if (error?.code === 'client-side') return 'client-side';
           if (controller.signal.aborted || current.stopped) return;
+          // The browser finishes what the host engine could not: a provider
+          // that dies mid-read degrades to system speech for the remainder
+          // instead of leaving the answer half-spoken.
+          const remaining = sentences.slice(playedGroups * PLAYBACK_GROUP_SIZE);
+          if (remaining.length && window.speechSynthesis) {
+            const finished = await playSystem(messageId, remaining, volume);
+            if (finished === true) return true;
+          }
           publish({ status: 'error', messageId, error: error instanceof Error ? error.message : 'Speech synthesis failed.' });
           return false;
         }
-      }, [clearIdleSuspend, publish, unlockAudio]);
-      const playSystem = React.useCallback((messageId, sentences, volume) => {
-        if (!sentences.length || !window.speechSynthesis) {
-          publish({ status: 'error', messageId, error: 'System speech is unavailable in this browser.' });
-          return Promise.resolve(false);
-        }
-        const current = work.current;
-        let index = 0;
-        return new Promise((resolve) => {
-          const speakNext = () => {
-            if (current.stopped) { resolve(false); return; }
-            if (index >= sentences.length) {
-              publish({ status: 'idle', messageId: null, error: null });
-              resolve(true);
-              return;
-            }
-            const utterance = new SpeechSynthesisUtterance(sentences[index]);
-            const voices = window.speechSynthesis.getVoices();
-            utterance.voice = voices.find((voice) => voice.lang.toLowerCase().startsWith('zh')) || null;
-            utterance.lang = utterance.voice?.lang || 'zh-CN';
-            utterance.rate = BROWSER_SPEECH_RATE;
-            utterance.volume = volume;
-            utterance.onend = () => { index += 1; speakNext(); };
-            utterance.onerror = () => {
-              publish({ status: 'error', messageId, error: 'System speech playback failed.' });
-              resolve(false);
-            };
-            publish({ status: 'playing', messageId, error: null });
-            window.speechSynthesis.speak(utterance);
+      }, [clearIdleSuspend, playSystem, publish, unlockAudio]);
+
+      /* Local engine playback: same scheduler and stop semantics as the host
+       * path, but each group is synthesized here. A failure at group k hands
+       * groups k..n to system speech, mirroring the host-path degradation. */
+      const playLocalEngine = React.useCallback(async (engineId, messageId, sentences, volume) => {
+        if (!sentences.length || !isLocalEngine(engineId)) return false;
+        const requestedWork = work.current;
+        await unlockAudio(volume);
+        if (work.current !== requestedWork || requestedWork.stopped) return false;
+        const current = requestedWork;
+        const controller = new AbortController();
+        current.controller = controller;
+        current.stopped = false;
+        let nextStart = null;
+        const scheduler = createWebAudioScheduler({ current, getNextStart: () => nextStart });
+        const { waitForPlayback, waitForQueueCapacity } = scheduler;
+        let playedGroups = 0;
+        const scheduleSamples = (samples, sampleRate) => {
+          const context = current.context;
+          const gain = current.gain;
+          if (!context || context.state !== 'running' || !gain) throw new Error('Audio output is unavailable.');
+          const buffer = context.createBuffer(1, samples.length, sampleRate);
+          buffer.getChannelData(0).set(samples);
+          applyPcmEdgeRamp(buffer.getChannelData(0));
+          const source = context.createBufferSource();
+          source.buffer = buffer;
+          source.connect(gain);
+          source.onended = () => {
+            current.sources.delete(source);
+            try { source.disconnect(); } catch (error) { reportAudioLifecycleFailure('source disconnect', error); }
+            reportAudioResources(current, 'source-ended');
           };
-          speakNext();
-        });
-      }, [publish]);
+          current.sources.add(source);
+          const startAt = Math.max(nextStart, context.currentTime + PLAYBACK_SCHEDULE_LEAD_SECONDS);
+          source.start(startAt);
+          nextStart = startAt + buffer.duration;
+          publish({ status: 'playing', messageId, error: null });
+        };
+        try {
+          publish({ status: 'loading', messageId, error: null });
+          const settingsValue = await localTtsTransport.providerConfig().catch(() => null);
+          const config = localEngineConfig(settingsValue, engineId);
+          const handle = await openLocalEngine(engineId, config);
+          if (current.stopped) return false;
+          if (nextStart === null) nextStart = current.context.currentTime + PLAYBACK_PREBUFFER_SECONDS;
+          for (let index = 0; index < sentences.length; index += PLAYBACK_GROUP_SIZE) {
+            if (current.stopped) return false;
+            await waitForQueueCapacity();
+            const text = sentences.slice(index, index + PLAYBACK_GROUP_SIZE).join('\n');
+            const { samples, sampleRate } = await synthesizeLocalEngine(handle, text, config, current.context);
+            if (current.stopped) return false;
+            scheduleSamples(samples, sampleRate);
+            playedGroups += 1;
+          }
+          await waitForPlayback();
+          if (current.stopped) return false;
+          if (work.current === current && current.context?.state === 'running') {
+            clearIdleSuspend();
+            await current.context.suspend().catch((error) => reportAudioLifecycleFailure('suspend', error));
+          }
+          reportAudioResources(current, 'playback-idle');
+          publish({ status: 'idle', messageId: null, error: null });
+          return true;
+        } catch (error) {
+          if (controller.signal.aborted || current.stopped) return;
+          // Capability gaps (no WebGPU, blocked module URL, OOM) are expected
+          // on some machines; system speech is the floor, not an error state.
+          const remaining = sentences.slice(playedGroups * PLAYBACK_GROUP_SIZE);
+          if (remaining.length && window.speechSynthesis) {
+            const finished = await playSystem(messageId, remaining, volume);
+            if (finished === true) return true;
+          }
+          publish({ status: 'error', messageId, error: error instanceof Error ? error.message : 'Speech synthesis failed.' });
+          return false;
+        }
+      }, [clearIdleSuspend, playSystem, publish, unlockAudio]);
       React.useEffect(() => () => {
         const context = work.current.context;
         stop();
         clearIdleSuspend();
         context?.close().catch((error) => reportAudioLifecycleFailure('close', error));
       }, [clearIdleSuspend, stop]);
-      return { state, play, playSystem, stop, primeAudio, setOutputVolume };
+      return { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume };
     }
 
     function VoiceController({ useSession, sessionId }) {
@@ -1200,7 +1425,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const activeSessions = activeSessionStore || emptyActiveSessionStore;
       const activeSelection = React.useSyncExternalStore(activeSessions.subscribe, activeSessions.getSnapshot, activeSessions.getSnapshot);
       const sessionActive = activeSelection.key === sessionKey;
-      const { state, play, playSystem, stop, primeAudio, setOutputVolume } = usePlayer(sessionKey);
+      const { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume } = usePlayer(sessionKey);
       // Auto-read is the product default. An explicit false remains respected.
       const [autoRead, setAutoRead] = React.useState(() => localStorage.getItem(SETTINGS_AUTO) !== 'false');
       const [volume, setVolume] = React.useState(() => clampVolume(localStorage.getItem(SETTINGS_VOLUME) || '1'));
@@ -1451,7 +1676,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             }
             const played = engine === 'system'
               ? await playSystem(messageId, sentences, volume)
-              : await play(messageId, sentences, volume);
+              : isLocalEngine(engine)
+                ? await playLocalEngine(engine, messageId, sentences, volume)
+                : await play(messageId, sentences, volume);
             if (played === 'client-side') {
               // This provider has no host-side engine; the browser must speak.
               // Publish the switch so the next answer skips the round trip.
@@ -1483,7 +1710,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         };
         window.addEventListener(EVENT_PLAY, onPlay);
         return () => { pendingStatus.current = null; prepareScope.current?.cancel('effect-cleanup'); prepareScope.current = null; prepareController.current = null; for (const timer of autoRetryTimers.current.values()) clearTimeout(timer); autoRetryTimers.current.clear(); window.removeEventListener(EVENT_PLAY, onPlay); };
-      }, [activeSessions, cancelPlayback, drainPendingStatus, engine, play, playSystem, primeAudio, sessionKey, volume]);
+      }, [activeSessions, cancelPlayback, drainPendingStatus, engine, play, playLocalEngine, playSystem, primeAudio, sessionKey, volume]);
       React.useEffect(() => {
         const onState = (event) => {
           const detail = event.detail || {};

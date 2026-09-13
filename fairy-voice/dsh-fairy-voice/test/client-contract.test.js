@@ -283,6 +283,32 @@ test('streaming playback reserves enough CPU-inference headroom', () => {
   assert.match(source, /PLAYBACK_SCHEDULE_LEAD_SECONDS/);
 });
 
+test('a host engine failing mid-read hands the remaining groups to system speech', () => {
+  assert.match(source, /let playedGroups = 0;/);
+  assert.match(source, /playedGroups \+= 1;/);
+  assert.match(source, /const remaining = sentences\.slice\(playedGroups \* PLAYBACK_GROUP_SIZE\);/);
+  assert.match(source, /const finished = await playSystem\(messageId, remaining, volume\);/);
+});
+
+test('system speech keeps long utterances alive in Blink and always releases its timer', () => {
+  assert.match(source, /BROWSER_SPEECH_BUMP_MS = 6_000/);
+  assert.match(source, /Chrome\|Chromium\|Edg/);
+  assert.match(source, /synth\.pause\(\); synth\.resume\(\);/);
+  assert.match(source, /const stopBump = \(\) => \{ if \(bump !== null\) \{ clearInterval\(bump\); bump = null; \} \};/);
+  assert.match(source, /if \(current\.stopped\) \{ stopBump\(\); resolve\(false\); return; \}/);
+});
+
+test('browser engines synthesize locally with the shared scheduler and degrade to system speech', () => {
+  assert.match(source, /const LOCAL_ENGINE_IDS = \['kokoro-web', 'piper-web'\]/);
+  assert.match(source, /function isLocalEngine\(id\) \{/);
+  assert.match(source, /KokoroTTS\.from_pretrained\(config\.modelId/);
+  assert.match(source, /await handle\.api\.predict\(\{ text, voiceId: config\.voiceId \}\)/);
+  assert.match(source, /await context\.decodeAudioData\(await blob\.arrayBuffer\(\)\)/);
+  assert.match(source, /await playLocalEngine\(engine, messageId, sentences, volume\)/);
+  assert.match(source, /localEngineConfig\(settingsValue, engineId\)/);
+  assert.match(source, /createWebAudioScheduler\(\{ current, getNextStart: \(\) => nextStart \}\)/);
+});
+
 test('empty PCM responses cannot be reported as successful playback', () => {
   assert.match(source, /let receivedSamples = 0/);
   assert.match(source, /receivedSamples \+= sampleCount/);
@@ -605,6 +631,9 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
     providers: {
       localSovits: { baseURL: 'http://127.0.0.1:9880', referenceAudioPath: 'C:/ref.wav', referencePromptPath: 'C:/ref.txt' },
       openai: { baseURL: 'https://api.openai.com/v1', apiKey: '***', model: 'tts-1', voice: 'alloy' },
+      elevenlabsWs: { baseUrl: 'wss://api.elevenlabs.io', apiKey: '***', voiceId: 'voice-1', modelId: 'eleven_multilingual_v2', outputFormat: 'pcm_32000' },
+      kokoroWeb: { moduleUrl: 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm', modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX', dtype: 'q8', device: 'wasm', voice: 'af_heart' },
+      piperWeb: { moduleUrl: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1/+esm', voiceId: 'en_US-hfc_female-medium' },
       customHttp: { url: '', method: 'POST', headersJson: '{}', bodyTemplate: '{"text":"{{text}}"}' },
     },
   };
@@ -622,6 +651,9 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
         return json([
           { id: 'local-sovits', available: true },
           { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' },
+          { id: 'elevenlabs-ws', available: false, reason: '未配置 ElevenLabs API Key。' },
+          { id: 'kokoro-web', available: true },
+          { id: 'piper-web', available: true },
           { id: 'browser', available: true },
           { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' },
         ]);
@@ -671,4 +703,24 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
   assert.equal(stored.provider, 'openai');
   assert.equal(stored.providers.openai.model, 'gpt-4o-mini-tts');
   assert.equal(stored.providers.openai.apiKey, '***', 'an untouched masked key must be preserved');
+
+  // The card offers the WebSocket vendor and both browser engines, and shows
+  // availability for each without a round trip to the engine itself.
+  select.props.onChange({ target: { value: 'kokoro-web' } });
+  for (let tick = 0; tick < 2; tick += 1) await settleVoiceClient();
+  tree = card.tree;
+  const engineIds = find(tree, (node) => node.type === 'select');
+  // Spread into this realm: the bundle runs in a vm, and cross-realm arrays
+  // never compare equal to host arrays under deepStrictEqual.
+  assert.deepEqual(
+    [...engineIds.props.children.filter((child) => child?.props?.value).map((child) => child.props.value)],
+    ['local-sovits', 'openai', 'custom-http', 'elevenlabs-ws', 'kokoro-web', 'piper-web', 'browser'],
+  );
+  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'kokoro-web').props.children, '可用');
+  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'elevenlabs-ws').props.children, '不可用 · 未配置 ElevenLabs API Key。');
+  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'moduleUrl').props.value, 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm');
+  select.props.onChange({ target: { value: 'piper-web' } });
+  for (let tick = 0; tick < 2; tick += 1) await settleVoiceClient();
+  tree = card.tree;
+  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'voiceId').props.value, 'en_US-hfc_female-medium');
 });

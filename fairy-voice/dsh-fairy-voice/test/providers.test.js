@@ -16,6 +16,54 @@ import { REFERENCE_PROMPT_FALLBACK, createLocalSovitsProvider } from '../lib/pro
 import { createOpenAiProvider } from '../lib/providers/openai.js';
 import { parseStaticHeaders, renderCustomBody, createCustomHttpProvider } from '../lib/providers/custom-http.js';
 import { createProviderRegistry } from '../lib/providers/index.js';
+import { KOKORO_WEB_DEFAULTS, PIPER_WEB_DEFAULTS } from '../lib/providers/client-engines.js';
+import { ELEVENLABS_WS_DEFAULTS, createElevenLabsWsProvider } from '../lib/providers/elevenlabs-ws.js';
+
+/** Minimal WebSocket double: tests drive open/message/error/close explicitly. */
+class FakeWebSocket {
+  static instances = [];
+
+  constructor(url) {
+    this.url = url;
+    this.sent = [];
+    this.closed = null;
+    this.onopen = null;
+    this.onmessage = null;
+    this.onerror = null;
+    this.onclose = null;
+    FakeWebSocket.instances.push(this);
+  }
+
+  static reset() {
+    FakeWebSocket.instances = [];
+  }
+
+  static get last() {
+    return FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+  }
+
+  send(payload) {
+    this.sent.push(payload);
+  }
+
+  close(code, reason) {
+    if (this.closed) return;
+    this.closed = { code, reason };
+    this.onclose?.({});
+  }
+
+  open() {
+    this.onopen?.({});
+  }
+
+  message(data) {
+    this.onmessage?.({ data });
+  }
+
+  fail() {
+    this.onerror?.({});
+  }
+}
 
 function requestWithJson(value) {
   const request = new EventEmitter();
@@ -96,18 +144,34 @@ test('provider registry resolves known ids and falls back to GPT-SoVITS for unkn
 });
 
 test('provider availability is reported per provider without leaking config', async () => {
-  const registry = createProviderRegistry({ fetchImpl: async () => ({ ok: true }) });
+  const registry = createProviderRegistry({ fetchImpl: async () => ({ ok: true }), WebSocketImpl: FakeWebSocket });
   const list = await registry.list(FAIRY_VOICE_SETTINGS_DEFAULTS);
-  assert.deepEqual(list.map((entry) => entry.id), ['local-sovits', 'openai', 'browser', 'custom-http']);
+  assert.deepEqual(list.map((entry) => entry.id), [
+    'local-sovits',
+    'openai',
+    'elevenlabs-ws',
+    'kokoro-web',
+    'piper-web',
+    'browser',
+    'custom-http',
+  ]);
   assert.deepEqual(list[0], { id: 'local-sovits', available: true });
   assert.deepEqual(list[1], { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' });
-  assert.deepEqual(list[2], { id: 'browser', available: true });
-  assert.deepEqual(list[3], { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' });
+  assert.deepEqual(list[2], { id: 'elevenlabs-ws', available: false, reason: '未配置 ElevenLabs API Key。' });
+  // Browser engines answer `ready`: only the browser can judge WebGPU/memory,
+  // and their failure path degrades to system speech.
+  assert.deepEqual(list[3], { id: 'kokoro-web', available: true });
+  assert.deepEqual(list[4], { id: 'piper-web', available: true });
+  assert.deepEqual(list[5], { id: 'browser', available: true });
+  assert.deepEqual(list[6], { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' });
 
-  const unreachable = createProviderRegistry({ fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
+  const unreachable = createProviderRegistry({ fetchImpl: async () => { throw new Error('ECONNREFUSED'); }, WebSocketImpl: FakeWebSocket });
   assert.deepEqual(await unreachable.list(FAIRY_VOICE_SETTINGS_DEFAULTS), [
     { id: 'local-sovits', available: false, reason: '本地 Fairy 服务未启动。' },
     { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' },
+    { id: 'elevenlabs-ws', available: false, reason: '未配置 ElevenLabs API Key。' },
+    { id: 'kokoro-web', available: true },
+    { id: 'piper-web', available: true },
     { id: 'browser', available: true },
     { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' },
   ]);
@@ -218,6 +282,9 @@ test('provider config reads and writes stay sanitized and never clobber a stored
     providers: {
       localSovits: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.localSovits,
       openai: { baseURL: 'https://api.example.com/v1', apiKey: '***', model: 'tts-1-hd', voice: 'alloy' },
+      elevenlabsWs: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.elevenlabsWs,
+      kokoroWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.kokoroWeb,
+      piperWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.piperWeb,
       customHttp: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.customHttp,
     },
   });
@@ -245,7 +312,15 @@ test('provider config lists every provider availability entry for the settings c
   const handlers = createFairyVoiceHandlers({ fetchImpl: async () => ({ ok: true }) });
   const response = responseDouble();
   await handlers.providers({}, response);
-  assert.deepEqual(JSON.parse(response.payload).map((entry) => entry.id), ['local-sovits', 'openai', 'browser', 'custom-http']);
+  assert.deepEqual(JSON.parse(response.payload).map((entry) => entry.id), [
+    'local-sovits',
+    'openai',
+    'elevenlabs-ws',
+    'kokoro-web',
+    'piper-web',
+    'browser',
+    'custom-http',
+  ]);
 });
 
 test('persona voice bindings write provider settings without importing the voice schema', () => {
@@ -325,4 +400,111 @@ test('local provider reads the configured reference transcript once per path', a
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('browser engine providers answer client-side and keep their configuration', async () => {
+  const registry = createProviderRegistry({ fetchImpl: async () => ({ ok: true }) });
+  const kokoro = registry.resolve({ provider: 'kokoro-web', providers: { kokoroWeb: { voice: 'af_bella' } } });
+  assert.equal(kokoro.id, 'kokoro-web');
+  assert.equal(kokoro.config.voice, 'af_bella');
+  assert.equal(kokoro.config.modelId, KOKORO_WEB_DEFAULTS.modelId);
+  await assert.rejects(
+    () => kokoro.provider.stream('hi', kokoro.config, {}),
+    (error) => error.code === 'client-side',
+  );
+
+  const piper = registry.resolve({ provider: 'piper-web', providers: { piperWeb: { voiceId: 'zh_CN-huayan-medium' } } });
+  assert.equal(piper.config.voiceId, 'zh_CN-huayan-medium');
+  assert.equal(piper.config.moduleUrl, PIPER_WEB_DEFAULTS.moduleUrl);
+});
+
+test('the /tts route answers 409 for a browser engine provider too', async () => {
+  const boundary = createVoiceSettingsBoundary();
+  boundary.write({ provider: 'kokoro-web' });
+  const handlers = createFairyVoiceHandlers({ settings: boundary });
+  const response = responseDouble();
+  await handlers.tts(requestWithJson({ text: '浏览器端合成。' }), response);
+  assert.equal(response.statusCode, 409);
+  // One shared body for the whole client-side family: the browser routes by
+  // its own selected engine id, so the message stays generic.
+  assert.deepEqual(JSON.parse(response.payload), { error: { code: 'client-side', message: '浏览器端朗读' } });
+});
+
+test('elevenlabs-ws streams base64 frames as PCM over a Response-like body', async () => {
+  FakeWebSocket.reset();
+  const provider = createElevenLabsWsProvider({ WebSocketImpl: FakeWebSocket });
+  const pending = provider.stream('你好，世界', { apiKey: 'xi-test', voiceId: 'voice-1' }, {});
+  const socket = FakeWebSocket.last;
+  assert.match(socket.url, /^wss:\/\/api\.elevenlabs\.io\/v1\/text-to-speech\/voice-1\/stream-input\?/);
+  assert.match(socket.url, /output_format=pcm_32000/);
+
+  socket.open();
+  const upstream = await pending;
+  assert.equal(upstream.response.ok, true);
+  assert.equal(upstream.response.headers.get('content-type'), 'audio/raw');
+  assert.equal(upstream.sampleRate, 32_000);
+  assert.equal(socket.sent.length, 3);
+  const init = JSON.parse(socket.sent[0]);
+  assert.equal(init.xi_api_key, 'xi-test');
+  assert.equal(init.text, ' ');
+  assert.equal(init.voice_settings.stability, 0.5);
+  assert.deepEqual(init.generation_config.chunk_length_schedule, [120, 160, 250, 290]);
+  assert.deepEqual(JSON.parse(socket.sent[1]), { text: '你好，世界 ', try_trigger_generation: true });
+  assert.deepEqual(JSON.parse(socket.sent[2]), { text: '' });
+
+  const chunks = [];
+  const drained = (async () => {
+    for await (const chunk of upstream.response.body) chunks.push(Buffer.from(chunk));
+  })();
+  socket.message(JSON.stringify({ audio: Buffer.from([1, 2]).toString('base64') }));
+  socket.message(Buffer.from(JSON.stringify({ audio: Buffer.from([3, 4]).toString('base64') })));
+  socket.message(JSON.stringify({ isFinal: true }));
+  await drained;
+  assert.deepEqual(chunks.map((chunk) => [...chunk]), [[1, 2], [3, 4]]);
+  assert.equal(socket.closed.code, 1000);
+
+  upstream.release();
+});
+
+test('elevenlabs-ws surfaces vendor errors and early closes as provider failures', async () => {
+  FakeWebSocket.reset();
+  const provider = createElevenLabsWsProvider({ WebSocketImpl: FakeWebSocket });
+  const first = provider.stream('hi', { apiKey: 'xi-test', voiceId: 'v' }, {});
+  FakeWebSocket.last.open();
+  const upstream = await first;
+  const failure = (async () => {
+    for await (const _chunk of upstream.response.body) { /* drain */ }
+  })();
+  FakeWebSocket.last.message(JSON.stringify({ error: 'quota exceeded' }));
+  await assert.rejects(() => failure, (error) => error.code === 'provider-failed' && /quota exceeded/.test(error.message));
+
+  FakeWebSocket.reset();
+  const second = provider.stream('hi', { apiKey: 'xi-test', voiceId: 'v' }, {});
+  FakeWebSocket.last.open();
+  const secondUpstream = await second;
+  const dropped = (async () => {
+    for await (const _chunk of secondUpstream.response.body) { /* drain */ }
+  })();
+  FakeWebSocket.last.close(1006, 'dropped');
+  await assert.rejects(() => dropped, (error) => error.code === 'provider-failed');
+});
+
+test('elevenlabs-ws refuses to start without a key and closes the socket on abort', async () => {
+  FakeWebSocket.reset();
+  const provider = createElevenLabsWsProvider({ WebSocketImpl: FakeWebSocket });
+  assert.deepEqual(
+    provider.available({ ...ELEVENLABS_WS_DEFAULTS, apiKey: '' }),
+    { available: false, reason: '未配置 ElevenLabs API Key。' },
+  );
+
+  const controller = new AbortController();
+  const pending = provider.stream('hi', { apiKey: 'xi-test', voiceId: 'v' }, { signal: controller.signal });
+  FakeWebSocket.last.open();
+  const upstream = await pending;
+  const ended = (async () => {
+    for await (const _chunk of upstream.response.body) { /* drain */ }
+  })();
+  controller.abort('client-aborted');
+  await ended;
+  assert.equal(FakeWebSocket.last.closed.reason, 'aborted');
 });
