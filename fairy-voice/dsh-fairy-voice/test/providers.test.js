@@ -329,6 +329,36 @@ test('provider config lists every provider availability entry for the settings c
   ]);
 });
 
+test('pocket-tts posts the documented form and strips the RIFF header', async () => {
+  // 本仓宿主 TTS 契约是裸 PCM（客户端按 pcmBytesToSamples/schedulePcm 直接播），
+  // 而 Pocket TTS 回 WAV：这条用例就是"WAV 头被当采样播成噪声"的防线。
+  const { readWavHeader, createPocketTtsProvider } = await import('../lib/providers/pocket-tts.js');
+  const wav = new Uint8Array(44 + 8);
+  const view = new DataView(wav.buffer);
+  const write = (offset, text) => { for (let i = 0; i < text.length; i += 1) wav[offset + i] = text.charCodeAt(i); };
+  write(0, 'RIFF'); view.setUint32(4, wav.length - 8, true); write(8, 'WAVE');
+  write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, 24_000, true);
+  write(36, 'data'); view.setUint32(40, 8, true);
+  assert.deepEqual(readWavHeader(wav), { sampleRate: 24_000, dataOffset: 44 });
+  assert.equal(readWavHeader(new Uint8Array([1, 2, 3, 4])), null);
+
+  const seen = [];
+  const provider = createPocketTtsProvider({
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return { ok: true, status: 200, headers: { get: () => 'audio/wav' }, async arrayBuffer() { return wav.buffer; }, async text() { return ''; } };
+    },
+  });
+  const answer = await provider.stream('你好', { baseUrl: 'http://127.0.0.1:8000', voice: 'alba' }, {});
+  assert.equal(seen[0].url, 'http://127.0.0.1:8000/tts');
+  assert.equal(seen[0].options.method, 'POST');
+  assert.equal(seen[0].options.headers['content-type'], 'application/x-www-form-urlencoded');
+  assert.deepEqual([...new URLSearchParams(seen[0].options.body).entries()], [['text', '你好'], ['voice_url', 'alba']]);
+  assert.equal(answer.sampleRate, 24_000);
+  assert.equal((await answer.response.arrayBuffer()).byteLength, 8);
+});
+
 test('persona voice bindings write provider settings without importing the voice schema', () => {
   assert.deepEqual(personaVoicePatch({ provider: 'openai', config: { baseURL: 'https://api.example.com/v1', apiKey: 'sk-live-1234567890', model: 'tts-1', voice: 'nova' } }), {
     provider: 'openai',
