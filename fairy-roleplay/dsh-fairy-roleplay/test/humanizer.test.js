@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { check, passes, renderReport } from '../lib/humanizer.js';
+import { check, renderReport } from '../lib/humanizer.js';
 
 test('off level disables every check', () => {
   const result = check('值得注意的是，这不是方案A而是方案B。', { level: 'off' });
@@ -16,7 +16,6 @@ test('L1 catches banned phrases and shell patterns with fixes', () => {
   assert.ok(rules.includes('contrast-shell'), `expected contrast-shell, got ${rules.join(',')}`);
   for (const hit of result.hits) assert.ok(typeof hit.fix === 'string' && hit.fix.length > 0, `每个命中都要给出改法：${hit.rule}`);
   assert.ok(result.score < 100);
-  assert.equal(passes(result), false);
 });
 
 test('quoted text is exempt from the word list', () => {

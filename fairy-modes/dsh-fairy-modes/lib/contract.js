@@ -67,7 +67,6 @@ export const PIPELINE_STAGE_LABELS = Object.freeze({
   off: '空闲（不在流水线内）',
   explore: '探查（只读）',
   roleplay: '扮演',
-  explore: '探查（极简）',
   ptc: '建造（PTC）',
   create: '创造（回忆）',
 });

@@ -44,6 +44,8 @@ export function createModePipelineTool({ service, readPlan, resolvePlanMode } = 
    * 官方 plan 控制器：由 agent-presets 按名解析（与桥面取 fairyMode 同一手法）。
    * 取不到就退回“让用户 /plan”，流水线其余部分不受影响。
    */
+  // ponytail: 按名探测 plan 控制器（与桥面同一手法），拿不到就退回提示用户 /plan；
+  // 升级路径：harness 给出跨 realm 的正式入口后改为显式依赖。
   const planController = (agent) => {
     if (typeof resolvePlanMode !== 'function') return undefined;
     try {

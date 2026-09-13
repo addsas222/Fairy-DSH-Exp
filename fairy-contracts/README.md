@@ -54,3 +54,7 @@ become a channel for one feature to mutate another feature's state.
 Validate it through `~/.dsh/fairy-system/check.sh`. Roll back source/config
 from the verified audit archive documented by the system audit; do not restore
 contracts independently from their consuming plugins.
+
+## ponytail 上限
+
+`ponytail: HTTP 小工具（sendJson/readJson）在六个包各抄一份。` 每份十几行、语义稳定（正文大小上限 + JSON 解析错误），复制比跨包抽象便宜；升级路径：把这它们搬进本包（`./http` 子路径）后逐包删本地副本。

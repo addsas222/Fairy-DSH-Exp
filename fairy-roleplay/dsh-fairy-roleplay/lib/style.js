@@ -14,6 +14,8 @@
 /** 单条情境与表达的字数上限，超出的条目在学习阶段就截断。 */
 export const STYLE_FIELD_LIMIT = 20;
 
+/** ponytail: (situation, style) 精确匹配去重，语义相近的说法会各占一条；
+ * 升级路径：条目逼近上限时再做 embedding 聚类或让模型合并。 */
 /** 风格库条目上限。 */
 export const STYLE_ENTRY_LIMIT = 200;
 

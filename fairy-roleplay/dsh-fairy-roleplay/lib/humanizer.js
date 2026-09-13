@@ -7,6 +7,10 @@
  * - L3 内容（空泛大词、悬浮比喻）——启发式标记，供模型自查。
  * - L4 终审：自动检查全部通过时才置 `requiresReading`，提醒必须通读一遍。
  *
+ * ponytail: 启发式检查——词表、句式正则与句长统计，判据由中文 AI 腔的常见模式归纳而来，
+ * 会漏掉新造套话、也会误报正常行文。升级路径：命中率不够时把 L1/L2 交给一次模型复核，
+ * 或按真实语料扩词表（本文件之外不改调用方）。
+ *
  * 引用保护：引号包裹的内容（"…"、'…'、「…」、“…”）不参与词表替换判断，
  * 这是 MaiBot 类规则里优先级最高的一条，这里同样优先。
  *
@@ -136,16 +140,6 @@ export function check(text, { level = 'l1', locale } = {}) {
   }
   const score = Math.max(0, 100 - hits.reduce((sum, hit) => sum + (hit.layer === 1 ? 12 : hit.layer === 2 ? 6 : 4), 0));
   return { level, depth, score, hits, requiresReading: depth >= 4 && hits.length === 0 };
-}
-
-/**
- * 按档位给出是否放行：L4 档要求「自动检查无命中」。模型侧仍需通读一遍。
- *
- * @param result - {@link check} 的返回值。
- * @returns 是否可以按当前档位发出。
- */
-export function passes(result) {
-  return (result?.hits?.length ?? 0) === 0;
 }
 
 /** 把命中项渲染成给模型的自检报告（人话、可执行）。 */

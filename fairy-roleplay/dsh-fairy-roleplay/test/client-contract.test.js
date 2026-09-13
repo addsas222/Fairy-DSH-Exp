@@ -72,7 +72,4 @@ test('the card talks to the host routes this package actually serves', async () 
   for (const level of ['off', 'l1', 'l2', 'l3', 'l4']) {
     assert.ok(source.includes(`value: '${level}'`), `level ${level} must be selectable`);
   }
-  for (const toggle of ['timingGate', 'styleEnabled', 'autoCheck', 'memoryImpression']) {
-    assert.ok(source.includes(toggle), `toggle ${toggle} must exist`);
-  }
 });

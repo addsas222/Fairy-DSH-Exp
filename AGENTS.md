@@ -28,7 +28,7 @@
 | `fairy-modes/dsh-fairy-modes/` | 五模式引擎（极简 Explore&Check=官方 plan / 探查只读 / PTC Build&Work / 创造 Memory&Dream / 角色扮演），含 `session_recall` 与 `mode_pipeline` 工具；后者把四个站点串成流水线（扮演→探查→建造→创造→回到扮演），进探查站会尝试自动打开官方 plan 审批闸门，离开走 `exit_plan_mode`。端点 `/fairy-modes/*` |
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成。端点 `/fairy-search/*` |
 | `fairy-memory/dsh-fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`），mem0 / 自定义 HTTP / 本地 Markdown 备选；`memory_recall`/`memory_remember` 工具 + CLI。端点 `/fairy-memory/*` |
-| `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（`/mode roleplay`，流水线第四站）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
+| `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（`/mode roleplay`，流水线环的起点与回环点）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
 | `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT（网上：browser / openai / deepgram / azure / custom-http；本地：whisper-web、或 openai 指向 loopback）。端点 `/fairy-voice/*` |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
 | `balance-meter/` | 余额指示 |
