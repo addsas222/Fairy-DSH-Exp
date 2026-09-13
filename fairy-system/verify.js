@@ -46,6 +46,7 @@ const publishedPackages = [
   paths.modesPlugin,
   paths.searchPlugin,
   paths.memoryPlugin,
+  paths.roleplayPlugin,
 ];
 
 function fail(message) {
@@ -113,6 +114,7 @@ function verifyGeneratedArtifactFreshness() {
     [paths.modesPlugin, null],
     [paths.searchPlugin, null],
     [path.join(paths.memoryPlugin, 'src'), 'src'],
+    [paths.roleplayPlugin, null],
   ]);
   const forbiddenClient = new Map([
     [paths.browserDock, [/child_process/, /playwright-profile/, /Google Chrome\.app/]],

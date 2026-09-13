@@ -16,6 +16,7 @@ const scopeRoots = [
   'browser-dock/dsh-browser-dock',
   'fairy-contracts',
   'fairy-memory/dsh-fairy-memory',
+  'fairy-roleplay/dsh-fairy-roleplay',
   'fairy-startup/dsh-fairy-startup',
   'fairy-system',
   'fairy-persona/dsh-fairy-persona',

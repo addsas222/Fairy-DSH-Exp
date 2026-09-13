@@ -74,6 +74,15 @@ const packages = [
     forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
     forbiddenClient: [/Authorization/, /DEEPSEEK_API_KEY/],
   },
+  {
+    dir: path.join(dshRoot, 'fairy-roleplay', 'dsh-fairy-roleplay'),
+    name: 'dsh-fairy-roleplay',
+    // Hand-written lib/ (no build step): the shipped files are the source.
+    sourceRoot: null,
+    // Rules are prompt data; neither face may build auth material.
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
+    forbiddenClient: [/Authorization/],
+  },
 ];
 
 function fail(message) {

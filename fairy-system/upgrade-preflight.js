@@ -20,6 +20,7 @@ const LOCAL_PACKAGES = [
   ['dsh-fairy-modes', 'fairy-modes', 'dsh-fairy-modes'],
   ['dsh-fairy-search', 'fairy-search', 'dsh-fairy-search'],
   ['dsh-fairy-memory', 'fairy-memory', 'dsh-fairy-memory'],
+  ['dsh-fairy-roleplay', 'fairy-roleplay', 'dsh-fairy-roleplay'],
 ];
 // Same knobs as preflight-build.js: the validation chain runs against an
 // isolated home and a candidate runtime, never the developer's live install.
@@ -250,7 +251,7 @@ function verifyProfileContracts(profileRoot, packages, matrix) {
   assert(positions.every((position, index) => index === 0 || position > positions[index - 1]), 'profile inject order drifted');
 
   // The Ponytail-era packages must stay wired into the web profile.
-  for (const id of ['fairy-persona', 'fairy-modes-bridge', 'fairy-search', 'fairy-memory']) {
+  for (const id of ['fairy-persona', 'fairy-modes-bridge', 'fairy-search', 'fairy-memory', 'fairy-roleplay']) {
     assert(patch.includes(`id: ${id}`), `profile inject declaration is missing: ${id}`);
   }
 

@@ -37,7 +37,7 @@ function createIsolatedFixture() {
   const runtime = join(rootDir, 'runtime', 'lib', 'client.js');
   mkdirSync(nodeModules, { recursive: true });
   mkdirSync(join(rootDir, 'runtime', 'lib'), { recursive: true });
-  for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search', 'dsh-fairy-memory']) {
+  for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search', 'dsh-fairy-memory', 'dsh-fairy-roleplay']) {
     const source = realpathSync(join(currentProfile, 'node_modules', name));
     linkDirectory(source, join(nodeModules, name));
   }
@@ -51,7 +51,7 @@ function createIsolatedFixture() {
   mkdirSync(join(nodeModules, '@deepseek-ai'), { recursive: true });
   linkDirectory(officialConversation, join(nodeModules, '@deepseek-ai', 'dsh-client-ui-conversation'));
   const profilePackage = JSON.parse(readFileSync(join(currentProfile, 'package.json'), 'utf8'));
-  for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search', 'dsh-fairy-memory']) {
+  for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search', 'dsh-fairy-memory', 'dsh-fairy-roleplay']) {
     profilePackage.dependencies[name] = `link:${realpathSync(join(currentProfile, 'node_modules', name))}`;
   }
   writeFileSync(join(profile, 'package.json'), JSON.stringify(profilePackage, null, 2));
