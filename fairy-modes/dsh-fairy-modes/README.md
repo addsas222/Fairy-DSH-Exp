@@ -89,7 +89,7 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 
 ## ponytail 上限与升级路径
 
-- **plan 控制器按名解析**：探查站通过 `agentPresets.serviceFor(agent, 'planMode')` 取官方控制器；拿不到（不同组合、不同 cohort）就退回“提示用户 `/plan`”，流水线其余行为不变。升级路径：harness 暴露跨 realm 的正式入口后改为显式依赖。
+- **plan 控制器按名解析**：探查站通过 `agentPresets.serviceFor(agent, 'planMode')` 取官方控制器。harness 的 `serviceForAgent` 遍历全局服务表、按名在**该 agent 的 preset 子树内**查找（`withinFiber(impl.fiber, mount.fiber)`），因此兄弟 realm 里的 plan 控制器可见；其文档也写明这正是“已持有 agent 的调用方按名寻址”的用途（官方 `exit_plan_mode` 同平面读 `ctx.get('userQuestions')`，同一先例）。拿不到（不同组合 / 该 cohort 未挂 plan-mode）时退回“提示用户 `/plan`”，流水线其余行为不变。
 - **无 turn 内排队**：`set()` 立即落事件，不复制 plan-mode 的 pending-intent 等待（模式只影响下一次请求组装）。升级路径：若需在运行中的 turn 内叙述模式切换，接入 `agent/pre-step`。
 - **无切换叙述消息**：段落本身就是指令，注入用户通知等于每次切换重复一遍。
 - **`presentAs` 冲突不回滚**：作用域已声明呈现（preset 行或另一模式实例）时 `presentAs` 抛错，本包 `diagnostics.warn` 后仍记录模式（提示词段落照常生效）。升级路径：与声明方协商单一 owner。

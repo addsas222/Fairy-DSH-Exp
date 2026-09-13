@@ -262,3 +262,23 @@ test('the 0.1.2+ cohort gets the ptc presentation value and the 501 order', () =
   assert.equal(presentationOf(), 'ptc');
   assert.equal(sections.get('fairy:mode-ptc').order, 501);
 });
+
+test('the mounted pipeline tool resolves the official plan controller by name', async () => {
+  const { ctx, agent, calls, session } = mount();
+  const gate = [];
+  let asked = null;
+  // 解析器在调用时才读 ctx，所以挂载后替换 get() 就能覆盖按名寻址那一步。
+  ctx.get = (name) => {
+    asked = name;
+    return name === 'agentPresets'
+      ? { serviceFor: (_agent, serviceName) => (serviceName === 'planMode' ? { set: (_a, active) => { gate.push(active); return 'committed'; } } : undefined) }
+      : undefined;
+  };
+  const tool = calls.tools.find((entry) => entry.name === 'mode_pipeline');
+  assert.ok(tool, 'mode_pipeline is registered at mount');
+  const result = await tool.execute({ action: 'enter', stage: 'explore' }, { agent });
+  assert.equal(asked, 'agentPresets', 'the resolver asks the preset registry');
+  assert.deepEqual(gate, [true], 'the official plan gate is opened through the resolver');
+  assert.equal(result.stage, 'explore');
+  assert.equal(session.log.at(-1).data.mode, 'explore', 'and the read-only station is logged');
+});
