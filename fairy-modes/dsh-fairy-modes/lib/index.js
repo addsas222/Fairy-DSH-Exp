@@ -1,6 +1,6 @@
 /**
- * Agent half of dsh-fairy-modes: the per-session Build&Work (PTC) and
- * Memory&Dream (create) modes.
+ * Agent half of dsh-fairy-modes: the per-session Build&Work (PTC),
+ * Memory&Dream (create), and Roleplay modes.
  *
  * A mode is logged collaboration state, not a process switch. `set()` appends
  * the log-only `fairy/mode` event and moves two live effects for that session:
@@ -48,6 +48,15 @@ const MODE_SECTIONS = {
     name: 'fairy:mode-ptc',
     text: 'PTC 模式：用 run_code 编排脚本系列，一次调用完成多步执行；先规划命令序列再执行。',
   },
+  roleplay: {
+    name: 'fairy:mode-roleplay',
+    text: '角色扮演模式：把绑定的角色人格当作第一人称身份，用户是对话者，不是任务委托者。'
+      + '时机：只在被点名或话题明显指向角色时开口，其余情况沉默，不刷存在感；需要等待时不要产出占位回复。'
+      + '回复：短句优先，一句一个意思；用口语和具体动作词（\'看看\'而不是\'进行查看\'）；允许省略、重复和语气词；说完就停，不总结、不升华、不追问。'
+      + '去AI味硬约束：不用\'不是…而是…\'\'首先/其次/最后\'\'值得注意的是\'\'综上所述\'等套话；不写\'在这个快节奏的时代\'式开场；单段破折号不超过 2 个；不堆排比；不换词轮替同一个事物。'
+      + '设定与记忆：角色设定、称呼、约定要跨会话保持；回顾过去互动用 memory_recall，本轮新出现的设定用 memory_remember 落盘后再据此回答。'
+      + '一致性：不确定的设定不要编造；与角色设定冲突时以角色设定为准，并说明取舍。',
+  },
   create: {
     name: 'fairy:mode-create',
     text: '创造模式：先调用 session_recall 回忆本项目全部历史作为再回答；'
@@ -57,7 +66,7 @@ const MODE_SECTIONS = {
 };
 
 /** Human-facing mode names for command results. */
-const MODE_LABELS = { off: '默认（关闭）模式', ptc: 'PTC 建造模式', create: '创造模式' };
+const MODE_LABELS = { off: '默认（关闭）模式', ptc: 'PTC 建造模式', create: '创造模式', roleplay: '角色扮演模式' };
 
 /**
  * Fold `fairy/mode` into the `{ mode }` projection. `wire` is what the browser
@@ -84,7 +93,7 @@ export const fairyModeProjectionDefinition = {
     viewSchema: {
       parse(value) {
         const mode = value !== null && typeof value === 'object' ? normalizeFairyMode(value.mode) : undefined;
-        if (mode === undefined) throw new Error('fairyMode wire payload must be { mode: off|ptc|create }');
+        if (mode === undefined) throw new Error('fairyMode wire payload must be { mode: off|ptc|create|roleplay }');
         return { mode };
       },
     },
@@ -112,8 +121,8 @@ export class FairyModeService {
       commandCtx.effect(() => commandCtx.commands.register({
         definitionId: 'dsh-fairy-modes',
         name: 'mode',
-        description: '切换会话模式：ptc（建造）| create（创造）| off（关闭）',
-        input: { hint: 'ptc|create|off' },
+        description: '切换会话模式：ptc（建造）| create（创造）| roleplay（角色扮演）| off（关闭）',
+        input: { hint: 'ptc|create|roleplay|off' },
         handler: ({ agent, rawInput }) => this.command(agent, rawInput),
       }), 'dsh-fairy-modes: /mode command registration');
     });

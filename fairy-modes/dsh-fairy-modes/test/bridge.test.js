@@ -108,7 +108,7 @@ test('POST /fairy-modes/set rejects an unknown mode and a bad body before resolv
 
   assert.deepEqual(await call(setRoute, fakeRequest({
     method: 'POST', body: { sessionId: 's1', mode: 'fast' },
-  })), { status: 400, value: { ok: false, error: 'mode 必须是 off、ptc 或 create。' } });
+  })), { status: 400, value: { ok: false, error: 'mode 必须是 off、ptc、create 或 roleplay。' } });
 
   const malformed = fakeRequest({ method: 'POST' });
   malformed[Symbol.asyncIterator] = async function* malformedBody() { yield Buffer.from('{not json'); };

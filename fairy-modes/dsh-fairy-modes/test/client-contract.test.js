@@ -184,7 +184,7 @@ test('the settings card explains the modes and persists the new-session default'
   assert.equal(select.props['data-dsh-fairy-modes-default'], 'true');
   assert.deepEqual(
     Array.from(select.props.children, option => option.props.value),
-    ['', 'ptc', 'create', 'off'],
+    ['', 'ptc', 'roleplay', 'create', 'off'],
     'the dropdown offers 不设置/建造/创造/关闭',
   );
   assert.deepEqual(Array.from(texts(select.props.children[0])), ['不设置（新会话保持 off）']);

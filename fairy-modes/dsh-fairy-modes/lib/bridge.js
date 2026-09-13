@@ -145,7 +145,7 @@ export function createFairyModesBridge(ctx) {
       }
       const mode = normalizeFairyMode(body?.mode);
       if (mode === undefined) {
-        sendJson(res, 400, { ok: false, error: 'mode 必须是 off、ptc 或 create。' });
+        sendJson(res, 400, { ok: false, error: 'mode 必须是 off、ptc、create 或 roleplay。' });
         return;
       }
       const resolved = await resolve(body?.sessionId);

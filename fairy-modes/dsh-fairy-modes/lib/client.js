@@ -70,10 +70,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
      * and this keeps a second chip instance (or a fallback-mode chip) correct
      * without polling. */
     const EVENT_CHANGED = 'fairy-modes-changed';
-    const CHIP_LABELS = { ptc: 'PTC', create: '创造', off: 'off' };
+    const CHIP_LABELS = { ptc: 'PTC', create: '创造', roleplay: '角色', off: 'off' };
     const MENU = [
       { value: 'plan', label: '探查·极简' },
       { value: 'ptc', label: '建造·PTC' },
+      { value: 'roleplay', label: '角色扮演' },
       { value: 'create', label: '创造·回忆' },
       { value: 'off', label: '关闭' },
     ];
@@ -87,6 +88,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const DEFAULT_MODE_OPTIONS = [
       { value: '', label: '不设置（新会话保持 off）' },
       { value: 'ptc', label: '建造·PTC' },
+      { value: 'roleplay', label: '角色扮演' },
       { value: 'create', label: '创造·回忆' },
       { value: 'off', label: '关闭·off' },
     ];

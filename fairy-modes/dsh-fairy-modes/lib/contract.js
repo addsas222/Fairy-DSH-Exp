@@ -12,7 +12,7 @@ export const FAIRY_MODE_EVENT = 'fairy/mode';
 export const FAIRY_MODE_PROJECTION = 'fairyMode';
 
 /** Every selectable mode, in UI order. Plan mode (探索/极简) is official and orthogonal. */
-export const FAIRY_MODES = Object.freeze(['off', 'ptc', 'create']);
+export const FAIRY_MODES = Object.freeze(['off', 'ptc', 'create', 'roleplay']);
 
 /**
  * Normalize a requested mode, tolerating case and surrounding blanks.
