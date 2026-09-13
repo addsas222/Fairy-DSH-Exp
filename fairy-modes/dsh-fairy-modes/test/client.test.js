@@ -179,7 +179,7 @@ test('the chip label follows the fairyMode projection, then plan mode', () => {
     { sessionId: 's1', useProjection: (key) => values[key], inputActions: undefined },
   );
   render({});
-  assert.equal(driver.tree().props.children[0].props.children, 'off');
+  assert.equal(driver.tree().props.children[0].props.children, '空闲');
   render({ fairyMode: { mode: 'ptc' } });
   assert.equal(driver.tree().props.children[0].props.children, 'PTC');
   render({ fairyMode: { mode: 'create' } });
@@ -205,7 +205,7 @@ test('selecting a fairy mode posts to the bridge and announces the change', asyn
     useProjection: () => ({ mode: 'off' }),
     inputActions: undefined,
   });
-  buttonWith(bundle.driver.tree(), 'off').props.onClick();
+  buttonWith(bundle.driver.tree(), '空闲').props.onClick();
   const posted = buttonWith(bundle.driver.tree(), '创造·回忆');
   posted.props.onClick();
   await bundle.settle();
@@ -234,7 +234,7 @@ test('the 极简 row drives the official /plan command through the composer', as
     inputActions: { setDraft: (text) => drafts.push(text), submit: () => drafts.push('submit') },
   });
   render({ active: false, pending: false });
-  buttonWith(bundle.driver.tree(), 'off').props.onClick();
+  buttonWith(bundle.driver.tree(), '空闲').props.onClick();
   buttonWith(bundle.driver.tree(), '探查·极简').props.onClick();
   assert.deepEqual(drafts, ['/plan', 'submit']);
   assert.equal(bundle.requests.filter(request => request.url === '/fairy-modes/set').length, 0);

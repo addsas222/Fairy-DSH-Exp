@@ -2,7 +2,9 @@
  * Agent half of dsh-fairy-modes: the per-session Build&Work (PTC),
  * Memory&Dream (create), and Roleplay modes.
  *
- * A mode is logged collaboration state, not a process switch. `set()` appends
+ * A mode is logged collaboration state, not a process switch. The four modes are
+ * also the stations of a pipeline (roleplay → explore → ptc → create → roleplay)
+ * that `mode_pipeline` advances — see `./pipeline.js`. `set()` appends
  * the log-only `fairy/mode` event and moves two live effects for that session:
  * the `fairy:mode-ptc` / `fairy:mode-create` prompt section, and — for PTC —
  * the scoped `ctx.tools.presentAs('ptc')` declaration held as its own disposer.
@@ -39,6 +41,7 @@ import {
   normalizeFairyMode,
 } from './contract.js';
 import { createSessionRecallTool } from './recall.js';
+import { PIPELINE_SECTION_TEXT, createModePipelineTool } from './pipeline.js';
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-modes');
 
@@ -181,8 +184,8 @@ export class FairyModeService {
       return {
         kind: 'error',
         text: requested === ''
-          ? '用法：/mode ptc|create|off'
-          : `未知模式 "${requested}"；可用：ptc、create、off。`,
+          ? '用法：/mode ptc|create|roleplay|off'
+          : `未知模式 "${requested}"；可用：ptc、create、roleplay、off。`,
       };
     }
     const outcome = this.set(agent, mode);
@@ -255,7 +258,16 @@ export function apply(ctx) {
   return diagnostics.guard('apply', () => {
     /* `provide` ties the service to this fiber: unloading the row (or its realm)
      * unregisters it, and every disposal it owns unwinds with the same scope. */
-    ctx.provide('fairyMode', new FairyModeService(ctx));
+    const service = new FairyModeService(ctx);
+    ctx.provide('fairyMode', service);
+    /* The pipeline section stays present in every mode: the request tool catalog
+     * and the prompt shape must not change just because a stage advanced. */
+    ctx.systemPrompt.section({
+      name: 'fairy:pipeline',
+      order: modeSectionOrder(ctx.systemPrompt) + 2,
+      text: PIPELINE_SECTION_TEXT,
+    });
+    ctx.tools.register(createModePipelineTool({ service }));
     /* Recall is registered in every mode, not just create: the request tool
      * catalog must not change when the mode does. The child waits for the
      * session-query engine, so a deployment composing none simply has no tool. */

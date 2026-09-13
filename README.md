@@ -9,7 +9,7 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 - `fairy-contracts/`：跨插件契约与诊断边界
 - `browser-dock/`、`balance-meter/`、`fairy-startup/`、`fairy-voice/`、`fairy-visual/`：Fairy 插件
 - `fairy-persona/`：人格包引擎（人格文档 + 调色属性 + TTS 绑定的热切换）
-- `fairy-modes/`：会话模式引擎（极简 Explore&Check / PTC Build&Work / 创造 Memory&Dream）
+- `fairy-modes/`：会话模式引擎（极简 Explore&Check / PTC Build&Work / 创造 Memory&Dream / 角色扮演；`mode_pipeline` 把四者串成流水线）
 - `fairy-search/`：搜索枢纽（多后端按设置路由 + 控制界面）
 - `fairy-memory/`：长期记忆（GBrain 主用，Mem0 / 自定义 HTTP / 本地 Markdown 备选 + 控制界面）
 - `fairy-roleplay/`：角色扮演模式（第四会话模式；去AI味检查器 L1-L4 + 风格库 + 控制界面）

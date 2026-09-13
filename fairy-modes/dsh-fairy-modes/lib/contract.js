@@ -52,3 +52,64 @@ export function modeSectionOrder(systemPrompt) {
     ? systemPrompt.getSectionOrder('PLAN_POLICY') + 1
     : 51;
 }
+
+/**
+ * 模式流水线（会话调度）：扮演 → 探查 → 建造 → 创造，然后回到扮演。
+ *
+ * 阶段不是新的日志状态：`explore` 读的是官方 `plan` 投影（plan 模式打开即处于
+ * 探查阶段），`ptc` / `create` / `roleplay` 读的是 `fairyMode` 投影。两个投影都
+ * 折在会话日志里，所以 resume / fork 之后流水线位置自动还原。
+ */
+export const FAIRY_PIPELINE_STAGES = Object.freeze(['roleplay', 'explore', 'ptc', 'create']);
+
+/** 阶段的中文名，供工具回报与 chip 使用。 */
+export const PIPELINE_STAGE_LABELS = Object.freeze({
+  off: '空闲（不在流水线内）',
+  roleplay: '扮演',
+  explore: '探查（极简）',
+  ptc: '建造（PTC）',
+  create: '创造（回忆）',
+});
+
+/**
+ * 每个阶段要落地的状态：fairy 模式 + 是否期望官方 plan-mode 打开。
+ *
+ * `explore` 用 `off`（默认 agent 行为）并把 plan 打开：官方 plan 策略段自带
+ * 「只探查、不改动、方案经审批」的约束，不需要我们再写一份。plan-mode 由官方
+ * 服务拥有（另一个 isolate 领域），本包只读 `plan` 投影、不写它——需要打开时
+ * 由用户在输入框 `/plan` 或会话头 chip 切换。
+ */
+export const PIPELINE_STAGE_STATE = Object.freeze({
+  roleplay: Object.freeze({ mode: 'roleplay', plan: false }),
+  explore: Object.freeze({ mode: 'off', plan: true }),
+  ptc: Object.freeze({ mode: 'ptc', plan: false }),
+  create: Object.freeze({ mode: 'create', plan: false }),
+});
+
+/**
+ * 当前阶段：plan 打开即在探查阶段，否则就是 fairy 模式本身。
+ *
+ * @param input.planActive - 官方 `plan` 投影的 `active`。
+ * @param input.mode - `fairyMode` 投影的模式。
+ * @returns 流水线阶段；未知模式回落 `roleplay`。
+ */
+export function pipelineStageOf({ planActive, mode }) {
+  if (planActive === true) return 'explore';
+  // 默认模式（off）是流水线之外的空闲态：用户显式关掉了模式，或还没进入流水线。
+  if (mode === undefined || mode === 'off') return 'off';
+  return FAIRY_PIPELINE_STAGES.includes(mode) ? mode : 'off';
+}
+
+/**
+ * 下一个阶段；末尾回到扮演，所以流水线是个环。
+ *
+ * @param stage - 当前阶段。
+ * @returns 下一个阶段。
+ */
+export function nextPipelineStage(stage) {
+  // 空闲态推进一格 = 回到流水线起点（扮演），而不是跳到探查：进入工作流应当是
+  // 一次显式选择，从空闲直接落到探查会跳过扮演阶段的判断。
+  if (stage === 'off') return 'roleplay';
+  const index = FAIRY_PIPELINE_STAGES.indexOf(stage);
+  return FAIRY_PIPELINE_STAGES[index < 0 ? 0 : (index + 1) % FAIRY_PIPELINE_STAGES.length];
+}

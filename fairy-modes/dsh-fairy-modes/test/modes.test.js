@@ -131,12 +131,12 @@ test('publishes the mode service and the projection unit', () => {
 
 test('registers the recall tool in every mode for a stable tool catalog', () => {
   const { calls, service, agent } = mount();
-  assert.deepEqual(calls.tools.map(tool => tool.name), ['session_recall']);
+  assert.deepEqual(calls.tools.map(tool => tool.name), ['mode_pipeline', 'session_recall']);
   const registered = calls.tools[0];
   service.set(agent, 'create');
   service.set(agent, 'ptc');
   service.set(agent, 'off');
-  assert.equal(calls.tools.length, 1, 'mode switches never touch the tool catalog');
+  assert.equal(calls.tools.length, 2, 'mode switches never touch the tool catalog');
   assert.equal(calls.tools[0], registered);
 });
 
@@ -167,7 +167,7 @@ test('ptc drives the scoped presentation and the prompt section, and off restore
   assert.equal(service.set(agent, 'ptc'), 'committed');
   assert.deepEqual(calls.presentAs, ['code']);
   assert.equal(presentationOf(), 'code');
-  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+  assert.deepEqual([...sections.keys()], ['fairy:pipeline', 'fairy:mode-ptc']);
   // 51 = one step after the official plan:policy section (order 50), which is
   // the literal this harness cohort expects; getSectionOrder does not exist here.
   // 0.1.1 cohort: plan:policy sits at literal order 50, the value is `code`.
@@ -178,13 +178,14 @@ test('ptc drives the scoped presentation and the prompt section, and off restore
   assert.equal(service.set(agent, 'create'), 'committed');
   assert.equal(presentationOf(), null);
   assert.equal(calls.releases, 1);
-  assert.deepEqual([...sections.keys()], ['fairy:mode-create']);
+  assert.deepEqual([...sections.keys()], ['fairy:pipeline', 'fairy:mode-create']);
   assert.match(sections.get('fairy:mode-create').text, /session_recall/);
   assert.doesNotMatch(sections.get('fairy:mode-create').text, /session_search/);
   assert.match(sections.get('fairy:mode-create').text, /skill-audit\.js/);
 
   assert.equal(service.set(agent, 'off'), 'committed');
-  assert.equal(sections.size, 0);
+  // 流水线说明段落在每种模式下都在场：模式切换只换模式段落。
+  assert.deepEqual([...sections.keys()], ['fairy:pipeline']);
   assert.equal(presentationOf(), null);
   assert.equal(calls.releases, 1);
   assert.deepEqual(service.get(agent), { mode: 'off' });
@@ -195,7 +196,7 @@ test('a scope that already declared a presentation still records the mode', () =
   assert.equal(service.set(agent, 'ptc'), 'committed');
   assert.equal(presentationOf(), null);
   assert.equal(service.loggedMode(agent.session), 'ptc');
-  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+  assert.deepEqual([...sections.keys()], ['fairy:pipeline', 'fairy:mode-ptc']);
 });
 
 test('repeat selection is a noop and never duplicates log or section entries', () => {
@@ -203,7 +204,7 @@ test('repeat selection is a noop and never duplicates log or section entries', (
   service.set(agent, 'ptc');
   assert.equal(service.set(agent, 'ptc'), 'noop');
   assert.equal(session.log.length, 1);
-  assert.equal(sections.size, 1);
+  assert.equal(sections.size, 2, '流水线段落 + 当前模式段落');
   assert.equal(service.set(agent, 'off'), 'committed');
   assert.equal(service.set(agent, 'off'), 'noop');
   assert.equal(session.log.length, 2);
@@ -215,7 +216,7 @@ test('get() reconciles a mode carried by the session log (resume and fork)', () 
   session.append('fairy/mode', { mode: 'ptc' });
   assert.deepEqual(service.get(agent), { mode: 'ptc' });
   assert.equal(presentationOf(), 'code');
-  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+  assert.deepEqual([...sections.keys()], ['fairy:pipeline', 'fairy:mode-ptc']);
   // Re-reading is idempotent.
   const registered = sections.get('fairy:mode-ptc');
   assert.deepEqual(service.get(agent), { mode: 'ptc' });
@@ -237,8 +238,8 @@ test('/mode parses ptc|create|off and reports usage otherwise', () => {
   assert.deepEqual(service.command(agent, 'ptc'), { kind: 'success', text: '已切换到PTC 建造模式。' });
   assert.deepEqual(service.command(agent, ' create '), { kind: 'success', text: '已切换到创造模式。' });
   assert.deepEqual(service.command(agent, 'off'), { kind: 'success', text: '已切换到默认（关闭）模式。' });
-  assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode ptc|create|off' });
-  assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：ptc、create、off。' });
+  assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode ptc|create|roleplay|off' });
+  assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：ptc、create、roleplay、off。' });
   assert.deepEqual(session.log.map(event => event.data.mode), ['ptc', 'create', 'off']);
 
   // The handler the registry holds is the same body, and says so when the

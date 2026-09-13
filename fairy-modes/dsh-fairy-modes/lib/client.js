@@ -70,7 +70,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
      * and this keeps a second chip instance (or a fallback-mode chip) correct
      * without polling. */
     const EVENT_CHANGED = 'fairy-modes-changed';
-    const CHIP_LABELS = { ptc: 'PTC', create: '创造', roleplay: '角色', off: 'off' };
+    const CHIP_LABELS = { ptc: 'PTC', create: '创造', roleplay: '角色', off: '空闲' };
     const MENU = [
       { value: 'plan', label: '探查·极简' },
       { value: 'ptc', label: '建造·PTC' },
@@ -94,6 +94,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     ];
     const MODE_SEMANTICS = [
       { term: '极简', text: '官方 plan-mode，与下面的会话模式正交：在输入框输入 /plan（或点会话头 chip 的「探查·极简」）切换。' },
+      { term: '流水线', text: '扮演 → 探查 → 建造 → 创造 → 回到扮演：模型用 mode_pipeline 推进，也可以点上面的模式手动切换任意一步。' },
       { term: '建造·PTC', text: '用 run_code 编排脚本系列，一次调用完成多步执行；先规划命令序列再执行。' },
       { term: '创造·回忆', text: '先调用 session_recall 回忆本项目全部历史，再回答；技能制作写 SKILL.md，插件制作运行 fairy-system/scaffold-plugin.js。' },
     ];
