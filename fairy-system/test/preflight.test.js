@@ -28,7 +28,7 @@ function createFixture() {
     dependencies: {
       ...Object.fromEntries(packages.map(([name, folder]) => [name, `link:../../${folder}/${name}`])),
       'dsh-message-edit': '0.2.3',
-      'dsh-reasoning-effort': 'github:HanaAyane/dsh-reasoning-effort#main',
+      'dsh-reasoning-effort': 'github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994',
     },
   }));
   copyFileSync(join(approvedProfile, 'pnpm-lock.yaml'), join(profile, 'pnpm-lock.yaml'));
@@ -70,7 +70,7 @@ test('accepts complete bundles and profile links', (t) => {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = runVerifier(root);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="5"/);
+  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="8"/);
 });
 
 test('fails before launch when a client bundle is missing', (t) => {
@@ -130,7 +130,7 @@ test('fails when the profile dependency declaration drifts', (t) => {
     dependencies: {
       ...Object.fromEntries(packages.map(([name, folder]) => [name, `link:../../${folder}/${name}`])),
       'dsh-message-edit': '0.2.3',
-      'dsh-reasoning-effort': 'github:HanaAyane/dsh-reasoning-effort#main',
+      'dsh-reasoning-effort': 'github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994',
       'dsh-fairy-visual': 'link:../../fairy-voice/dsh-fairy-voice',
     },
   }));

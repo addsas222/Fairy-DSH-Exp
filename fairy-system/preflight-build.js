@@ -27,7 +27,7 @@ const APPROVED = Object.freeze({
     }),
     'dsh-reasoning-effort': Object.freeze({
       version: '0.6.2',
-      specifier: 'github:HanaAyane/dsh-reasoning-effort#main',
+      specifier: 'github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994',
       commit: '83bc8c548749d7156a03d11d875d8117e9b5d994',
       importerVersion: 'https://codeload.github.com/HanaAyane/dsh-reasoning-effort/tar.gz/83bc8c548749d7156a03d11d875d8117e9b5d994(patch_hash=9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5)',
       patchHash: '9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5',
