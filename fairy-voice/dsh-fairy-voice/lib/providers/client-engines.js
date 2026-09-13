@@ -34,7 +34,12 @@ export const KOKORO_WEB_DEFAULTS = {
  * kokoro 少；模型与音色从 HuggingFace 拉，`resourceBase` 同 kokoro 用于镜像。
  * 包自带 `esm.sh` 文档地址，这里按仓库惯例钉 jsDelivr 的 ESM 构建与版本。 */
 export const KITTEN_WEB_DEFAULTS = {
-  moduleUrl: 'https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/+esm',
+  // 上游 README 的浏览器导入形式（esm.sh）。jsDelivr 的 `+esm` 实测不可用：
+  // 该包把 onnxruntime 的 wasmPaths 指向 `.../src/`，而那里没有 ORT 的加载器
+  // （报错原文：Failed to fetch dynamically imported module
+  // .../kitten-tts-js@0.1.2/src/ort-wasm-simd-threaded.jsep.mjs）。自托管时
+  // 本字段可换成任意可信 URL。
+  moduleUrl: 'https://esm.sh/kitten-tts-js@0.1.2',
   modelId: 'KittenML/kitten-tts-nano-0.8',
   voice: 'Bella',
   resourceBase: '',

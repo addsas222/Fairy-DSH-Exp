@@ -48,3 +48,13 @@
 
 发布新版本时，应从最终 lockfile 重新核对版本、来源和许可证，并把新增的
 第三方依赖补入本表；不能因为依赖被锁定就把它们当作本项目原创内容。
+
+## KittenTTS / kitten-tts-js（fairy-voice 的 `kitten-web` 引擎）
+
+- 模型：**KittenTTS-Nano**（`KittenML/kitten-tts-nano-0.8`），版权归 **KittenML /
+  Stellon Labs**，Apache-2.0；上游 <https://github.com/KittenML/KittenTTS>。
+- JS 运行时：**kitten-tts-js**（<https://github.com/Algiras/kitten-tts-js>），
+  社区**非官方**移植（作者自述"不隶属于、未获 KittenML/Stellon Labs 背书"），
+  Apache-2.0。
+- 本仓库不复制其源码：引擎在运行时由用户配置的 `moduleUrl` 动态加载，模型由
+  该库经 HuggingFace 下载（可用 `resourceBase` 指向镜像）。

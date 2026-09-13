@@ -1370,7 +1370,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         label: 'KittenTTS-Nano（浏览器内 WASM，约 25MB）',
         key: 'kittenWeb',
         fields: [
-          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/+esm' },
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://esm.sh/kitten-tts-js@0.1.2' },
           { name: 'modelId', label: '模型 ID', placeholder: 'KittenML/kitten-tts-nano-0.8（micro/mini 可换）' },
           { name: 'voice', label: '音色', placeholder: 'Bella / Luna / Rosie / Kiki / Leo / Jasper / Bruno / Hugo' },
           { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
@@ -1449,6 +1449,20 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           setAudition({ status: 'idle', error: null });
         } catch (auditionError) {
           setAudition({ status: 'error', error: auditionError?.message || '试听失败。' });
+        }
+      };
+      const [model, setModel] = React.useState({ status: 'idle', error: null, note: '' });
+      /** 模型自行下载的显式入口：走的是与朗读完全相同的加载路径
+       *  （openLocalEngine 按配置缓存），所以它既预热缓存，也把"加载期失败"
+       *  从静默降级变成看得见、可重试的一步。 */
+      const downloadModel = async () => {
+        setModel({ status: 'working', error: null, note: '' });
+        const startedAt = Date.now();
+        try {
+          await openLocalEngine(provider, localEngineConfig(config, provider));
+          setModel({ status: 'ready', error: null, note: `已缓存（${((Date.now() - startedAt) / 1000).toFixed(1)}s）` });
+        } catch (downloadError) {
+          setModel({ status: 'error', error: downloadError?.message || '模型下载失败。', note: '' });
         }
       };
       // ponytail: availability refreshes on mount, after a save, and on demand.
@@ -1543,6 +1557,17 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy || !provider, onClick: save, children: busy ? '处理中…' : '保存' })
           ] }),
           audition.error ? jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': 'true', children: `试听失败：${audition.error}` }) : null,
+          isLocalEngine(provider) ? jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
+            jsx.jsx('button', {
+              className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy || model.status === 'working',
+              'data-dsh-fairy-model-download': 'true', onClick: downloadModel,
+              children: model.status === 'working' ? '下载中…' : '下载模型（缓存到本机）'
+            }),
+            jsx.jsx('span', {
+              className: 'dsh-fairy-voice-brain-value', 'data-dsh-fairy-model-state': model.status,
+              children: model.status === 'ready' ? model.note : model.status === 'error' ? `失败：${model.error}` : '模型未下载（首次朗读时才会拉取）'
+            })
+          ] }) : null,
           jsx.jsxs('label', { className: 'dsh-fairy-voice-brain-row', children: [
             jsx.jsx('input', {
               type: 'checkbox', 'data-dsh-fairy-always-controls': 'true', checked: alwaysControls,

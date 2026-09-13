@@ -323,7 +323,11 @@ test('browser engines are pinned, single-threaded, and can be mirrored', () => {
   // drift behind the CDN without touching this repo.
   assert.match(source, /kokoro-js@1\.2\.1\/\+esm/);
   // KittenTTS-Nano：第二个浏览器内引擎（模型来自 HF，引擎自管 onnxruntime）。
-  assert.match(source, /kitten-tts-js@0\.1\.2\/\+esm/);
+  assert.match(source, /esm\.sh\/kitten-tts-js@0\.1\.2/);
+  // 模型自行下载的显式入口：走同一条加载路径，失败可见可重试。
+  assert.match(source, /'data-dsh-fairy-model-download': 'true'/);
+  assert.match(source, /'data-dsh-fairy-model-state': model\.status/);
+  assert.match(source, /await openLocalEngine\(provider, localEngineConfig\(config, provider\)\)/);
   assert.match(source, /KittenTTS\.from_pretrained\(config\.modelId\)/);
   assert.match(source, /handle\.kind === 'kokoro' \|\| handle\.kind === 'kitten'/);
   assert.match(source, /@realtimex\/piper-tts-web@1\.1\.1\/\+esm/);
@@ -827,7 +831,7 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
       openai: { baseURL: 'https://api.openai.com/v1', apiKey: '***', model: 'tts-1', voice: 'alloy' },
       elevenlabsWs: { baseUrl: 'wss://api.elevenlabs.io', apiKey: '***', voiceId: 'voice-1', modelId: 'eleven_multilingual_v2', outputFormat: 'pcm_32000' },
       kokoroWeb: { moduleUrl: 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm', modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX', dtype: 'q8', device: 'wasm', voice: 'af_heart' },
-      kittenWeb: { moduleUrl: 'https://cdn.jsdelivr.net/npm/kitten-tts-js@0/+esm', modelId: 'KittenML/kitten-tts-nano-0.8', voice: 'Bella' },
+      kittenWeb: { moduleUrl: 'https://esm.sh/kitten-tts-js@0', modelId: 'KittenML/kitten-tts-nano-0.8', voice: 'Bella' },
       piperWeb: { moduleUrl: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1/+esm', voiceId: 'en_US-hfc_female-medium' },
       customHttp: { url: '', method: 'POST', headersJson: '{}', bodyTemplate: '{"text":"{{text}}"}' },
     },
