@@ -1,4 +1,4 @@
-# Ponytail preset:精简三模式 composition。
+# Ponytail preset:精简模式 composition（四站流水线：扮演→探查→建造→创造）。
 #
 # 与 fairy preset 的差异(Ponytail 标准,删除优先):
 # - 不引用任何仓库外/私有运行时资产(原 runtime/index.js、fairy_core.py、
@@ -88,7 +88,7 @@
 # ── 极简模式(Explore&Check) ─────────────────────────────────────────────
 # 直接复用官方 plan-mode:探查、定案、exit_plan_mode 审批后才进入实施。
 # 主会话 chip 由 dsh-fairy-modes 的客户端读取 `plan` 投影显示。
-# ── 角色扮演(第四模式:人格/时机/回复/去AI味) ─────────────────────────────
+# ── 角色扮演(流水线第四站:人格/时机/回复/去AI味) ─────────────────────────
 # 与记忆同形态：agent 面只挂两个工具(roleplay_check / roleplay_style)，
 # 引擎本体(设置命名空间 fairy-roleplay + /fairy-roleplay/* 路由 + 设置卡)由
 # profile 的 host 行 dsh-fairy-roleplay 承担；模式段落由 dsh-fairy-modes 注入。

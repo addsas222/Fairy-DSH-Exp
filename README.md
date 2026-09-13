@@ -16,11 +16,11 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 - `fairy-system/`：离线检查与验收工具（含 `skill-audit.js` 冗余审计、`scaffold-plugin.js` 插件脚手架）
 - `persona-packs/`：内置人格包（fairy、standard）
 - `profiles/web/`：独立 Web profile 模板
-- `.agent-presets/ponytail/`：精简三模式 preset（无仓库外私有资产依赖，自带 ponytail 规则技能组）
+- `.agent-presets/ponytail/`：精简模式 preset（无仓库外私有资产依赖，自带 ponytail 规则技能组）
 
 设计与决策记录见 `fairy-system/PONYTAIL-DESIGN.md`。
 
-## Ponytail 三模式（部署要点）
+## Ponytail 会话模式（部署要点）
 
 启动前设置 `DSH_FAIRY_REPO_ROOT` 指向本仓库；`profiles/web/cordis.patch.yml`
 的 `agent-presets` 行已把仓库 `.agent-presets/` 配为发现根，`ponytail`

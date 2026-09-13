@@ -8,7 +8,7 @@
 ## 1. 仓库信息
 
 **Fairy-DSH** 是一套 DSH（DeepSeek Harness）插件集合：把人格、语音（TTS/STT）、
-三模式、搜索枢纽、长期记忆、浏览器 Dock、视觉舞台等能力做成可独立安装的包，
+会话模式流水线、搜索枢纽、长期记忆、浏览器 Dock、视觉舞台等能力做成可独立安装的包，
 并把"怎么装、怎么验、怎么升级"固化成脚本与门禁。
 
 ### 1.1 版本钉定
@@ -28,7 +28,7 @@
 | `fairy-modes/dsh-fairy-modes/` | 五模式引擎（极简 Explore&Check=官方 plan / 探查只读 / PTC Build&Work / 创造 Memory&Dream / 角色扮演），含 `session_recall` 与 `mode_pipeline` 工具；后者把四个站点串成流水线（扮演→探查→建造→创造→回到扮演），进探查站会尝试自动打开官方 plan 审批闸门，离开走 `exit_plan_mode`。端点 `/fairy-modes/*` |
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成。端点 `/fairy-search/*` |
 | `fairy-memory/dsh-fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`），mem0 / 自定义 HTTP / 本地 Markdown 备选；`memory_recall`/`memory_remember` 工具 + CLI。端点 `/fairy-memory/*` |
-| `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（第四会话模式 `/mode roleplay`）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
+| `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（`/mode roleplay`，流水线第四站）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
 | `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT（网上：browser / openai / deepgram / azure / custom-http；本地：whisper-web、或 openai 指向 loopback）。端点 `/fairy-voice/*` |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
 | `balance-meter/` | 余额指示 |
@@ -37,7 +37,7 @@
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
 | `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/ponytail/` | 三模式预设（**公开入口**；自带 ponytail 规则技能、modes 与 memory 的 agent 面 shim） |
+| `.agent-presets/ponytail/` | 模式预设（**公开入口**；自带 ponytail 规则技能、modes 与 memory 的 agent 面 shim） |
 | `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
