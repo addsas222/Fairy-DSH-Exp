@@ -68,8 +68,14 @@ export function createModePipelineTool({ service, readPlan, resolvePlanMode } = 
   });
   const applyStage = (agent, stage) => {
     const target = PIPELINE_STAGE_STATE[stage];
-    const outcome = service.set(agent, target.mode);
     const planActive = planState(agent.session)?.active === true;
+    // 闸门还没过就不切站：官方 plan 模式仍在时，保持只读的探查站，等
+    // exit_plan_mode 批准之后由下一次 advance 正常切换。否则模式已切成目标站、
+    // 附注却让人「批准后再 advance」，会把模型从建造推成创造。
+    if (!target.plan && planActive) {
+      return { outcome: 'blocked', notes: [`plan 模式还开着：方案定稿后用官方 exit_plan_mode 提交审批；批准后再 advance 进入${PIPELINE_STAGE_LABELS[stage] ?? stage}。`] };
+    }
+    const outcome = service.set(agent, target.mode);
     const notes = [];
     if (target.plan && !planActive) {
       const controller = planController(agent);
@@ -85,10 +91,6 @@ export function createModePipelineTool({ service, readPlan, resolvePlanMode } = 
       } else {
         notes.push('探查阶段的审批闸门来自官方 plan 模式，本次没能自动开启：让用户在输入框输入 /plan（或点会话头 chip 的「探查·极简」）即可打开。');
       }
-    }
-    if (!target.plan && planActive) {
-      // 离开探查一律走官方审批：不替用户关掉闸门。
-      notes.push('plan 模式还开着：方案定稿后用官方 exit_plan_mode 提交审批，批准后再 advance 进入下一阶段。');
     }
     return { outcome, notes };
   };
@@ -148,11 +150,11 @@ export function createModePipelineTool({ service, readPlan, resolvePlanMode } = 
         // 按目标阶段回报：投影要到下一次 pre-step 才追上，此刻回读会得到上一阶段。
         const target = nextPipelineStage(stage);
         const { outcome, notes } = applyStage(agent, target);
-        return describe(agent, target, 'advance', { notes, advanced: outcome !== 'noop' });
+        return describe(agent, target, 'advance', { notes, advanced: outcome === 'committed' || outcome === 'queued' });
       }
       if (action === 'finish') {
         const { outcome, notes } = applyStage(agent, 'roleplay');
-        return describe(agent, 'roleplay', 'finish', { notes, advanced: outcome !== 'noop' });
+        return describe(agent, 'roleplay', 'finish', { notes, advanced: outcome === 'committed' || outcome === 'queued' });
       }
       if (action === 'enter') {
         const wanted = typeof args?.stage === 'string' ? args.stage.trim().toLowerCase() : '';
@@ -162,7 +164,7 @@ export function createModePipelineTool({ service, readPlan, resolvePlanMode } = 
           throw error;
         }
         const { outcome, notes } = applyStage(agent, wanted);
-        return describe(agent, wanted, 'enter', { notes, advanced: outcome !== 'noop' });
+        return describe(agent, wanted, 'enter', { notes, advanced: outcome === 'committed' || outcome === 'queued' });
       }
       const error = new Error("mode_pipeline action must be 'status', 'advance', 'enter' or 'finish'");
       error.code = 'INVALID_ARGS';

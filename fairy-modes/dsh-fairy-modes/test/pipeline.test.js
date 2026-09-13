@@ -69,14 +69,6 @@ test('advance moves one station and reports the target, not the stale read', asy
   assert.match(result.report, /\/plan/, 'opening the official plan gate is spelled out');
 });
 
-test('leaving the explore station points at the official exit tool while plan is on', async () => {
-  const { tool, exec, applied } = harness({ mode: 'explore', planActive: true });
-  const result = await tool.execute({ action: 'advance' }, exec);
-  assert.deepEqual(applied, ['ptc']);
-  assert.equal(result.stage, 'ptc');
-  assert.match(result.report, /exit_plan_mode/);
-});
-
 test('enter takes an explicit station and finish returns to roleplay', async () => {
   const first = harness({ mode: 'roleplay' });
   assert.equal((await first.tool.execute({ action: 'enter', stage: 'create' }, first.exec)).stage, 'create');
@@ -142,18 +134,22 @@ test('a queued plan entry and an unresolvable gate are both reported honestly', 
   assert.match(bareResult.report, /\/plan/, 'without a controller the user is told how to open the gate');
 });
 
-test('leaving the explore station never closes the official gate for the user', async () => {
+test('a station change waits for the official gate instead of racing it', async () => {
   const state = { mode: 'explore', planActive: true };
   const gate = [];
+  const applied = [];
   const tool = createModePipelineTool({
-    service: { loggedMode: () => state.mode, set: (_agent, value) => { state.mode = value; return 'committed'; }, ctx: {} },
+    service: { loggedMode: () => state.mode, set: (_agent, value) => { applied.push(value); state.mode = value; return 'committed'; }, ctx: {} },
     readPlan: () => ({ active: state.planActive }),
     resolvePlanMode: () => ({ set: (_agent, active) => { gate.push(active); return 'committed'; } }),
   });
   const result = await tool.execute({ action: 'advance' }, { agent: { session: {} } });
   assert.deepEqual(gate, [], 'only exit_plan_mode closes the gate');
-  assert.equal(result.stage, 'ptc');
+  assert.deepEqual(applied, [], 'the mode does not move while the gate is still open');
+  assert.equal(state.mode, 'explore', 'the read-only station holds until approval');
+  assert.equal(result.advanced, false, 'a blocked advance is not an advance');
   assert.match(result.report, /exit_plan_mode/);
+  assert.match(result.report, /批准后再 advance/);
 });
 
 test('advanced follows the real switch outcome, not the presence of notes', async () => {
