@@ -54,7 +54,15 @@ done
 #    新增 link 依赖后需 --no-frozen-lockfile 重生成锁文件）
 (cd "$DSH_HOME/profiles/web" && pnpm install --no-frozen-lockfile --ignore-scripts)
 
-# 4) 启动
+# 4) EvoMap 接入（Layer 1：恢复或注册节点，并给出绑定链接）
+#    首次运行会注册一个节点并打印 claim_url —— 打开它即把节点绑定到你的
+#    EvoMap 账号；node_secret 以 0600 落在 ~/.evomap，永不打印。
+#    幂等：已有凭据时只做探测，不会重复注册。离线/Hub 不可达只提示，不阻断部署。
+#    沙箱或 CI 想换目录：EVOMAP_HOME=/some/dir（默认 ~/.evomap）。
+node "$DSH_HOME/fairy-memory/dsh-fairy-memory/lib/memory-cli.js" evomap join --name "Fairy DSH" \
+  || echo "evomap join 未完成（离线或 Hub 不可达）：部署继续，稍后重跑同一条命令即可。"
+
+# 5) 启动
 export DSH_FAIRY_REPO_ROOT="$DSH_HOME"   # ponytail preset 的插件 shim 与 persona 包扫描根
 dsh --profile web --no-open
 ```
@@ -72,6 +80,11 @@ provider → `/fairy-search/state` 正常。
 - preset 用**复制**而不是链接：`readdir` 的 `Dirent.isDirectory()` 对
   symlink/junction 为假，链接形态不会被发现，表现为"preset 凭空消失"。
 - `profiles/web` 首次安装需 `--no-frozen-lockfile`（新增 link 依赖后锁文件需重生成）。
+- EvoMap 第 4 步的语义：`join` 只在**显式调用**时向外发一次
+  `POST https://evomap.ai/a2a/hello`；它按该服务自身的分层设计只做
+  Layer 1（注册/恢复 + 绑定链接），**不含**心跳（stay online）与任务操作——
+  那两层需要各自的明确授权。凭据是本机私有状态：不要提交、不要粘进对话、
+  不要在 CI 里跑（会外网请求并产生凭据；测试用假 hub + `EVOMAP_HOME` 覆盖目录）。
 - MCP 行（playwright/context7）会拉起子进程；隔离 home 里缺少
   `@playwright/mcp` 的 `.bin` 时对应行报 ENOENT，属环境耦合，不影响其余插件。
 
@@ -150,6 +163,8 @@ fairy    user BROKEN: …      ← 见下
 - **不要**改 DSH 官方安装与 runtime（只读边界）；升级走候选择预检流程。
 - **不要**为让检查变绿而运行 `node fairy-system/accepted-baseline.js --accept`；
   接受基线是人工审查后的发布级动作。
+- **不要**在 CI / `test-isolated.sh` / 任何自动化里调用 `evomap join`：它会向外
+  网注册节点并产生本机凭据（部署流程第 4 步是人工部署时执行的，且失败不阻断）。
 - **不要**手改 `profiles/web/pnpm-lock.yaml` 或跳过逐包安装：CI 与
   `test-isolated.sh` 用 `--frozen-lockfile`；锁文件与 package.json 不同步即失败。
 - **不要**把插件包名写进 preset 行：preset 行只接受字面字符串 / preset 相对
