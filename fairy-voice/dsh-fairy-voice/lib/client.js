@@ -445,8 +445,8 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       };
     }
 
-    /** Recorder path: the clip is uploaded to the host, which owns the key. */
-    async function startRecordedSpeech(lang) {
+    /** Media capture only; the caller decides what happens to the clip. */
+    async function openRecorder() {
       const media = navigator.mediaDevices;
       if (!media?.getUserMedia || typeof MediaRecorder !== 'function') throw new Error('当前浏览器不支持录音。');
       const stream = await media.getUserMedia({ audio: true });
@@ -465,8 +465,25 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           }
           await ended;
           stopTracks();
-          if (!chunks.length) return '';
-          const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+          if (!chunks.length) return null;
+          return new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+        },
+        cancel: () => {
+          if (recorder.state !== 'inactive') {
+            try { recorder.stop(); } catch (error) { reportAudioLifecycleFailure('recorder cancel', error); }
+          }
+          stopTracks();
+        },
+      };
+    }
+
+    /** Online/host route: the clip is uploaded; the host owns the key. */
+    async function startRecordedSpeech(lang) {
+      const clip = await openRecorder();
+      return {
+        stop: async () => {
+          const blob = await clip.stop();
+          if (!blob) return '';
           const response = await fetch(`${STT_ENDPOINT}/stt`, {
             method: 'POST',
             headers: { 'content-type': blob.type || 'audio/webm', ...(lang ? { 'x-fairy-language': lang } : {}) },
@@ -476,12 +493,75 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           if (!response.ok) throw new Error(value?.error?.message || '语音识别失败。');
           return String(value?.text ?? '').trim();
         },
-        cancel: () => {
-          if (recorder.state !== 'inactive') {
-            try { recorder.stop(); } catch (error) { reportAudioLifecycleFailure('recorder cancel', error); }
-          }
-          stopTracks();
+        cancel: () => clip.cancel(),
+      };
+    }
+
+    /* ---- browser-local Whisper (transformers.js) ------------------------- */
+
+    const whisperPipelines = new Map();
+    const WHISPER_LANGUAGES = {
+      zh: 'chinese', 'zh-cn': 'chinese', 'zh-tw': 'chinese', cmn: 'chinese',
+      en: 'english', 'en-us': 'english', ja: 'japanese', ko: 'korean', es: 'spanish',
+      fr: 'french', de: 'german', ru: 'russian', it: 'italian'
+    };
+
+    /** Whisper wants full language names; unknown values fall back to detect. */
+    function whisperLanguage(raw) {
+      const value = String(raw || '').trim().toLowerCase();
+      if (!value || value === 'auto') return undefined;
+      return WHISPER_LANGUAGES[value] || value;
+    }
+
+    async function openWhisperWeb(config) {
+      const key = `${config.moduleUrl}|${config.modelId}|${config.device}|${config.dtype}|${config.resourceBase}`;
+      if (!whisperPipelines.has(key)) {
+        whisperPipelines.set(key, (async () => {
+          const module = await importLocalEngineModule(config.moduleUrl);
+          const pipeline = module?.pipeline || module?.default?.pipeline;
+          if (typeof pipeline !== 'function') throw new Error('transformers.js 未导出 pipeline。');
+          const webgpu = config.device === 'webgpu' && typeof navigator !== 'undefined' && 'gpu' in navigator;
+          const dtype = webgpu ? 'fp32' : (config.dtype && config.dtype !== 'fp32' ? config.dtype : 'q8');
+          return await withResourceMirror(config.resourceBase, () => withSingleThreadHint(
+            () => pipeline('automatic-speech-recognition', config.modelId, { device: webgpu ? 'webgpu' : 'wasm', dtype }),
+          ));
+        })().catch((error) => {
+          whisperPipelines.delete(key);
+          throw error instanceof Error ? error : new Error('本地识别引擎加载失败。');
+        }));
+      }
+      return whisperPipelines.get(key);
+    }
+
+    /** Decode a clip to the 16 kHz mono float array Whisper expects. */
+    async function decodeForAsr(blob) {
+      if (typeof OfflineAudioContext !== 'function') throw new Error('当前浏览器无法解码音频。');
+      const context = new OfflineAudioContext(1, 16000, 16000);
+      const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+      if (decoded.numberOfChannels === 1) return decoded.getChannelData(0);
+      const mixed = new Float32Array(decoded.length);
+      for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
+        const data = decoded.getChannelData(channel);
+        for (let index = 0; index < data.length; index += 1) mixed[index] += data[index] / decoded.numberOfChannels;
+      }
+      return mixed;
+    }
+
+    /** Local route: nothing leaves the machine; the model runs in this tab. */
+    async function startLocalWhisperSpeech(config) {
+      const whisperConfig = config?.providers?.whisperWeb || {};
+      const clip = await openRecorder();
+      return {
+        stop: async () => {
+          const blob = await clip.stop();
+          if (!blob) return '';
+          const transcriber = await openWhisperWeb(whisperConfig);
+          const audio = await decodeForAsr(blob);
+          const language = whisperLanguage(whisperConfig.language);
+          const result = await transcriber(audio, { task: 'transcribe', ...(language ? { language } : {}) });
+          return String(result?.text ?? '').trim();
         },
+        cancel: () => clip.cancel(),
       };
     }
 
@@ -1421,9 +1501,43 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const VOICE_STT_PROVIDERS = [
       {
         id: 'browser',
-        label: '浏览器识别（免配置）',
+        label: '浏览器识别（在线·免配置）',
         key: 'browser',
         fields: [{ name: 'lang', label: '识别语言', placeholder: 'zh-CN' }]
+      },
+      {
+        id: 'whisper-web',
+        label: 'Whisper 本地（浏览器内，离线可用）',
+        key: 'whisperWeb',
+        fields: [
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm' },
+          { name: 'modelId', label: '模型 ID', placeholder: 'onnx-community/whisper-base' },
+          { name: 'device', label: '设备', placeholder: 'wasm 或 webgpu' },
+          { name: 'dtype', label: '精度', placeholder: 'q8（WASM）或 fp32（WebGPU）' },
+          { name: 'language', label: '识别语言', placeholder: 'chinese / english / auto' },
+          { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
+        ]
+      },
+      {
+        id: 'deepgram',
+        label: 'Deepgram（在线）',
+        key: 'deepgram',
+        fields: [
+          { name: 'apiKey', label: 'API Key', secret: true },
+          { name: 'model', label: '模型', placeholder: 'nova-3' },
+          { name: 'language', label: '识别语言', placeholder: 'zh-CN' },
+          { name: 'baseUrl', label: '服务地址', placeholder: 'https://api.deepgram.com' }
+        ]
+      },
+      {
+        id: 'azure',
+        label: 'Azure 语音（在线）',
+        key: 'azure',
+        fields: [
+          { name: 'endpoint', label: '终结点', placeholder: 'https://<region>.api.cognitive.microsoft.com' },
+          { name: 'apiKey', label: 'API Key', secret: true },
+          { name: 'locale', label: '识别区域', placeholder: 'zh-CN' }
+        ]
       },
       {
         id: 'openai',
@@ -1516,7 +1630,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return jsx.jsxs('section', { className: 'dsh-fairy-voice-brain', children: [
         jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-head', children: [
           jsx.jsx('h2', { className: 'dsh-fairy-voice-brain-title', children: 'Fairy 语音输入' }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '把说话转成文字并写入输入框（写入后由你确认再发送）。浏览器识别免配置；Whisper 与自定义服务的密钥只保存在本机。' }),
+          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '把说话转成文字并写入输入框（写入后由你确认再发送）。本地路径：Whisper 在浏览器内离线识别，或把 OpenAI 兼容地址指向本机服务（whisper.cpp server / faster-whisper / speaches）。在线路径：浏览器识别、Deepgram、Azure。密钥只保存在本机。' }),
           recognitionSupported ? null : jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '当前浏览器不支持内置语音识别，请选择 Whisper 或自定义 HTTP 提供方。' })
         ] }),
         jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: [
@@ -1945,7 +2059,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         const active = speechRef.current;
         if (!active) return;
         speechRef.current = null;
-        setSpeech({ status: 'working', error: null });
+        setSpeech({ status: 'working', error: null, provider: active.provider });
         try {
           const text = await active.stop();
           if (!text) { setSpeech({ status: 'idle', error: null }); return; }
@@ -1960,9 +2074,14 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         try {
           const sttSettings = await localTtsTransport.sttConfig();
           const lang = sttLanguage(sttSettings);
-          speechRef.current = sttProviderId(sttSettings) === 'browser'
+          const provider = sttProviderId(sttSettings);
+          const session = provider === 'browser'
             ? await startBrowserSpeech(lang)
-            : await startRecordedSpeech(lang);
+            : provider === 'whisper-web'
+              ? await startLocalWhisperSpeech(sttSettings)
+              : await startRecordedSpeech(lang);
+          speechRef.current = { ...session, provider };
+          setSpeech({ status: 'listening', error: null, provider });
         } catch (speechError) {
           speechRef.current = null;
           setSpeech({ status: 'idle', error: speechError?.message || '无法启动语音输入。' });
@@ -2403,7 +2522,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         jsx.jsx('span', { className: 'dsh-fairy-voice-waveform', 'data-dsh-fairy-waveform': 'true', 'aria-hidden': 'true', children: waveform }),
         jsx.jsx(Tooltip, { label: `语音音量 ${Math.round(volume * 100)}%`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-volume-input': 'true', disabled: !engineAvailable, min: '0', max: '1', step: '0.05', type: 'range', value: volume, onChange: (event) => setVolume(Number(event.target.value)), 'aria-label': '语音音量', style: { '--dsh-fairy-volume': `${Math.round(volume * 100)}%` } }) }),
         jsx.jsx(Tooltip, { label: `朗读语速 ${rate.toFixed(2)}×`, children: jsx.jsx('input', { className: 'dsh-fairy-voice-volume', 'data-dsh-fairy-rate-input': 'true', disabled: !engineAvailable, min: String(SPEECH_RATE_MIN), max: String(SPEECH_RATE_MAX), step: String(SPEECH_RATE_STEP), type: 'range', value: rate, onChange: (event) => setRate(clampSpeechRate(event.target.value)), 'aria-label': '朗读语速', style: { '--dsh-fairy-volume': `${Math.round(((rate - SPEECH_RATE_MIN) / (SPEECH_RATE_MAX - SPEECH_RATE_MIN)) * 100)}%` } }) }),
-        jsx.jsx(Tooltip, { label: speech.error ? `语音输入：${speech.error}` : speech.status === 'listening' ? '停止并转写' : speech.status === 'working' ? '正在转写…' : '语音输入（转文字）', children: jsx.jsx('button', {
+        jsx.jsx(Tooltip, { label: speech.error ? `语音输入：${speech.error}` : speech.status === 'listening' ? '停止并转写' : speech.status === 'working' ? (speech.provider === 'whisper-web' ? '本地识别中（首次会下载模型）…' : '正在转写…') : '语音输入（转文字）', children: jsx.jsx('button', {
           type: 'button',
           className: 'dsh-fairy-voice-auto',
           'data-dsh-fairy-mic-control': 'true',

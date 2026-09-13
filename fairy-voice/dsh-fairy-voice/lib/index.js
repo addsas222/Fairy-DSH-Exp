@@ -44,7 +44,10 @@ export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
     provider: STT_DEFAULTS.provider,
     providers: Object.freeze({
       browser: Object.freeze({ ...STT_DEFAULTS.providers.browser }),
+      whisperWeb: Object.freeze({ ...STT_DEFAULTS.providers.whisperWeb }),
       openai: Object.freeze({ ...STT_DEFAULTS.providers.openai }),
+      deepgram: Object.freeze({ ...STT_DEFAULTS.providers.deepgram }),
+      azure: Object.freeze({ ...STT_DEFAULTS.providers.azure }),
       customHttp: Object.freeze({ ...STT_DEFAULTS.providers.customHttp }),
     }),
   }),
@@ -107,12 +110,32 @@ export const FairyVoiceSettings = z.object({
       browser: z.object({
         lang: z.string().default(STT_DEFAULTS.providers.browser.lang),
       }).default({ ...STT_DEFAULTS.providers.browser }),
+      // Client-side Whisper: consumed by the browser, stored and validated here.
+      whisperWeb: z.object({
+        moduleUrl: z.string().default(STT_DEFAULTS.providers.whisperWeb.moduleUrl),
+        modelId: z.string().default(STT_DEFAULTS.providers.whisperWeb.modelId),
+        device: z.string().default(STT_DEFAULTS.providers.whisperWeb.device),
+        dtype: z.string().default(STT_DEFAULTS.providers.whisperWeb.dtype),
+        language: z.string().default(STT_DEFAULTS.providers.whisperWeb.language),
+        resourceBase: z.string().default(STT_DEFAULTS.providers.whisperWeb.resourceBase),
+      }).default({ ...STT_DEFAULTS.providers.whisperWeb }),
       openai: z.object({
         baseURL: z.string().default(STT_DEFAULTS.providers.openai.baseURL),
         apiKey: z.string().default(''),
         model: z.string().default(STT_DEFAULTS.providers.openai.model),
         language: z.string().default(STT_DEFAULTS.providers.openai.language),
       }).default({ ...STT_DEFAULTS.providers.openai }),
+      deepgram: z.object({
+        baseUrl: z.string().default(STT_DEFAULTS.providers.deepgram.baseUrl),
+        apiKey: z.string().default(''),
+        model: z.string().default(STT_DEFAULTS.providers.deepgram.model),
+        language: z.string().default(STT_DEFAULTS.providers.deepgram.language),
+      }).default({ ...STT_DEFAULTS.providers.deepgram }),
+      azure: z.object({
+        endpoint: z.string().default(''),
+        apiKey: z.string().default(''),
+        locale: z.string().default(STT_DEFAULTS.providers.azure.locale),
+      }).default({ ...STT_DEFAULTS.providers.azure }),
       customHttp: z.object({
         url: z.string().default(''),
         headersJson: z.string().default(STT_DEFAULTS.providers.customHttp.headersJson),
@@ -706,14 +729,23 @@ function statusFor(code) {
 }
 
 /** 409 keeps the shared `client-side` code; the wording is input-specific. */
-function publicSttError(code) {
+function publicSttError(code, detail) {
   const messages = {
     'client-side': '浏览器端语音输入',
     timeout: '语音识别超时。',
     'provider-failed': '语音识别服务未能完成识别。',
     'provider-unavailable': '语音识别服务不可用或未配置。',
   };
-  return messages[code] ? { code, message: messages[code] } : publicError(code);
+  const fixed = messages[code];
+  if (!fixed) return publicError(code);
+  // With several routes configured the upstream text is what separates a bad
+  // key from an unsupported container, so a provider-described failure keeps
+  // it: one line, control characters stripped, bounded.
+  if (code === 'provider-failed' && typeof detail === 'string') {
+    const trimmed = detail.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200);
+    if (trimmed && trimmed !== fixed) return { code, message: `${fixed}（${trimmed}）` };
+  }
+  return { code, message: fixed };
 }
 
 function createVoiceRequestScope() {
@@ -1015,7 +1047,7 @@ export function createFairyVoiceSttHandlers({
       } catch (error) {
         const code = error?.code || 'provider-failed';
         if (!['client-aborted', 'client-side', 'timeout'].includes(code)) diagnostics.warn('stt.request', { code }, error);
-        if (!res.writableEnded) sendJson(res, statusFor(code), { error: publicSttError(code) });
+        if (!res.writableEnded) sendJson(res, statusFor(code), { error: publicSttError(code, error?.message) });
       } finally {
         diagnostics.metric('stt.request', startedAt, { aborted: controller.signal.aborted });
         activeControllers.delete(controller);

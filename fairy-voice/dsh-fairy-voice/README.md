@@ -52,13 +52,30 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 
 ### 语音输入（转文字，STT）
 
-把说话写进输入框（写入后由你确认再发送；不会自动发送）。提供方三选一：
+把说话写进输入框（写入后由你确认再发送；不会自动发送）。**网上 / 本地**两条路都在设置 → 语音输入里按提供方切换：
 
-| id | 判定 | 识别方式 |
-| --- | --- | --- |
-| `browser` | 总是可用（需浏览器支持 `SpeechRecognition`） | 浏览器内置识别，`lang` 默认 `zh-CN` |
-| `openai` | 已填 `baseURL` 与 `apiKey` | 浏览器录音（`MediaRecorder`）→ `POST {baseURL}/audio/transcriptions`（multipart，Whisper 形态） |
-| `custom-http` | `url` 合法且 `headersJson` 可解析 | 录音 → `POST {url}` 原始音频 + 静态头，按 `responsePath`（默认 `text`）取文本 |
+| 路线 | id | 判定 | 识别方式 |
+| --- | --- | --- | --- |
+| 本地 | `whisper-web` | 总是可用（需浏览器能解码音频） | **浏览器内 Whisper**（transformers.js + ONNX）：录音在本标签页识别，音频不出机器，离线可用；首次使用时下载并缓存模型 |
+| 本地 | `openai`（指向本机） | `baseURL` 主机为 loopback（`127.0.0.1`/`localhost`/`::1`）时空 key 即算可用 | 录音（`MediaRecorder`）→ `POST {baseURL}/audio/transcriptions`；适配 whisper.cpp `whisper-server`、faster-whisper-server、speaches 等 |
+| 网上 | `browser` | 总是可用（需浏览器支持 `SpeechRecognition`） | 浏览器内置识别（由浏览器厂商的在线服务完成），`lang` 默认 `zh-CN` |
+| 网上 | `openai`（云端） | 已填 `baseURL` 与 `apiKey` | OpenAI / Groq / SiliconFlow / DeepInfra 等 OpenAI 兼容云端 |
+| 网上 | `deepgram` | 已填 `apiKey` | `POST {baseUrl}/v1/listen`（Nova 模型，`smart_format` + `punctuate`） |
+| 网上 | `azure` | 已填 `endpoint` 与 `apiKey` | Azure 快速转写 API（multipart：`audio` + `definition.locales`），中文短语按字拼接 |
+| 任意 | `custom-http` | `url` 合法且 `headersJson` 可解析 | 录音 → `POST {url}` 原始音频 + 静态头，按 `responsePath`（默认 `text`）取文本 |
+
+本地服务一行起（三者都走 `openai` 提供方，地址填各自 `/v1`）：
+
+```sh
+whisper-server -m ggml-base.bin --port 8080   # whisper.cpp → http://127.0.0.1:8080/v1
+uvx speaches --port 8000                       # → http://127.0.0.1:8000/v1
+faster-whisper-server --port 9000              # → http://127.0.0.1:9000/v1
+```
+
+`whisper-web` 字段：模块地址（默认 `@huggingface/transformers@3.8.1`，仅填可信来源，会在页面内执行）、
+模型 ID（默认 `onnx-community/whisper-base`）、设备（`wasm` 或 `webgpu`）、精度（WASM 用 `q8`、
+WebGPU 用 `fp32`）、识别语言（`chinese`/`english`/`auto`）、资源镜像（HF 不可达时填，复用 TTS 的
+`resourceBase` 域名重写机制）。与浏览器内 TTS 相同：单线程 ONNX 守卫 + 引擎模块缓存。
 
 主机端点：`GET /fairy-voice/stt-providers`、`GET|POST /fairy-voice/stt-config`、
 `POST /fairy-voice/stt`（请求体=原始音频字节，`content-type: audio/*`，可选

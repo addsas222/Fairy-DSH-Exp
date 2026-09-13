@@ -81,6 +81,29 @@ interface TtsProvider {
 `ponytail:` 上限——自定义 HTTP 模板仅支持 JSON 正文与静态头；流式 SSE 解析属升级路径。
 `/fairy-voice/*` 既有端点路径与响应形状不变（client 兼容）；新增 `/fairy-voice/providers`（列出）与 provider 配置读写进 `fairy-voice` 设置命名空间。
 
+### STT provider 注册表（网上 / 本地，允许多条路）
+
+```ts
+interface SttProvider {
+  id: string         // browser | whisper-web | openai | deepgram | azure | custom-http
+  available(config): Promise<boolean>
+  transcribe(audio: Uint8Array, contentType, lang, config, signal): Promise<string>
+}
+```
+
+| 路线 | id | 说明 |
+| --- | --- | --- |
+| 本地 | `whisper-web` | 客户端 transformers.js（ONNX）在标签页内识别，音频不出机器；复用 TTS 的引擎缓存 / 单线程守卫 / `resourceBase` 域名重写 |
+| 本地 | `openai`（loopback） | 指向 whisper.cpp `whisper-server`、faster-whisper-server、speaches 等；**loopback 主机时空 key 即算可用且不发 Authorization 头**（本地服务通常无鉴权） |
+| 网上 | `browser` | 浏览器 `SpeechRecognition`（厂商在线服务），免配置 |
+| 网上 | `openai`（云端） | OpenAI / Groq / SiliconFlow / DeepInfra 等同形 API，需 key |
+| 网上 | `deepgram` | `POST {baseUrl}/v1/listen`（Nova，`smart_format`+`punctuate`），解析 `results.channels[0].alternatives[0].transcript` |
+| 网上 | `azure` | 快速转写 API（multipart `audio` + `definition.locales`），解析 `phrases[].text`（zh 按字拼接） |
+| 任意 | `custom-http` | URL/静态头/`responsePath` 取值 |
+
+端点不变：`GET /fairy-voice/stt-providers`、`GET|POST /fairy-voice/stt-config`、`POST /fairy-voice/stt`（音频体，415/413 映射不变）；`whisper-web` 与 `browser` 同语义由客户端执行，主机回 409 `client-side`。
+`ponytail:` 上限——不做本地二进制托管（不 spawn whisper.cpp），要进程内推理走 `whisper-web`，要系统级推理走 loopback 服务。
+
 ### 三模式引擎（主会话显示）
 
 | 模式 | 语义 | 实现 |

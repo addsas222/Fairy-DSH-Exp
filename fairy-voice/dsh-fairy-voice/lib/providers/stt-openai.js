@@ -27,6 +27,24 @@ function resolveConfig(config = {}) {
 }
 
 /**
+ * Local whisper.cpp / faster-whisper / speaches servers ship without any auth,
+ * so an empty key is valid as long as the service really is on this machine.
+ * The hostname comes from the URL parser: a string prefix test would accept
+ * `127.0.0.1.evil.com` as local.
+ */
+export function isLoopbackBaseUrl(baseURL) {
+  let hostname;
+  try {
+    hostname = new URL(String(baseURL ?? '').trim()).hostname;
+  } catch (error) {
+    return false;
+  }
+  // WHATWG keeps the brackets on an IPv6 literal (`[::1]`).
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+/**
  * Upstream services sniff the container from the multipart filename, and a
  * mislabeled extension is rejected before the audio is ever read. The host
  * only ever passes a `type/subtype` string, never parameters.
@@ -42,13 +60,18 @@ export function createOpenAiSttProvider({ fetchImpl = fetch } = {}) {
     available(config) {
       const value = resolveConfig(config);
       if (!String(value.baseURL || '').trim()) return { available: false, reason: '未配置 OpenAI 服务地址。' };
-      if (!String(value.apiKey || '').trim()) return { available: false, reason: '未配置 OpenAI API Key。' };
+      if (!String(value.apiKey || '').trim()) {
+        if (isLoopbackBaseUrl(value.baseURL)) return { available: true, reason: '本地服务无需密钥。' };
+        return { available: false, reason: '未配置 OpenAI API Key。' };
+      }
       return { available: true, reason: null };
     },
     async transcribe({ audio, contentType, language, config, signal }) {
       const value = resolveConfig(config);
-      if (!String(value.apiKey || '').trim()) throw providerError(PROVIDER_UNAVAILABLE, '未配置 OpenAI API Key。');
-      if (!String(value.baseURL || '').trim()) throw providerError(PROVIDER_UNAVAILABLE, '未配置 OpenAI 服务地址。');
+      const apiKey = String(value.apiKey || '').trim();
+      const baseURL = String(value.baseURL || '').trim();
+      if (!baseURL) throw providerError(PROVIDER_UNAVAILABLE, '未配置 OpenAI 服务地址。');
+      if (!apiKey && !isLoopbackBaseUrl(baseURL)) throw providerError(PROVIDER_UNAVAILABLE, '未配置 OpenAI API Key。');
       const form = new FormData();
       form.append('file', new Blob([audio], { type: contentType }), audioFileName(contentType));
       form.append('model', value.model);
@@ -57,10 +80,12 @@ export function createOpenAiSttProvider({ fetchImpl = fetch } = {}) {
       const spoken = String(language || value.language || '').trim();
       if (spoken) form.append('language', spoken);
       // fetch derives the multipart boundary itself: setting Content-Type here
-      // would strip the boundary and make the upstream body unparsable.
+      // would strip the boundary and make the upstream body unparsable. An
+      // empty `Bearer ` header makes some local servers answer 401, so an
+      // unauthenticated service gets no Authorization header at all.
       const response = await requestProvider(fetchImpl, `${trimBaseUrl(value.baseURL)}/audio/transcriptions`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${value.apiKey}` },
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
         body: form,
       }, signal);
       let payload;

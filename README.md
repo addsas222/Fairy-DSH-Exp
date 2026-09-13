@@ -33,6 +33,9 @@ preset 原地可发现（`dsh --profile web --dump-config` 可核对组合）。
 人格在 设置 → 人格 中选择，与语音引擎（设置 → 语音引擎）按人格包原子绑定；
 人格包格式与扫描根见 `fairy-persona/dsh-fairy-persona/README.md`。
 搜索引擎在 设置 → 搜索引擎 中切换后端（DeepSeek / Exa / Perplexity / 自定义）。
+语音输入（转文字）在 设置 → 语音输入 中选路线：**本地**用浏览器内 Whisper（音频不出机器）或把
+OpenAI 兼容地址指向本机服务（whisper.cpp / faster-whisper / speaches，loopback 免密钥）；**网上**用
+浏览器识别、Deepgram、Azure 或任意 OpenAI 兼容云端；另有自定义 HTTP 通用模板。
 
 版本边界：本仓库固定 DSH `0.1.1-rc.2`；跨到 `≥0.1.5-rc.1` 需要走
 `fairy-system/upgrade-candidate-preflight.sh` 的升级验收（含前端面孔与

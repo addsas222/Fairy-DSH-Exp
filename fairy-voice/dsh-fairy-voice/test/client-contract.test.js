@@ -423,6 +423,32 @@ test('speech input ships a mic control, a browser path, and a host upload path',
   assert.match(source, /const liveInput = typeof useInput === 'function' \? useInput\(\(snapshot\) => snapshot\) : input;/);
 });
 
+test('speech input offers online and local routes', () => {
+  // Descriptors: browser-local Whisper plus two online adapters ride the same
+  // registry the settings card already renders.
+  assert.match(source, /id: 'whisper-web'/);
+  assert.match(source, /id: 'deepgram'/);
+  assert.match(source, /id: 'azure'/);
+  assert.match(source, /key: 'whisperWeb'/);
+  assert.match(source, /@huggingface\/transformers@3\.8\.1\/\+esm/);
+  // Routing: the local engine never uploads; host providers keep the recorder
+  // plus upload path.
+  assert.match(source, /const provider = sttProviderId\(sttSettings\);/);
+  assert.match(source, /provider === 'whisper-web'/);
+  assert.match(source, /startLocalWhisperSpeech\(sttSettings\)/);
+  // Capture is separate from transport, and the clip is resampled to the
+  // 16 kHz mono float array Whisper expects.
+  assert.match(source, /async function openRecorder\(\) \{/);
+  assert.match(source, /async function startRecordedSpeech\(lang\) \{\r?\n      const clip = await openRecorder\(\);/);
+  assert.match(source, /new OfflineAudioContext\(1, 16000, 16000\)/);
+  // The local engine reuses the TTS guards instead of inventing its own.
+  assert.match(source, /pipeline\('automatic-speech-recognition', config\.modelId/);
+  assert.match(source, /withResourceMirror\(config\.resourceBase, \(\) => withSingleThreadHint\(/);
+  assert.match(source, /WHISPER_LANGUAGES\[value\] \|\| value/);
+  // First local run downloads the model; the mic tooltip says so.
+  assert.match(source, /speech\.provider === 'whisper-web' \? '本地识别中（首次会下载模型）…' : '正在转写…'/);
+});
+
 test('the 语音输入 settings card owns provider, fields, and availability', () => {
   assert.match(source, /id: 'fairy-voice-stt', order: 32, label: \(\) => '语音输入'/);
   assert.match(source, /'data-dsh-fairy-stt-provider': 'true'/);

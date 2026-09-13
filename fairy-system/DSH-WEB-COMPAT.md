@@ -23,7 +23,7 @@ profile 机制挂载（`dsh plugin --profile web add @linxin666/dsh-web-all@late
   /`dsh-market-*`;Fairy 全部使用 `fairy-*`。
 - 槽位仅共享两个 list 槽，且 id/order 不相交：`settings.section`(dsh-web 的
   `web-ui-plugins` order 110、`pet` order 130;Fairy 的 `fairy-persona` 25、
-  `fairy-search` 28、`fairy-voice-brain` 30、`fairy-voice-engine` 31）与
+  `fairy-search` 28、`fairy-voice-brain` 30、`fairy-voice-engine` 31、`fairy-voice-stt` 32）与
   `sidebar.footer.action`(balance-meter order 0)。
 - Fairy 独占槽 dsh-web 从不占用：`conversation.session.header.utilities`（模式
   chip、人格 chip)、`conversation.input.left`、`conversation.chat.assistant-actions`、
