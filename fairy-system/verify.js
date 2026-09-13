@@ -33,6 +33,7 @@ const paths = {
   modesPlugin: path.join(dshRoot, 'fairy-modes', 'dsh-fairy-modes'),
   searchPlugin: path.join(dshRoot, 'fairy-search', 'dsh-fairy-search'),
   memoryPlugin: path.join(dshRoot, 'fairy-memory', 'dsh-fairy-memory'),
+  roleplayPlugin: path.join(dshRoot, 'fairy-roleplay', 'dsh-fairy-roleplay'),
   profile: path.join(dshRoot, 'profiles', 'web'),
 };
 
