@@ -39,6 +39,32 @@ const packages = [
     sourceRoot: null,
     forbidden: [/dsh-hdd-mode/, /agent\/pre-step/, /\.agent-presets/],
   },
+  {
+    dir: path.join(dshRoot, 'fairy-persona', 'dsh-fairy-persona'),
+    name: 'dsh-fairy-persona',
+    sourceRoot: null,
+    // Persona packs live under persona-packs/ and $DSH_HOME/personas; the
+    // engine must not grow a hook into agent internals or preset discovery.
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/, /\.agent-presets/],
+    forbiddenClient: [/Authorization/, /DEEPSEEK_API_KEY/],
+  },
+  {
+    dir: path.join(dshRoot, 'fairy-modes', 'dsh-fairy-modes'),
+    name: 'dsh-fairy-modes',
+    sourceRoot: null,
+    // Mode state is a session projection; the engine owns no agent hooks and
+    // no preset/discovery machinery.
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/, /\.agent-presets/],
+    forbiddenClient: [/Authorization/],
+  },
+  {
+    dir: path.join(dshRoot, 'fairy-search', 'dsh-fairy-search'),
+    name: 'dsh-fairy-search',
+    sourceRoot: null,
+    // Keys are host-side settings; neither face may build auth material.
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
+    forbiddenClient: [/Authorization/],
+  },
 ];
 
 function fail(message) {

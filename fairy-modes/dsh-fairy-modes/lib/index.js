@@ -21,7 +21,7 @@
  * - No mid-turn queueing: the event is appended immediately instead of waiting
  *   for the next accepted in-turn pre-step (plan-mode's pending-intent
  *   machinery), because a mode only changes the NEXT request assembly.
- *   Upgrade path: adopt plan-mode's `agent/pre-step` intake if a mode change
+ *   Upgrade path: adopt the plan-mode pre-step hook if a mode change
  *   must be narrated inside the running turn.
  * - No narration message: the prompt section is the instruction; an injected
  *   user notice would repeat it every switch.
