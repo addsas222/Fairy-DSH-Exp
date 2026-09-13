@@ -913,7 +913,7 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
   // never compare equal to host arrays under deepStrictEqual.
   assert.deepEqual(
     [...engineIds.props.children.filter((child) => child?.props?.value).map((child) => child.props.value)],
-    ['local-sovits', 'openai', 'custom-http', 'elevenlabs-ws', 'kitten-web', 'kokoro-web', 'piper-web', 'browser'],
+    ['local-sovits', 'openai', 'custom-http', 'elevenlabs-ws', 'kitten-web', 'kokoro-web', 'piper-web', 'browser', 'pocket-tts'],
   );
   assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'kokoro-web').props.children, '可用');
   assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'elevenlabs-ws').props.children, '不可用 · 未配置 ElevenLabs API Key。');

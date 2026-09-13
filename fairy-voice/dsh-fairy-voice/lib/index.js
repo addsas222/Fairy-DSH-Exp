@@ -40,6 +40,7 @@ export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
     kittenWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.kittenWeb }),
     piperWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
+    pocketTts: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.pocketTts }),
   }),
   stt: Object.freeze({
     provider: STT_DEFAULTS.provider,
@@ -109,6 +110,11 @@ export const FairyVoiceSettings = z.object({
       headersJson: z.string().default(PROVIDER_CONFIG_DEFAULTS.customHttp.headersJson),
       bodyTemplate: z.string().default(PROVIDER_CONFIG_DEFAULTS.customHttp.bodyTemplate),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
+    // Pocket TTS：宿主侧本地服务，回 WAV；采样率由 provider 解析后上报。
+    pocketTts: z.object({
+      baseUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.pocketTts.baseUrl),
+      voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.pocketTts.voice),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.pocketTts }),
   }).default({ ...FAIRY_VOICE_SETTINGS_DEFAULTS.providers }),
   stt: z.object({
     // Free-form for the same reason as the TTS provider id: an unknown value

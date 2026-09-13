@@ -2,6 +2,7 @@
  * probe per provider. Settings ownership stays with the host plugin. */
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 import { BROWSER_ID, browserProvider } from './browser.js';
+import { POCKET_TTS_DEFAULTS, POCKET_TTS_ID, createPocketTtsProvider } from './pocket-tts.js';
 import { KITTEN_WEB_DEFAULTS, KITTEN_WEB_ID, KOKORO_WEB_DEFAULTS, KOKORO_WEB_ID, PIPER_WEB_DEFAULTS, PIPER_WEB_ID, kokoroWebProvider, kittenWebProvider, piperWebProvider } from './client-engines.js';
 import { CUSTOM_HTTP_DEFAULTS, CUSTOM_HTTP_ID, createCustomHttpProvider } from './custom-http.js';
 import { ELEVENLABS_WS_DEFAULTS, ELEVENLABS_WS_ID, createElevenLabsWsProvider } from './elevenlabs-ws.js';
@@ -19,6 +20,7 @@ export const PROVIDER_IDS = [
   PIPER_WEB_ID,
   BROWSER_ID,
   CUSTOM_HTTP_ID,
+  POCKET_TTS_ID,
 ];
 const PROVIDER_CONFIG_KEYS = {
   [LOCAL_SOVITS_ID]: 'localSovits',
@@ -28,6 +30,7 @@ const PROVIDER_CONFIG_KEYS = {
   [KITTEN_WEB_ID]: 'kittenWeb',
   [PIPER_WEB_ID]: 'piperWeb',
   [CUSTOM_HTTP_ID]: 'customHttp',
+  [POCKET_TTS_ID]: 'pocketTts',
 };
 export const PROVIDER_CONFIG_DEFAULTS = {
   localSovits: LOCAL_SOVITS_DEFAULTS,
@@ -37,6 +40,7 @@ export const PROVIDER_CONFIG_DEFAULTS = {
   kittenWeb: KITTEN_WEB_DEFAULTS,
   piperWeb: PIPER_WEB_DEFAULTS,
   customHttp: CUSTOM_HTTP_DEFAULTS,
+  pocketTts: POCKET_TTS_DEFAULTS,
 };
 export const PROVIDER_CONFIG_FIELDS = {
   localSovits: ['baseURL', 'referenceAudioPath', 'referencePromptPath'],
@@ -46,6 +50,7 @@ export const PROVIDER_CONFIG_FIELDS = {
   kittenWeb: ['moduleUrl', 'modelId', 'voice', 'resourceBase'],
   piperWeb: ['moduleUrl', 'voiceId', 'resourceBase'],
   customHttp: ['url', 'method', 'headersJson', 'bodyTemplate'],
+  pocketTts: ['baseUrl', 'voice'],
 };
 const AVAILABILITY_TIMEOUT_MS = 3_000;
 
@@ -73,6 +78,7 @@ export function createProviderRegistry({
     [KITTEN_WEB_ID, kittenWebProvider],
     [PIPER_WEB_ID, piperWebProvider],
     [CUSTOM_HTTP_ID, createCustomHttpProvider({ fetchImpl })],
+    [POCKET_TTS_ID, createPocketTtsProvider({ fetchImpl })],
     [BROWSER_ID, browserProvider],
   ]);
 

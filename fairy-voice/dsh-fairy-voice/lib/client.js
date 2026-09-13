@@ -1399,7 +1399,8 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
         ]
       },
-      { id: 'browser', label: '浏览器朗读', key: null, fields: [] }
+      { id: 'browser', label: '浏览器朗读', key: null, fields: [] },
+      { id: 'pocket-tts', label: 'Pocket TTS（本地服务，Kyutai）', key: 'pocketTts', fields: [ { name: 'baseUrl', label: '服务地址', placeholder: 'http://127.0.0.1:8000（uvx pocket-tts serve）' }, { name: 'voice', label: '音色（可空=服务端默认）', placeholder: 'alba / marius / estelle / lola / giovanni …' } ] },
     ];
 
     function engineOption(id) {

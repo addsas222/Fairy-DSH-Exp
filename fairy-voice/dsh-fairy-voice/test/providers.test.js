@@ -156,6 +156,7 @@ test('provider availability is reported per provider without leaking config', as
     'piper-web',
     'browser',
     'custom-http',
+    'pocket-tts',
   ]);
   assert.deepEqual(list[0], { id: 'local-sovits', available: true });
   assert.deepEqual(list[1], { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' });
@@ -167,6 +168,7 @@ test('provider availability is reported per provider without leaking config', as
   assert.deepEqual(list[5], { id: 'piper-web', available: true });
   assert.deepEqual(list[6], { id: 'browser', available: true });
   assert.deepEqual(list[7], { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' });
+  assert.deepEqual(list[8], { id: 'pocket-tts', available: true });
 
   const unreachable = createProviderRegistry({ fetchImpl: async () => { throw new Error('ECONNREFUSED'); }, WebSocketImpl: FakeWebSocket });
   assert.deepEqual(await unreachable.list(FAIRY_VOICE_SETTINGS_DEFAULTS), [
@@ -178,6 +180,7 @@ test('provider availability is reported per provider without leaking config', as
     { id: 'piper-web', available: true },
     { id: 'browser', available: true },
     { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' },
+    { id: 'pocket-tts', available: false, reason: '未连接到 Pocket TTS（语音服务连接失败。）：先运行 uvx pocket-tts serve。' },
   ]);
 });
 
@@ -291,6 +294,7 @@ test('provider config reads and writes stay sanitized and never clobber a stored
       kittenWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.kittenWeb,
       piperWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.piperWeb,
       customHttp: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.customHttp,
+      pocketTts: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.pocketTts,
     },
   });
 
@@ -326,6 +330,7 @@ test('provider config lists every provider availability entry for the settings c
     'piper-web',
     'browser',
     'custom-http',
+    'pocket-tts',
   ]);
 });
 
