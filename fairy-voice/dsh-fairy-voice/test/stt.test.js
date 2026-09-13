@@ -562,17 +562,14 @@ test('azure stt posts the fast-transcription multipart body and joins phrases pe
   });
   // Chinese phrases are concatenated without a joining space, empties dropped.
   assert.deepEqual(chinese, { text: '你好世界' });
-  assert.equal(captured.url, 'https://rg.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15');
+  assert.equal(captured.url, 'https://rg.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15');
   assert.equal(captured.options.method, 'POST');
   assert.equal(captured.options.headers['Ocp-Apim-Subscription-Key'], 'az-live-123');
   // fetch must derive the multipart boundary itself.
   assert.equal(captured.options.headers['Content-Type'], undefined);
   assert.equal(captured.options.body instanceof FormData, true);
-  // The definition part carries its own JSON media type: a bare string part
-  // serializes as text/plain, which some deployments reject.
-  const definition = captured.options.body.get('definition');
-  assert.equal(definition.type, 'application/json');
-  assert.equal(await definition.text(), '{"locales":["zh-CN"]}');
+  // Plain form text, exactly as the documented request sends it.
+  assert.equal(captured.options.body.get('definition'), '{"locales":["zh-CN"]}');
   const blob = captured.options.body.get('audio');
   assert.equal(blob.type, 'audio/webm');
   assert.deepEqual([...new Uint8Array(await blob.arrayBuffer())], [...audio]);
@@ -587,7 +584,34 @@ test('azure stt posts the fast-transcription multipart body and joins phrases pe
     language: 'en-US',
     config: { endpoint: 'https://x.cognitiveservices.azure.com', apiKey: 'k' },
   }), { text: 'hello world' });
-  assert.equal(url, 'https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15');
+  assert.equal(url, 'https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15');
+});
+
+test('azure stt prefers the service-provided full transcript over the phrase join', async () => {
+  const phrases = { phrases: [{ text: 'Good afternoon.' }, { text: 'This is Sam.' }] };
+  const provider = createAzureSttProvider({
+    fetchImpl: async () => jsonResponse({ durationMilliseconds: 182439, combinedPhrases: [{ text: ' Good afternoon. This is Sam. ' }], ...phrases }),
+  });
+  const config = { endpoint: 'https://x.cognitiveservices.azure.com', apiKey: 'k' };
+  // One string straight from the service beats re-assembling segments, where
+  // the joining space is a guess about the locale's writing system.
+  assert.deepEqual(
+    await provider.transcribe({ audio: Buffer.from([1]), contentType: 'audio/wav', config }),
+    { text: 'Good afternoon. This is Sam.' },
+  );
+
+  const legacy = createAzureSttProvider({ fetchImpl: async () => jsonResponse(phrases) });
+  assert.deepEqual(
+    await legacy.transcribe({ audio: Buffer.from([1]), contentType: 'audio/wav', language: 'zh-CN', config }),
+    { text: 'Good afternoon.This is Sam.' },
+  );
+
+  // An empty combinedPhrases must not shadow the phrases it accompanies.
+  const blank = createAzureSttProvider({ fetchImpl: async () => jsonResponse({ combinedPhrases: [{ text: '  ' }], ...phrases }) });
+  assert.deepEqual(
+    await blank.transcribe({ audio: Buffer.from([1]), contentType: 'audio/wav', language: 'en-US', config }),
+    { text: 'Good afternoon. This is Sam.' },
+  );
 });
 
 test('azure stt keeps a pasted full endpoint path and maps upstream failures', async () => {
@@ -598,10 +622,11 @@ test('azure stt keeps a pasted full endpoint path and maps upstream failures', a
   const call = (endpoint) => provider.transcribe({ audio: Buffer.from([1]), contentType: 'audio/wav', config: { endpoint, apiKey: 'k' } });
   await call('https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15');
   await call('https://x.cognitiveservices.azure.com/speechtotext/');
-  // Neither the request path nor the api-version is appended twice.
+  // Neither the request path nor the api-version is appended twice, and an
+  // operator who pinned an older version keeps it.
   assert.deepEqual(urls, [
     'https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15',
-    'https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15',
+    'https://x.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15',
   ]);
 
   const rejected = createAzureSttProvider({ fetchImpl: async () => jsonResponse({ error: { code: 'BadRequest', message: 'Unsupported locale' } }, false, 400) });

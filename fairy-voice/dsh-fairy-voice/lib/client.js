@@ -425,7 +425,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     /** Browser recognition: resolves with text when the engine delivers it. */
     async function startBrowserSpeech(lang) {
       const Recognition = speechRecognitionCtor();
-      if (!Recognition) throw new Error('当前浏览器不支持语音识别；请改用 OpenAI Whisper 或自定义 HTTP 提供方。');
+      if (!Recognition) throw new Error('当前浏览器不支持语音识别；请改用 Whisper 本地（浏览器内，免密钥）、在线 Deepgram/Azure 或自定义 HTTP 提供方。');
       const recognition = new Recognition();
       recognition.lang = lang;
       recognition.continuous = false;

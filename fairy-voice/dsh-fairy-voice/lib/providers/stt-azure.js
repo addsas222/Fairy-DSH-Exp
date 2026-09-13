@@ -11,7 +11,9 @@ export const STT_AZURE_DEFAULTS = Object.freeze({
   locale: 'zh-CN',
 });
 
-const API_VERSION = '2024-11-15';
+// The version the fast-transcription docs example targets; a caller that
+// pastes a full URL with its own api-version keeps that value.
+const API_VERSION = '2025-10-15';
 const TRANSCRIBE_PATH = '/speechtotext/transcriptions:transcribe';
 
 function resolveConfig(config = {}) {
@@ -72,9 +74,8 @@ export function createAzureSttProvider({ fetchImpl = fetch } = {}) {
       const locale = String(language || value.locale || '').trim();
       const form = new FormData();
       form.append('audio', new Blob([audio], { type: contentType }));
-      // Microsoft's own samples mark this part as JSON; a plain string part
-      // serializes as text/plain and some deployments reject that.
-      form.append('definition', new Blob([JSON.stringify({ locales: locale ? [locale] : [] })], { type: 'application/json' }));
+      // The documented request sends this part as plain form text.
+      form.append('definition', JSON.stringify({ locales: locale ? [locale] : [] }));
       // The fetch-derived boundary must survive: setting Content-Type here
       // would strip it and make the multipart body unparsable.
       const response = await requestAudioBytes(fetchImpl, url, {
@@ -83,6 +84,10 @@ export function createAzureSttProvider({ fetchImpl = fetch } = {}) {
         body: form,
       }, signal);
       const payload = await readTranscriptionPayload(response, '语音识别服务未返回有效响应。');
+      // `combinedPhrases` is the service's own concatenation for all speakers;
+      // the per-phrase join only exists for responses that omit it.
+      const combined = payload?.combinedPhrases?.[0]?.text;
+      if (typeof combined === 'string' && combined.trim()) return { text: combined.trim() };
       if (!Array.isArray(payload?.phrases)) throw providerError(PROVIDER_FAILED, '语音识别服务未返回识别结果。');
       return { text: joinPhrases(payload.phrases, locale) };
     },

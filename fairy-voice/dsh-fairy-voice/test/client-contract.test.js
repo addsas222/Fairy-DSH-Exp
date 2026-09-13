@@ -445,6 +445,9 @@ test('speech input offers online and local routes', () => {
   assert.match(source, /pipeline\('automatic-speech-recognition', config\.modelId/);
   assert.match(source, /withResourceMirror\(config\.resourceBase, \(\) => withSingleThreadHint\(/);
   assert.match(source, /WHISPER_LANGUAGES\[value\] \|\| value/);
+  // A browser without SpeechRecognition must be pointed at a route that works
+  // there — the local engine needs no key.
+  assert.match(source, /请改用 Whisper 本地（浏览器内，免密钥）、在线 Deepgram\/Azure 或自定义 HTTP 提供方/);
   // The language header follows the selected provider's own field.
   assert.match(source, /provider === 'deepgram' \? providers\.deepgram\?\.language/);
   assert.match(source, /provider === 'azure' \? providers\.azure\?\.locale/);
