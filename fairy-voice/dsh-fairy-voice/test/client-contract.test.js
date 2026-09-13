@@ -412,10 +412,15 @@ test('speech input ships a mic control, a browser path, and a host upload path',
   assert.match(source, /MediaRecorder/);
   assert.match(source, /fetch\(`\$\{STT_ENDPOINT}\/stt`/);
   assert.match(source, /'x-fairy-language': lang/);
-  // Insertion goes through the composer's sanctioned slash event, with a
-  // reported direct-write fallback instead of a silent one.
+  // Insertion prefers the composer's public action face (the draft machine's
+  // owner), falls back to the first-party slash channel, and refuses rather
+  // than writing the DOM behind the state machine's back.
+  assert.match(source, /inputActions\.setDraft\(`\$\{draft}\$\{separator}\$\{text}`\)/);
   assert.match(source, /cordisCtx\.bail\('slash\/input-insert-text', \{ text: `\$\{separator}\$\{text}`, span \}\)/);
-  assert.match(source, /diagnostics\.warn\('stt\.insert-fallback', \{\}\)/);
+  assert.doesNotMatch(source, /stt\.insert-fallback/);
+  assert.doesNotMatch(source, /Object\.getOwnPropertyDescriptor\(prototype, 'value'\)/);
+  // The live draft (store subscription) is what gets extended, not the render prop.
+  assert.match(source, /const liveInput = typeof useInput === 'function' \? useInput\(\(snapshot\) => snapshot\) : input;/);
 });
 
 test('the 语音输入 settings card owns provider, fields, and availability', () => {

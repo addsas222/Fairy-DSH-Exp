@@ -485,26 +485,33 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       };
     }
 
-    /** Insert recognized text through the composer's sanctioned slash event. */
-    function insertTranscript(cordisCtx, input, text) {
-      const draft = typeof input?.draft === 'string' ? input.draft : '';
-      const draftRev = input?.draftRev;
+    /**
+     * Insert recognized text into the composer, in sanctioned order:
+     *   1. `inputActions.setDraft` — the composer's public action face, which
+     *      owns the draft machine (no CAS, no racing the render loop);
+     *   2. `ctx.bail('slash/input-insert-text', ...)` — the slash channel the
+     *      first-party input-trigger uses, kept as the fallback for harness
+     *      versions that expose no action face;
+     *   3. otherwise refuse: the draft belongs to the shell's draftRev state
+     *      machine, and a direct DOM write would be clobbered by the next
+     *      render — reporting is honest where writing would be a lie.
+     */
+    function insertTranscript({ inputActions, cordisCtx, snapshot }, text) {
+      const draft = typeof snapshot?.draft === 'string' ? snapshot.draft : '';
       const separator = draft && !/\s$/.test(draft) ? ' ' : '';
-      if (typeof cordisCtx?.bail === 'function' && typeof draftRev === 'number') {
-        const span = { start: draft.length, end: draft.length, draftRev };
+      if (typeof inputActions?.setDraft === 'function') {
+        try {
+          inputActions.setDraft(`${draft}${separator}${text}`);
+          return true;
+        } catch (error) {
+          diagnostics.warn('stt.set-draft', {}, error);
+        }
+      }
+      if (typeof cordisCtx?.bail === 'function' && typeof snapshot?.draftRev === 'number') {
+        const span = { start: draft.length, end: draft.length, draftRev: snapshot.draftRev };
         if (cordisCtx.bail('slash/input-insert-text', { text: `${separator}${text}`, span }) === true) return true;
       }
-      // The harness refused the event (or exposes no draft revision): write the
-      // composer directly and report it, so a broken insertion is visible.
-      const field = document.querySelector('textarea, [contenteditable="true"]');
-      if (!field) return false;
-      const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-      if (setter) setter.call(field, `${field.value || ''}${separator}${text}`);
-      else field.textContent = `${field.textContent || ''}${separator}${text}`;
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-      diagnostics.warn('stt.insert-fallback', {});
-      return true;
+      return false;
     }
 
     function useAlwaysShowControls() {
@@ -1916,7 +1923,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return { state, play, playLocalEngine, playSystem, stop, primeAudio, setOutputVolume, setSpeechRate };
     }
 
-    function VoiceController({ useSession, sessionId, input, cordisCtx }) {
+    function VoiceController({ useSession, sessionId, input, inputActions, useInput, cordisCtx }) {
       const snapshot = useSession(readVoiceTimeline);
       const sessionKey = String(sessionId ?? snapshot.sessionKey ?? 'empty-chat');
       const activeSessions = activeSessionStore || emptyActiveSessionStore;
@@ -1927,6 +1934,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const [autoRead, setAutoRead] = React.useState(() => localStorage.getItem(SETTINGS_AUTO) !== 'false');
       const [volume, setVolume] = React.useState(() => clampVolume(localStorage.getItem(SETTINGS_VOLUME) || '1'));
       const [rate, setRate] = React.useState(() => clampSpeechRate(localStorage.getItem(SETTINGS_RATE) || String(BROWSER_SPEECH_RATE)));
+      // The slot props carry a render snapshot; the input store keeps the draft
+      // and its revision live, so the insertion reads this ref, not the prop.
+      const liveInput = typeof useInput === 'function' ? useInput((snapshot) => snapshot) : input;
+      const inputRef = React.useRef(liveInput);
+      inputRef.current = liveInput;
       const speechRef = React.useRef(null);
       const [speech, setSpeech] = React.useState({ status: 'idle', error: null });
       const finishSpeech = React.useCallback(async () => {
@@ -1937,12 +1949,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         try {
           const text = await active.stop();
           if (!text) { setSpeech({ status: 'idle', error: null }); return; }
-          const inserted = insertTranscript(cordisCtx || voiceClientCtx, input, text);
+          const inserted = insertTranscript({ inputActions, cordisCtx: cordisCtx || voiceClientCtx, snapshot: inputRef.current }, text);
           setSpeech({ status: 'idle', error: inserted ? null : '无法写入输入框，请聚焦输入框后重试。' });
         } catch (speechError) {
           setSpeech({ status: 'idle', error: speechError?.message || '语音识别失败。' });
         }
-      }, [cordisCtx, input]);
+      }, [cordisCtx, inputActions]);
       const startSpeech = React.useCallback(async () => {
         setSpeech({ status: 'listening', error: null });
         try {

@@ -63,9 +63,11 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 主机端点：`GET /fairy-voice/stt-providers`、`GET|POST /fairy-voice/stt-config`、
 `POST /fairy-voice/stt`（请求体=原始音频字节，`content-type: audio/*`，可选
 `x-fairy-language`；成功返回 `{ text }`；体上限 8 MiB，超时 60s）。
-写入路径用官方通道 `ctx.bail('slash/input-insert-text', { text, span })`；
-若通道被拒（无 draftRev 或版本差异），退化为直接写输入框并记 `stt.insert-fallback`
-诊断——不静默丢字。
+写入路径按官方优先级：① 槽位 props 的 `inputActions.setDraft(next)`
+（composer 的公开动作面，拥有 draft 状态机，实测端到端可用）；② 退路
+`ctx.bail('slash/input-insert-text', { text, span })`（一方 input-trigger 用的
+同一通道，span 取实时 `useInput` 快照的 `draftRev`）；③ 两者都不可用时**明确报错**
+而不是直写 DOM——草稿归 shell 的 draftRev 状态机所有，直写会被下一次渲染覆盖。
 
 ### 朗读与语音控件
 
