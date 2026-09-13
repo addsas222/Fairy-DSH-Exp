@@ -14,6 +14,29 @@
   config:
     defaultPreset: danger-full-access
 
+# 人格文本由 dsh-fairy-persona 的人格包接管:清空部署默认 persona,避免与
+# 人格包的 fairy:persona-prefix 段同时渲染(同序不同层会叠加而非替换)。
+# 该行的 config 是整体替换,web-app bundle 此行原本只设这两个键,其余键
+# 维持 schema 默认,无漂移。
+- id: system-prompt
+  config:
+    personaPrefix: ''
+    personaSuffix: ''
+
+# 搜索枢纽接管 provider 选择:请求时按 fairy-search 设置路由;
+# deepseek-official/exa/perplexity/custom 均为可切换后端。
+- id: web
+  config:
+    searchProvider: fairy-search-hub
+    fetchProvider: http
+
+# 创造模式的回忆能力需要全文索引;first-search 延迟打开以保持启动安静。
+# ponytail: 内存索引,跨进程重建;持久索引文件是升级路径。
+- id: session-query-sqlite
+  config:
+    path: ':memory:'
+    openAt: first-search
+
 - insert:
     - id: mcp-playwright
       name: '@deepseek-ai/dsh-mcp-client'
@@ -49,4 +72,21 @@
 
     - id: fairy-visual
       name: 'dsh-fairy-visual'
+      inject: [clientModules]
+
+    # Ponytail:人格引擎(人格包热切换 + 语音绑定)
+    - id: fairy-persona
+      name: 'dsh-fairy-persona'
+      inject: [clientModules]
+
+    # 模式引擎的 host 桥面(每会话控制器由 ponytail preset 的 isolate 组挂载)。
+    # 行名必须是裸包名:clientModules 扫描按行名解析包的 dsh.client 清单,
+    # 子路径名会让模式 chip 的客户端 bundle 进不了 boot 图。包的默认导出即桥面。
+    - id: fairy-modes-bridge
+      name: 'dsh-fairy-modes'
+      inject: [clientModules]
+
+    # 搜索枢纽:设置卡 + 请求时按设置路由到具体搜索后端
+    - id: fairy-search
+      name: 'dsh-fairy-search'
       inject: [clientModules]

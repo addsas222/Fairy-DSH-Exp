@@ -1,0 +1,4 @@
+id: greet
+name: Greeting
+description: 只负责打招呼
+prompt: prompt.md

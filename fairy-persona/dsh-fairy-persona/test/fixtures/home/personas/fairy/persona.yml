@@ -1,0 +1,11 @@
+# Fairy 内置人格包
+id: fairy
+name: Fairy
+description: Ⅲ型总序式集成泛用人工智能
+prompt: prompt.md
+tone: tone.json
+voice:
+  provider: openai
+  baseURL: http://127.0.0.1:9880
+  model: fairy-v4
+  voice: fairy

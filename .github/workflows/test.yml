@@ -23,9 +23,21 @@ jobs:
             fairy-startup/dsh-fairy-startup/pnpm-lock.yaml
             browser-dock/dsh-browser-dock/pnpm-lock.yaml
             balance-meter/dsh-balance-meter/pnpm-lock.yaml
+            fairy-persona/dsh-fairy-persona/pnpm-lock.yaml
+            fairy-modes/dsh-fairy-modes/pnpm-lock.yaml
+            fairy-search/dsh-fairy-search/pnpm-lock.yaml
       - name: Install and test visual
         working-directory: fairy-visual/dsh-fairy-visual
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
       - name: Install and test voice
         working-directory: fairy-voice/dsh-fairy-voice
+        run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
+      - name: Install and test persona
+        working-directory: fairy-persona/dsh-fairy-persona
+        run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
+      - name: Install and test modes
+        working-directory: fairy-modes/dsh-fairy-modes
+        run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
+      - name: Install and test search
+        working-directory: fairy-search/dsh-fairy-search
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test

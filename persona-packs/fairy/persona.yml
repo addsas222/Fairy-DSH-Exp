@@ -1,0 +1,8 @@
+id: fairy
+name: Fairy
+description: 《绝区零》Fairy：Ⅲ型总序式集成泛用人工智能，操作播报与冷面幽默。
+prompt: prompt.md
+tone: tone.json
+voice:
+  provider: local-sovits
+  baseURL: http://127.0.0.1:9880

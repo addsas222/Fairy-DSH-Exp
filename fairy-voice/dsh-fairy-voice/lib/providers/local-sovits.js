@@ -1,40 +1,40 @@
-/* Local TTS transport and PCM forwarding have no route or settings ownership. */
-export function createPcmStreamHandler() {
-  return {
-    async pipe(response, res, signal) {
-      if (!response.body) throw Object.assign(new Error('local synthesis returned no audio'), { code: 'local-service-failed' });
-      try {
-        for await (const chunk of response.body) {
-          if (signal.aborted) break;
-          if (!res.write(Buffer.from(chunk))) {
-            await new Promise((resolve) => {
-              let settled = false;
-              const finish = () => {
-                if (settled) return;
-                settled = true;
-                res.removeListener('drain', finish);
-                res.removeListener('close', finish);
-                signal.removeEventListener('abort', finish);
-                resolve();
-              };
-              res.once('drain', finish);
-              res.once('close', finish);
-              signal.addEventListener('abort', finish, { once: true });
-            });
-          }
-        }
-      } finally {
-        // Breaking an async iterator does not close every fetch implementation's
-        // body immediately. Explicitly cancel an aborted stream so session
-        // switches, reloads, and client disconnects release the socket now.
-        if (signal.aborted && typeof response.body.cancel === 'function') {
-          await response.body.cancel().catch((error) => {
-            if (!signal.aborted && error?.name !== 'AbortError') throw error;
-          });
-        }
-      }
-    },
-  };
+/* GPT-SoVITS transport and provider boundary. The host owns routes and
+ * settings; this module owns how the local CPU service is reached. */
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
+import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
+
+const diagnostics = createFairyDiagnostics('dsh-fairy-voice');
+
+export const LOCAL_SOVITS_ID = 'local-sovits';
+const LOCAL_TTS_TIMEOUT_MS = 180_000;
+const LOCAL_STATUS_TIMEOUT_MS = 3_000;
+export const LOCAL_SOVITS_DEFAULTS = {
+  baseURL: 'http://127.0.0.1:9880',
+  referenceAudioPath: join(homedir(), '.dsh', 'fairy-voice', 'runtime', 'reference', 'fairy_ref.wav'),
+  referencePromptPath: join(homedir(), '.dsh', 'fairy-voice', 'runtime', 'reference', 'fairy_ref.txt'),
+};
+export const REFERENCE_PROMPT_FALLBACK = '根据用户协议，我无权回复该问题。主人将在合适的时间与合适的场合获知答案。';
+
+/* The reference transcript is operator-managed and read once per path. A
+ * mid-run edit therefore needs a plugin reload; a per-request read would put
+ * file I/O on the synthesis latency path for no behavioural gain.
+ * ponytail: one cached read per path, reload to pick up edits. */
+const promptCache = new Map();
+
+function readReferencePrompt(file) {
+  const cached = promptCache.get(file);
+  if (cached !== undefined) return cached;
+  let prompt;
+  try {
+    prompt = readFileSync(file, 'utf8').trim();
+  } catch (error) {
+    diagnostics.warn('reference.prompt.load', { file: basename(String(file)), fallback: true }, error);
+    prompt = REFERENCE_PROMPT_FALLBACK;
+  }
+  promptCache.set(file, prompt);
+  return prompt;
 }
 
 async function localFetch(url, options, timeoutMs, parentSignal) {
@@ -84,7 +84,7 @@ export function createLocalTtsTransport({
 } = {}) {
   const fetchStatus = (url, options, timeoutMs, signal) => fetchImpl === fetch
     ? localFetch(url, options, timeoutMs, signal)
-    : fetchImpl(url, options);
+    : fetchImpl(url, { ...options, signal });
   const stream = (url, options, timeoutMs, signal) => fetchImpl === fetch
     ? openLocalStream(url, options, timeoutMs, signal)
     : fetchImpl(url, { ...options, signal }).then((response) => ({ response, release: null }));
@@ -102,6 +102,43 @@ export function createLocalTtsTransport({
     },
     stream(text, signal) {
       return stream(ttsUrl, localTtsRequest(text), ttsTimeoutMs, signal);
+    },
+  };
+}
+
+function transportFor({ fetchImpl, ttsTimeoutMs, statusTimeoutMs }, config = {}) {
+  const baseURL = String(config.baseURL || LOCAL_SOVITS_DEFAULTS.baseURL).trim().replace(/\/+$/, '');
+  const referencePromptPath = config.referencePromptPath || LOCAL_SOVITS_DEFAULTS.referencePromptPath;
+  return createLocalTtsTransport({
+    fetchImpl,
+    ttsUrl: `${baseURL}/tts`,
+    docsUrl: `${baseURL}/docs`,
+    referenceAudioPath: config.referenceAudioPath || LOCAL_SOVITS_DEFAULTS.referenceAudioPath,
+    referencePrompt: readReferencePrompt(referencePromptPath),
+    ttsTimeoutMs,
+    statusTimeoutMs,
+  });
+}
+
+export function createLocalSovitsProvider({
+  fetchImpl = fetch,
+  ttsTimeoutMs = LOCAL_TTS_TIMEOUT_MS,
+  statusTimeoutMs = LOCAL_STATUS_TIMEOUT_MS,
+} = {}) {
+  const options = { fetchImpl, ttsTimeoutMs, statusTimeoutMs };
+  return {
+    id: LOCAL_SOVITS_ID,
+    async available(config, { signal } = {}) {
+      try {
+        await transportFor(options, config).status(signal);
+        return { available: true, reason: null };
+      } catch (error) {
+        if (signal?.aborted) return { available: false, reason: '检查已取消。' };
+        return { available: false, reason: '本地 Fairy 服务未启动。' };
+      }
+    },
+    stream(text, config, { signal } = {}) {
+      return transportFor(options, config).stream(text, signal);
     },
   };
 }

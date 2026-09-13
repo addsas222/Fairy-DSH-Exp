@@ -8,8 +8,36 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 
 - `fairy-contracts/`：跨插件契约与诊断边界
 - `browser-dock/`、`balance-meter/`、`fairy-startup/`、`fairy-voice/`、`fairy-visual/`：Fairy 插件
-- `fairy-system/`：离线检查与验收工具
+- `fairy-persona/`：人格包引擎（人格文档 + 调色属性 + TTS 绑定的热切换）
+- `fairy-modes/`：会话模式引擎（极简 Explore&Check / PTC Build&Work / 创造 Memory&Dream）
+- `fairy-search/`：搜索枢纽（多后端按设置路由 + 控制界面）
+- `fairy-system/`：离线检查与验收工具（含 `skill-audit.js` 冗余审计、`scaffold-plugin.js` 插件脚手架）
+- `persona-packs/`：内置人格包（fairy、standard）
 - `profiles/web/`：独立 Web profile 模板
+- `.agent-presets/ponytail/`：精简三模式 preset（无仓库外私有资产依赖，自带 ponytail 规则技能组）
+
+设计与决策记录见 `fairy-system/PONYTAIL-DESIGN.md`。
+
+## Ponytail 三模式（部署要点）
+
+启动前设置 `DSH_FAIRY_REPO_ROOT` 指向本仓库；`profiles/web/cordis.patch.yml`
+的 `agent-presets` 行已把仓库 `.agent-presets/` 配为发现根，`ponytail`
+preset 原地可发现（`dsh --profile web --dump-config` 可核对组合）。
+
+| 模式 | 行为 | 切换 |
+| --- | --- | --- |
+| 极简 Explore&Check | 只探查与定案，`exit_plan_mode` 审批后才实施 | 会话头模式 chip → 探查·极简，或 `/plan` |
+| PTC Build&Work | 工具面切换为 `run_code` 编排脚本系列 | chip → 建造·PTC，或 `/mode ptc` |
+| 创造 Memory&Dream | 先用 `session_recall` 回忆历史，再制作/审查技能与插件 | chip → 创造·回忆，或 `/mode create` |
+
+人格在 设置 → 人格 中选择，与语音引擎（设置 → 语音引擎）按人格包原子绑定；
+人格包格式与扫描根见 `fairy-persona/dsh-fairy-persona/README.md`。
+搜索引擎在 设置 → 搜索引擎 中切换后端（DeepSeek / Exa / Perplexity / 自定义）。
+
+版本边界：本仓库固定 DSH `0.1.1-rc.2`；跨到 `≥0.1.5-rc.1` 需要走
+`fairy-system/upgrade-candidate-preflight.sh` 的升级验收（含前端面孔与
+selector 契约复核）。与社区包 dsh-web 的共存分析见
+`fairy-system/DSH-WEB-COMPAT.md`。
 
 ## 独立测试
 

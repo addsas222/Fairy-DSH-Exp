@@ -9,21 +9,25 @@ const canonicalClientDiagnostics = await readFile(new URL('../../../fairy-contra
 const canonicalClientDom = await readFile(new URL('../../../fairy-contracts/client-dom.cjs', import.meta.url), 'utf8');
 
 function embeddedClientDiagnostics(value) {
-  const begin = '// DSH_FAIRY_CLIENT_DIAGNOSTICS_BEGIN\n';
+  const begin = '// DSH_FAIRY_CLIENT_DIAGNOSTICS_BEGIN';
   const end = '// DSH_FAIRY_CLIENT_DIAGNOSTICS_END';
-  const start = value.indexOf(begin);
-  const finish = value.indexOf(end, start + begin.length);
-  assert.ok(start >= 0 && finish > start, 'embedded client diagnostics boundaries should exist');
-  return value.slice(start + begin.length, finish);
+  const marker = value.indexOf(begin);
+  // Locate the block body by scanning past the marker's own line break so a
+  // CRLF checkout compares the same bytes as an LF checkout.
+  const start = marker < 0 ? -1 : value.indexOf('\n', marker) + 1;
+  const finish = value.indexOf(end, start);
+  assert.ok(start > 0 && finish > start, 'embedded client diagnostics boundaries should exist');
+  return value.slice(start, finish);
 }
 
 function embeddedClientDom(value) {
-  const begin = '// DSH_FAIRY_CLIENT_DOM_BEGIN\n';
+  const begin = '// DSH_FAIRY_CLIENT_DOM_BEGIN';
   const end = '// DSH_FAIRY_CLIENT_DOM_END';
-  const start = value.indexOf(begin);
-  const finish = value.indexOf(end, start + begin.length);
-  assert.ok(start >= 0 && finish > start, 'embedded client DOM contracts boundaries should exist');
-  return value.slice(start + begin.length, finish);
+  const marker = value.indexOf(begin);
+  const start = marker < 0 ? -1 : value.indexOf('\n', marker) + 1;
+  const finish = value.indexOf(end, start);
+  assert.ok(start > 0 && finish > start, 'embedded client DOM contracts boundaries should exist');
+  return value.slice(start, finish);
 }
 
 test('embeds the canonical client diagnostics byte for byte', () => {
@@ -256,13 +260,13 @@ test('only mounts the composer voice controller while HDD visual mode is active'
 });
 
 test('server retains cancellation through the complete upstream PCM stream', async () => {
-  const [server, localTtsProxy] = await Promise.all([
+  const [server, localSovits] = await Promise.all([
     readFile(new URL('../lib/index.js', import.meta.url), 'utf8'),
-    readFile(new URL('../lib/server/local-tts-proxy.js', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/providers/local-sovits.js', import.meta.url), 'utf8'),
   ]);
-  assert.match(localTtsProxy, /function openLocalStream\(/);
-  assert.match(localTtsProxy, /signal: controller\.signal/);
-  assert.match(localTtsProxy, /const release = \(\) => \{[\s\S]*?parentSignal\?\.removeEventListener\('abort', onAbort\)/);
+  assert.match(localSovits, /function openLocalStream\(/);
+  assert.match(localSovits, /signal: controller\.signal/);
+  assert.match(localSovits, /const release = \(\) => \{[\s\S]*?parentSignal\?\.removeEventListener\('abort', onAbort\)/);
   assert.match(server, /activeTtsController\?\.abort\('superseded'\)/);
   assert.match(server, /releaseUpstream\?\.\(\)/);
   assert.match(server, /dispose: \(\) => \{[\s\S]*?controller\.abort\('disposed'\)/);
@@ -438,4 +442,233 @@ test('voice client boundaries remain separated and scheduler is used by playback
   assert.match(source, /const samples = buffer\.getChannelData\(0\);\s*pcmStreamHandler\.decodeInto\(bytes, samples\);\s*applyPcmEdgeRamp\(samples\);/s);
   assert.doesNotMatch(source, /new Float32Array\(bytes\.length/);
   assert.doesNotMatch(source, /function legacy(?:Prepare|GetAvailability|GetVoiceBrainStatus|CreateVoiceBrief|RequestVoiceBrainConfig)/);
+});
+
+// Harness for the playback boundary: boots the real client bundle against a
+// stateful React double, a fake server, and a fake audio stack.
+async function bootPlaybackClient({ fetchDouble, onBuffer }) {
+  const vm = await import('node:vm');
+  const calls = [];
+  const spoken = [];
+  const listeners = new Map();
+  const hooks = [];
+  let cursor = 0;
+  let active = null;
+  const React = {
+    useState(initial) {
+      const index = cursor; cursor += 1;
+      if (!(index in hooks)) hooks[index] = { value: typeof initial === 'function' ? initial() : initial };
+      return [hooks[index].value, (next) => {
+        // Late async work from a component that no longer owns these hooks
+        // (as React ignores setState on unmounted components).
+        if (!(index in hooks)) return;
+        hooks[index].value = typeof next === 'function' ? next(hooks[index].value) : next;
+        if (active) active.rerender();
+      }];
+    },
+    useRef(initial) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: { current: initial } }; return hooks[index].value; },
+    useCallback(callback) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: callback }; return hooks[index].value; },
+    useEffect(callback) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: callback() }; },
+    useLayoutEffect(callback) { this.useEffect(callback); },
+    useMemo(callback) { return callback(); },
+    useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
+  };
+  // One active component at a time: mounting a new one takes over hook storage,
+  // which is enough for these single-screen harnesses.
+  const mount = (Component, props) => {
+    const handle = { draw: () => { cursor = 0; return Component(props); }, rerender() { handle.tree = handle.draw(); }, tree: null };
+    hooks.length = 0;
+    // A state update raised during the first draw is stored, not re-entrant:
+    // the component is mounted after that draw returns.
+    active = null;
+    handle.tree = handle.draw();
+    active = handle;
+    return handle;
+  };
+  class AudioContextDouble {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+    createGain() { return { gain: { value: 1, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, setTargetAtTime() {} }, connect() {}, disconnect() {} }; }
+    createBuffer(_channels, length, rate) { onBuffer(rate, length); return { duration: 0.1, length, getChannelData: () => new Float32Array(length) }; }
+    createBufferSource() { return { buffer: null, connect() {}, disconnect() {}, start() {}, stop() {}, onended: null }; }
+    async resume() { this.state = 'running'; }
+    async suspend() { this.state = 'suspended'; }
+    async close() { this.state = 'closed'; }
+  }
+  const windowDouble = {
+    AudioContext: AudioContextDouble,
+    speechSynthesis: {
+      getVoices: () => [{ lang: 'zh-CN' }],
+      speak: (utterance) => { spoken.push(utterance); setTimeout(() => utterance.onend?.(), 0); },
+      cancel() {},
+    },
+    addEventListener(type, listener) { listeners.set(type, [...(listeners.get(type) || []), listener]); },
+    removeEventListener() {},
+    dispatchEvent(event) { return Promise.all((listeners.get(event.type) || []).map((listener) => listener(event))); },
+  };
+  let moduleDefinition;
+  const slots = new Map();
+  const context = vm.createContext({
+    AbortController, Map, Promise, Set, URL, clearTimeout, setTimeout, console,
+    CustomEvent: class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
+    SpeechSynthesisUtterance: class SpeechSynthesisUtterance { constructor(text) { this.text = text; } },
+    document: {
+      documentElement: { hasAttribute: (name) => name === 'data-dsh-fairy-visual', appendChild() {} },
+      getElementById: () => null,
+      createElement: () => ({ setAttribute() {}, appendChild() {}, textContent: '' }),
+      addEventListener() {}, removeEventListener() {}, visibilityState: 'visible',
+    },
+    fetch: async (url, options = {}) => { calls.push(`${options.method || 'GET'} ${url}`); return fetchDouble(url, options); },
+    localStorage: { getItem: () => null, setItem() {} },
+    window: { ...windowDouble, __ModuleLoader__: { load(definition) { moduleDefinition = definition; } } },
+  });
+  vm.runInContext(source, context, { filename: 'dsh-fairy-voice/client.js' });
+  moduleDefinition.factory((id) => {
+    if (id === 'react') return React;
+    if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props || {} }), jsxs: (type, props) => ({ type, props: props || {} }) };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Tooltip: 'Tooltip', IconPauseOutline16: 'P', IconPlayOutline16: 'P', IconStopFill16: 'S' };
+    throw new Error(`unexpected module: ${id}`);
+  }).apply({
+    effect() {},
+    sessions: { list: { getSnapshot: () => ({ current: 'empty-chat' }), subscribe: () => () => {} } },
+    slots: { inject(_name, register) { register(); }, register(definition, component) { slots.set(definition.id, component); } },
+  });
+  const wrapper = slots.get('fairy-voice-controller');
+  const element = wrapper({ sessionId: 'empty-chat', useSession: (selector) => selector({}) });
+  const instance = mount(element.type, element.props);
+  return { calls, spoken, windowDouble, instance, slots, mount };
+}
+
+const settleVoiceClient = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('a client-side provider answer falls back to browser speech at rate 1.0', async () => {
+  const booted = await bootPlaybackClient({
+    onBuffer: () => {},
+    fetchDouble: async (url) => {
+      const json = (value, status = 200, ok = true) => ({ ok, status, json: async () => value });
+      if (url.endsWith('/status')) return json({ available: true, reason: null, provider: 'local-sovits' });
+      if (url.endsWith('/brain/status')) return json({ configured: false, model: 'deepseek-v4-flash' });
+      if (url.endsWith('/prepare')) return json({ sentences: ['你好，主人。', '这是第二句。'] });
+      if (url.endsWith('/tts')) return json({ error: { code: 'client-side', message: '浏览器端朗读' } }, 409, false);
+      throw new Error(`unexpected fetch ${url}`);
+    },
+  });
+  await settleVoiceClient();
+  await settleVoiceClient();
+  await booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', messageId: 'm1', markdown: '一段回答。' } });
+  for (let tick = 0; tick < 6; tick += 1) await settleVoiceClient();
+  assert.ok(booted.calls.includes('POST /fairy-voice/tts'), `expected a synthesis attempt: ${booted.calls.join(' | ')}`);
+  assert.equal(booted.spoken.length, 2);
+  assert.equal(booted.spoken[0].text, '你好，主人。');
+  assert.equal(booted.spoken[0].rate, 1.0);
+  assert.equal(booted.spoken[0].volume, 1);
+  assert.equal(booted.spoken[0].lang, 'zh-CN');
+  await booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', stop: true } });
+});
+
+test('PCM playback schedules buffers at the sample rate the host declares', async () => {
+  const rates = [];
+  const booted = await bootPlaybackClient({
+    onBuffer: (rate) => rates.push(rate),
+    fetchDouble: async (url) => {
+      const json = (value, status = 200, ok = true) => ({ ok, status, json: async () => value });
+      if (url.endsWith('/status')) return json({ available: true, reason: null, provider: 'openai' });
+      if (url.endsWith('/brain/status')) return json({ configured: false, model: 'deepseek-v4-flash' });
+      if (url.endsWith('/prepare')) return json({ sentences: ['一段回答。'] });
+      if (url.endsWith('/tts')) {
+        const samples = new Uint8Array(6400);
+        let consumed = false;
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'audio/pcm' : name.toLowerCase() === 'x-fairy-sample-rate' ? '24000' : null },
+          body: { getReader: () => ({ read: async () => (consumed ? { done: true } : ((consumed = true), { done: false, value: samples })), releaseLock() {} }) },
+        };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    },
+  });
+  await settleVoiceClient();
+  await settleVoiceClient();
+  // Do not await the trigger: playback stays live until the stop below.
+  const triggered = booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', messageId: 'm2', markdown: '一段回答。' } }).catch(() => {});
+  for (let tick = 0; tick < 6; tick += 1) await settleVoiceClient();
+  assert.equal(booted.spoken.length, 0, 'PCM playback must not use browser speech');
+  assert.ok(rates.length >= 1, `expected scheduled buffers, got ${rates.length}`);
+  assert.deepEqual([...new Set(rates)], [24_000]);
+  await booted.windowDouble.dispatchEvent({ type: 'fairy-voice-play', detail: { sessionKey: 'empty-chat', stop: true } });
+  await triggered;
+});
+
+test('the 语音引擎 settings card seeds drafts, switches provider, and saves that section', async () => {
+  let stored = {
+    provider: 'local-sovits',
+    providers: {
+      localSovits: { baseURL: 'http://127.0.0.1:9880', referenceAudioPath: 'C:/ref.wav', referencePromptPath: 'C:/ref.txt' },
+      openai: { baseURL: 'https://api.openai.com/v1', apiKey: '***', model: 'tts-1', voice: 'alloy' },
+      customHttp: { url: '', method: 'POST', headersJson: '{}', bodyTemplate: '{"text":"{{text}}"}' },
+    },
+  };
+  const booted = await bootPlaybackClient({
+    onBuffer: () => {},
+    fetchDouble: async (url, options = {}) => {
+      const json = (value, status = 200, ok = true) => ({ ok, status, json: async () => value });
+      if (url.endsWith('/provider-config') && (options.method || 'GET') === 'GET') return json(stored);
+      if (url.endsWith('/provider-config')) {
+        const body = JSON.parse(options.body);
+        stored = { ...stored, ...body, providers: { ...stored.providers, ...(body.providers || {}) } };
+        return json(stored);
+      }
+      if (url.endsWith('/providers')) {
+        return json([
+          { id: 'local-sovits', available: true },
+          { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' },
+          { id: 'browser', available: true },
+          { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' },
+        ]);
+      }
+      if (url.endsWith('/status')) return json({ available: true, reason: null, provider: 'local-sovits' });
+      if (url.endsWith('/brain/status')) return json({ configured: false, model: 'deepseek-v4-flash' });
+      throw new Error(`unexpected fetch ${url}`);
+    },
+  });
+  await settleVoiceClient();
+
+  const walk = (node, visit) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach((child) => walk(child, visit)); return; }
+    if (!node.props) return;
+    visit(node);
+    walk(node.props.children, visit);
+  };
+  const find = (tree, predicate) => {
+    let found = null;
+    walk(tree, (node) => { if (!found && predicate(node)) found = node; });
+    return found;
+  };
+
+  const card = booted.mount(booted.slots.get('fairy-voice-engine'), {});
+  await settleVoiceClient();
+  await settleVoiceClient();
+  let tree = card.tree;
+
+  const select = find(tree, (node) => node.type === 'select');
+  assert.equal(select.props.value, 'local-sovits');
+  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'baseURL').props.value, 'http://127.0.0.1:9880');
+  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'openai').props.children, '不可用 · 未配置 OpenAI API Key。');
+  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'browser').props.children, '可用');
+
+  select.props.onChange({ target: { value: 'openai' } });
+  tree = card.tree;
+  const apiKeyField = find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'apiKey');
+  assert.equal(apiKeyField.props.type, 'password');
+  assert.equal(apiKeyField.props.value, '***', 'a stored key must come back masked');
+  find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'model').props.onChange({ target: { value: 'gpt-4o-mini-tts' } });
+  await find(card.tree, (node) => node.type === 'button' && node.props.children === '保存').props.onClick();
+  for (let tick = 0; tick < 4; tick += 1) await settleVoiceClient();
+
+  const post = booted.calls.find((call) => call === 'POST /fairy-voice/provider-config');
+  assert.ok(post, `expected a config write: ${booted.calls.join(' | ')}`);
+  assert.equal(stored.provider, 'openai');
+  assert.equal(stored.providers.openai.model, 'gpt-4o-mini-tts');
+  assert.equal(stored.providers.openai.apiKey, '***', 'an untouched masked key must be preserved');
 });

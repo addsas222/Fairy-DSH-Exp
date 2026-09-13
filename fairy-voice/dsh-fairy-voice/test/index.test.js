@@ -4,7 +4,6 @@ import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import vm from 'node:vm';
 import { createFairyVoiceHandlers, markdownToSpeechText, normalizeSpeechText, splitSpeechSentences, writePrivateJson } from '../lib/index.js';
 
 function requestWithJson(value) {
@@ -50,7 +49,9 @@ test('private JSON writes are atomic, unique, and permission-restricted', async 
     const value = JSON.parse(await readFile(file, 'utf8'));
     assert.equal(value.version, 1);
     assert.ok(['first', 'second'].includes(value.value));
-    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    // Windows has no POSIX permission bits: chmod there only toggles the
+    // read-only flag, so 0o600 is not expressible and cannot be asserted.
+    if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o600);
     assert.deepEqual((await readdir(directory)).filter((name) => name.endsWith('.tmp')), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -266,36 +267,26 @@ test('voice brain status never exposes the API key', async () => {
   assert.deepEqual(JSON.parse(payload), { configured: true, model: 'deepseek-v4-flash' });
 });
 
-test('server handlers use explicit speech and transport boundaries', async () => {
-  const [source, localTtsProxy, voiceBriefFallback] = await Promise.all([
+test('server handlers use explicit speech, provider, and transport boundaries', async () => {
+  const [source, pcmForward, localSovits, voiceBriefFallback] = await Promise.all([
     readFile(new URL('../lib/index.js', import.meta.url), 'utf8'),
-    readFile(new URL('../lib/server/local-tts-proxy.js', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/pcm-forward.js', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/providers/local-sovits.js', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/voice-brief-fallback.js', import.meta.url), 'utf8'),
   ]);
   assert.match(source, /function createSentencePreparation\(/);
-  assert.match(source, /from '\.\/server\/local-tts-proxy\.js'/);
+  assert.match(source, /from '\.\/providers\/index\.js'/);
+  assert.match(source, /from '\.\/server\/pcm-forward\.js'/);
   assert.match(source, /from '\.\/server\/voice-brief-fallback\.js'/);
-  assert.match(localTtsProxy, /export function createPcmStreamHandler\(/);
-  assert.match(localTtsProxy, /export function createLocalTtsTransport\(/);
+  assert.match(pcmForward, /export function createPcmStreamHandler\(/);
+  assert.match(localSovits, /export function createLocalTtsTransport\(/);
+  assert.match(localSovits, /export function createLocalSovitsProvider\(/);
+  assert.match(localSovits, /http:\/\/127\.0\.0\.1:9880/);
   assert.match(voiceBriefFallback, /export function createVoiceBrainServerBoundary\(/);
   assert.match(source, /const sentencePreparation = createSentencePreparation\(\)/);
   assert.match(source, /const pcmStreamHandler = createPcmStreamHandler\(\)/);
-  assert.match(source, /const localTtsTransport = createLocalTtsTransport\(/);
+  assert.match(source, /providers = createProviderRegistry\(\{ fetchImpl \}\)/);
+  assert.match(source, /settings = createVoiceSettingsBoundary\(\)/);
+  assert.match(source, /const \{ id: providerId, provider, config \} = providers\.resolve\(settings\.read\(\)\)/);
   assert.match(source, /const voiceBrainBoundary = createVoiceBrainServerBoundary\(/);
-  assert.match(source, /http:\/\/127\.0\.0\.1:9880\/tts/);
-  const loader = source.match(/function readReferencePrompt\(\) \{[\s\S]*?\n\}/)?.[0];
-  assert.ok(loader, 'reference prompt loader should be available');
-  const warnings = [];
-  const sandbox = {
-    REFERENCE_PROMPT_PATH: '/synthetic/fairy_ref.txt',
-    REFERENCE_PROMPT_FALLBACK: 'fallback prompt',
-    diagnostics: { warn(...args) { warnings.push(args); } },
-    readFileSync() { throw Object.assign(new Error('synthetic missing reference'), { code: 'ENOENT' }); },
-  };
-  vm.runInNewContext(`${loader}; globalThis.readReferencePrompt = readReferencePrompt;`, sandbox);
-  assert.equal(sandbox.readReferencePrompt(), 'fallback prompt');
-  assert.equal(warnings.length, 1);
-  sandbox.readFileSync = () => '  file prompt\n';
-  assert.equal(sandbox.readReferencePrompt(), 'file prompt');
-  assert.equal(warnings.length, 1);
 });

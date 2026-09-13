@@ -1,0 +1,7 @@
+id: standard
+name: 标准
+description: 无人格修饰的精简编码助手：直接、克制、只报告真实完成的动作。
+prompt: prompt.md
+tone: tone.json
+voice:
+  provider: browser

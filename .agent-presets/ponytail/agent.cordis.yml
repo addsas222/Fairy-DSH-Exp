@@ -1,0 +1,153 @@
+# Ponytail preset:精简三模式 composition。
+#
+# 与 fairy preset 的差异(Ponytail 标准,删除优先):
+# - 不引用任何仓库外/私有运行时资产(原 runtime/index.js、fairy_core.py、
+#   safety-gate.js 为悬空引用,公开仓库无法挂载)。
+# - 不挂 dsh-persona 行:人格文档由 host 层 dsh-fairy-persona 按人格包热切换;
+#   未选择人格包时回落到部署默认 persona(web-app bundle 的 system-prompt 行)。
+# - 不挂 tool-presentation 行:PTC 呈现由 dsh-fairy-modes 按会话运行时切换
+#   (ctx.tools.presentAs),而不是进程级 DSH_TOOLS_MODE。
+# - delegation 只保留 subagent(spawn/fork/list/control);workflow/ralph 属于
+#   重型编排,PTC 模式已覆盖脚本系列编排(YAGNI;需要时经 --patch 叠加)。
+# - 新增 tool-session-query:创造模式的“回忆一切所作所为”由
+#   session_search/session_event_search 承担(要求 profile 把
+#   session-query-sqlite 的 openAt 设为 first-search,profiles/web 已配)。
+#
+# isolate 语义与官方 preset 一致:服务行必须位于带 isolate 领域的组内,
+# 否则发布为进程全局并在第二个会话挂载时冲突(详见官方 ptc preset 注释)。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# 技能:registry 在 host 平面,这里注册本 preset 层的本地发现与目录。
+# customSkillDirs 指向本 preset 自带的 ponytail 规则技能组。
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── PTC(Build&Work)与创造(Memory&Dream) ───────────────────────────────
+# 模式状态是每会话的,entry-local 领域是正确的生命周期。
+# preset 行名必须是字面字符串(discovery 的 entryListProblem 不接受 !!js
+# 表达式名);本仓库插件经 preset 内 shim(./plugins/fairy-modes.js)加载,
+# shim 用 DSH_FAIRY_REPO_ROOT 解析真身,preset 复制/原地两种部署行为一致。
+# 创造模式的回忆由 fairy-modes 的 session_recall 工具承担
+# (dsh-tool-session-query 未随 0.1.2 发行,不能作为 preset 行)。
+- id: fairy-modes
+  name: cordis:group
+  group: true
+  isolate:
+    fairyMode: true
+  config:
+    # 子行 id 必须与组 id 不同:同名会让 loader 的 entry 自我为父,
+    # _disabled 的父链 while 循环空转(整个事件循环被同步卡死)。
+    - id: fairy-modes-engine
+      name: './plugins/fairy-modes.mjs'
+
+# ── 极简模式(Explore&Check) ─────────────────────────────────────────────
+# 直接复用官方 plan-mode:探查、定案、exit_plan_mode 审批后才进入实施。
+# 主会话 chip 由 dsh-fairy-modes 的客户端读取 `plan` 投影显示。
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+          You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+          Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+          The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+          Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+          Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+          When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+    - id: tool-subagent-fork
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: continuable
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000

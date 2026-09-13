@@ -24,6 +24,15 @@ importers:
       dsh-browser-dock:
         specifier: link:../../browser-dock/dsh-browser-dock
         version: link:../../browser-dock/dsh-browser-dock
+      dsh-fairy-modes:
+        specifier: link:../../fairy-modes/dsh-fairy-modes
+        version: link:../../fairy-modes/dsh-fairy-modes
+      dsh-fairy-persona:
+        specifier: link:../../fairy-persona/dsh-fairy-persona
+        version: link:../../fairy-persona/dsh-fairy-persona
+      dsh-fairy-search:
+        specifier: link:../../fairy-search/dsh-fairy-search
+        version: link:../../fairy-search/dsh-fairy-search
       dsh-fairy-startup:
         specifier: link:../../fairy-startup/dsh-fairy-startup
         version: link:../../fairy-startup/dsh-fairy-startup

@@ -12,7 +12,18 @@ export DSH_ACCEPTED_BASELINE_ROOT="$test_home/accepted-baselines"
 
 mkdir -p "$DSH_HOME"
 mkdir -p "$DSH_HOME/.agent-presets/fairy" "$DSH_HOME/accepted-baselines"
+# ponytail preset 复制进用户根:readdir 的 Dirent.isDirectory() 对链接/junction
+# 为假,链接形态会被发现器跳过,必须复制为真实目录。preset 内的插件 shim
+# (./plugins/fairy-modes.mjs)以 DSH_FAIRY_REPO_ROOT 解析真身,复制无损。
+if [ -e "$DSH_HOME/.agent-presets/ponytail" ]; then
+  rm -rf "$DSH_HOME/.agent-presets/ponytail"
+fi
+cp -R "$repo_root/.agent-presets/ponytail" "$DSH_HOME/.agent-presets/ponytail"
 for asset in runtime personality style canon behavior; do
+  # runtime/ 是私有资产,公开仓库不含;只复制存在的目录。
+  if [ ! -e "$repo_root/.agent-presets/fairy/$asset" ]; then
+    continue
+  fi
   if [ -e "$DSH_HOME/.agent-presets/fairy/$asset" ]; then
     mv "$DSH_HOME/.agent-presets/fairy/$asset" "$DSH_HOME/.agent-presets/fairy/$asset.previous.$$"
   fi
@@ -33,6 +44,9 @@ fi
 echo "[1/3] package tests"
 (cd "$repo_root/fairy-visual/dsh-fairy-visual" && npm test)
 (cd "$repo_root/fairy-voice/dsh-fairy-voice" && npm test)
+(cd "$repo_root/fairy-persona/dsh-fairy-persona" && npm test)
+(cd "$repo_root/fairy-modes/dsh-fairy-modes" && npm test)
+(cd "$repo_root/fairy-search/dsh-fairy-search" && npm test)
 
 echo "[2/3] profile dependency check"
 if command -v pnpm >/dev/null 2>&1; then

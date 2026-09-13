@@ -1,0 +1,28 @@
+{
+  "name": "dsh-fairy-modes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/bridge.js",
+  "exports": {
+    ".": "./lib/bridge.js",
+    "./engine": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "dependencies": {
+    "dsh-fairy-contracts": "link:../../fairy-contracts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

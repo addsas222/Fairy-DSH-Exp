@@ -18,10 +18,17 @@ Fairy-DSH 的 Apache-2.0 原创代码许可范围内，发布时必须继续保�
 宿主提供，不随本仓库 vendoring，也不由本项目重新授权。使用者应按照 DSH
 发行包中的许可证和版权文件处理。
 
+## 再分发的第三方内容
+
+| 内容 | 位置 | 许可证 | 版权 / 来源 |
+| --- | --- | --- | --- |
+| ponytail 技能组 | `.agent-presets/ponytail/skills/ponytail*/SKILL.md` | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)；许可证全文见 `.agent-presets/ponytail/skills/ponytail.LICENSE` |
+
 ## 本仓库内的本地包
 
 `fairy-contracts`、`dsh-browser-dock`、`dsh-balance-meter`、
-`dsh-fairy-startup`、`dsh-fairy-visual`、`dsh-fairy-voice` 是本仓库的原创
+`dsh-fairy-startup`、`dsh-fairy-visual`、`dsh-fairy-voice`、
+`dsh-fairy-persona`、`dsh-fairy-modes`、`dsh-fairy-search` 是本仓库的原创
 代码（除其自身依赖外），按根目录 `LICENSE` 和 `NOTICE` 处理。
 
 发布新版本时，应从最终 lockfile 重新核对版本、来源和许可证，并把新增的

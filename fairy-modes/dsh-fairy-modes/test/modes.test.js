@@ -1,0 +1,252 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  FairyModeService, apply, fairyModeProjectionDefinition,
+} from '../lib/index.js';
+
+/** A session double: the log plus the append the engine writes through. */
+function fakeSession(id = 'session-1') {
+  const log = [];
+  return {
+    id,
+    log,
+    append(type, data) {
+      log.push({ type, seq: log.length, time: 0, data });
+    },
+  };
+}
+
+/**
+ * Minimal host context for the agent half: the three injected services, their
+ * captured registrations, and one `presentAs` scope that behaves like the
+ * official one (a second declaration throws).
+ */
+function fakeHost({ presentAsConflicts = false } = {}) {
+  const sections = new Map();
+  const provided = new Map();
+  const calls = { presentAs: [], releases: 0, commands: null, tools: [] };
+  let presentation = null;
+
+  const ctx = {
+    provide(name, value) {
+      provided.set(name, value);
+      return () => provided.delete(name);
+    },
+    get: (name) => provided.get(name),
+    on() {},
+    effect(factory) {
+      const cleanup = factory();
+      return () => cleanup?.();
+    },
+    inject(deps, callback) {
+      if (deps.includes('commands')) {
+        callback({
+          effect: (factory) => factory(),
+          commands: {
+            register(definition) {
+              calls.commands = definition;
+              return () => { calls.commands = null; };
+            },
+          },
+        });
+      }
+      if (deps.includes('sessionQuery')) {
+        callback({
+          effect: (factory) => factory(),
+          tools: ctx.tools,
+          // A composed engine with the index open; recall's own tests cover the
+          // degraded paths.
+          sessionQuery: { searchSessions: async () => ({ items: [] }) },
+        });
+      }
+      return null;
+    },
+    sessionProjections: {
+      definition: null,
+      register(definition) {
+        this.definition = definition;
+        return () => { this.definition = null; };
+      },
+      stateOf(session, key) {
+        if (this.definition === null || this.definition.key !== key) return undefined;
+        let state = this.definition.init();
+        for (const event of session.log) state = this.definition.apply(state, event);
+        return state;
+      },
+    },
+    systemPrompt: {
+      sections,
+      section(definition) {
+        if (sections.has(definition.name)) throw new Error(`duplicate prompt section ${definition.name}`);
+        sections.set(definition.name, definition);
+        return () => sections.delete(definition.name);
+      },
+    },
+    tools: {
+      register(definition) {
+        calls.tools.push(definition);
+        return () => {
+          const at = calls.tools.indexOf(definition);
+          if (at >= 0) calls.tools.splice(at, 1);
+        };
+      },
+      presentAs(mode) {
+        calls.presentAs.push(mode);
+        if (presentAsConflicts || presentation !== null) {
+          throw new Error(`tools.presentAs("${mode}") conflicts with a presentation already declared for this scope`);
+        }
+        presentation = mode;
+        return () => {
+          if (presentation !== mode) return;
+          presentation = null;
+          calls.releases += 1;
+        };
+      },
+    },
+  };
+
+  return { ctx, sections, calls, presentationOf: () => presentation };
+}
+
+function mount(options) {
+  const host = fakeHost(options);
+  apply(host.ctx);
+  const session = fakeSession();
+  const agent = { session };
+  return { ...host, session, agent, service: host.ctx.get('fairyMode') };
+}
+
+test('publishes the mode service and the projection unit', () => {
+  const { ctx, service } = mount();
+  assert.ok(service instanceof FairyModeService);
+  assert.equal(typeof service.get, 'function');
+  assert.equal(typeof service.set, 'function');
+  assert.equal(ctx.sessionProjections.definition, fairyModeProjectionDefinition);
+  assert.equal(fairyModeProjectionDefinition.key, 'fairyMode');
+  assert.equal(fairyModeProjectionDefinition.stateVersion, 1);
+});
+
+test('registers the recall tool in every mode for a stable tool catalog', () => {
+  const { calls, service, agent } = mount();
+  assert.deepEqual(calls.tools.map(tool => tool.name), ['session_recall']);
+  const registered = calls.tools[0];
+  service.set(agent, 'create');
+  service.set(agent, 'ptc');
+  service.set(agent, 'off');
+  assert.equal(calls.tools.length, 1, 'mode switches never touch the tool catalog');
+  assert.equal(calls.tools[0], registered);
+});
+
+test('set appends the mode event and the projection folds the latest mode', () => {
+  const { service, agent, session } = mount();
+  assert.equal(service.set(agent, 'ptc'), 'committed');
+  assert.deepEqual(session.log.map(event => [event.type, event.data]), [['fairy/mode', { mode: 'ptc' }]]);
+
+  assert.equal(service.set(agent, 'create'), 'committed');
+  const folded = fairyModeProjectionDefinition.apply(
+    fairyModeProjectionDefinition.init(),
+    session.log.at(-1),
+  );
+  assert.deepEqual(folded, { mode: 'create' });
+  assert.deepEqual(fairyModeProjectionDefinition.wire.view(folded), { mode: 'create' });
+
+  // A log with no mode folds to off, and an unknown payload never moves it.
+  assert.deepEqual(fairyModeProjectionDefinition.init(), { mode: 'off' });
+  assert.deepEqual(
+    fairyModeProjectionDefinition.apply({ mode: 'ptc' }, { type: 'fairy/mode', data: { mode: 'bogus' } }),
+    { mode: 'ptc' },
+  );
+  assert.equal(session.log.length, 2);
+});
+
+test('ptc drives the scoped presentation and the prompt section, and off restores both', () => {
+  const { service, agent, sections, calls, presentationOf } = mount();
+  assert.equal(service.set(agent, 'ptc'), 'committed');
+  assert.deepEqual(calls.presentAs, ['ptc']);
+  assert.equal(presentationOf(), 'ptc');
+  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+  // 51 = one step after the official plan:policy section (order 50), which is
+  // the literal this harness cohort expects; getSectionOrder does not exist here.
+  assert.equal(sections.get('fairy:mode-ptc').order, 51);
+  assert.match(sections.get('fairy:mode-ptc').text, /run_code/);
+
+  // Switching modes moves the presentation to whoever should hold it.
+  assert.equal(service.set(agent, 'create'), 'committed');
+  assert.equal(presentationOf(), null);
+  assert.equal(calls.releases, 1);
+  assert.deepEqual([...sections.keys()], ['fairy:mode-create']);
+  assert.match(sections.get('fairy:mode-create').text, /session_recall/);
+  assert.doesNotMatch(sections.get('fairy:mode-create').text, /session_search/);
+  assert.match(sections.get('fairy:mode-create').text, /skill-audit\.js/);
+
+  assert.equal(service.set(agent, 'off'), 'committed');
+  assert.equal(sections.size, 0);
+  assert.equal(presentationOf(), null);
+  assert.equal(calls.releases, 1);
+  assert.deepEqual(service.get(agent), { mode: 'off' });
+});
+
+test('a scope that already declared a presentation still records the mode', () => {
+  const { service, agent, sections, presentationOf } = mount({ presentAsConflicts: true });
+  assert.equal(service.set(agent, 'ptc'), 'committed');
+  assert.equal(presentationOf(), null);
+  assert.equal(service.loggedMode(agent.session), 'ptc');
+  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+});
+
+test('repeat selection is a noop and never duplicates log or section entries', () => {
+  const { service, agent, session, sections } = mount();
+  service.set(agent, 'ptc');
+  assert.equal(service.set(agent, 'ptc'), 'noop');
+  assert.equal(session.log.length, 1);
+  assert.equal(sections.size, 1);
+  assert.equal(service.set(agent, 'off'), 'committed');
+  assert.equal(service.set(agent, 'off'), 'noop');
+  assert.equal(session.log.length, 2);
+});
+
+test('get() reconciles a mode carried by the session log (resume and fork)', () => {
+  const { service, agent, session, sections, presentationOf } = mount();
+  // A resumed log already holds the mode while the realm holds no effect.
+  session.append('fairy/mode', { mode: 'ptc' });
+  assert.deepEqual(service.get(agent), { mode: 'ptc' });
+  assert.equal(presentationOf(), 'ptc');
+  assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
+  // Re-reading is idempotent.
+  const registered = sections.get('fairy:mode-ptc');
+  assert.deepEqual(service.get(agent), { mode: 'ptc' });
+  assert.equal(sections.get('fairy:mode-ptc'), registered);
+});
+
+test('an unknown mode is rejected without touching the log', () => {
+  const { service, agent, session } = mount();
+  assert.throws(() => service.set(agent, 'fast'), /未知的 Fairy 模式 "fast"/);
+  assert.equal(session.log.length, 0);
+  assert.deepEqual(service.get(agent), { mode: 'off' });
+});
+
+test('/mode parses ptc|create|off and reports usage otherwise', () => {
+  const { service, agent, session, calls } = mount();
+  assert.ok(calls.commands !== null, 'the command child registers /mode');
+  assert.equal(calls.commands.name, 'mode');
+
+  assert.deepEqual(service.command(agent, 'ptc'), { kind: 'success', text: '已切换到PTC 建造模式。' });
+  assert.deepEqual(service.command(agent, ' create '), { kind: 'success', text: '已切换到创造模式。' });
+  assert.deepEqual(service.command(agent, 'off'), { kind: 'success', text: '已切换到默认（关闭）模式。' });
+  assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode ptc|create|off' });
+  assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：ptc、create、off。' });
+  assert.deepEqual(session.log.map(event => event.data.mode), ['ptc', 'create', 'off']);
+
+  // The handler the registry holds is the same body, and says so when the
+  // selected mode is already in force.
+  assert.deepEqual(calls.commands.handler({ agent, rawInput: 'ptc' }), {
+    kind: 'success', text: '已切换到PTC 建造模式。',
+  });
+  assert.deepEqual(calls.commands.handler({ agent, rawInput: 'ptc' }), {
+    kind: 'success', text: '当前已是PTC 建造模式。',
+  });
+  assert.deepEqual(service.command(undefined, 'ptc'), {
+    kind: 'error', text: '/mode 需要一个会话：当前调用没有 agent。',
+  });
+});

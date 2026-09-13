@@ -37,8 +37,21 @@ node --check "$DSH_ROOT/fairy-startup/dsh-fairy-startup/lib/index.js"
 node --check "$DSH_ROOT/fairy-startup/dsh-fairy-startup/lib/client.js"
 node --check "$DSH_ROOT/fairy-voice/dsh-fairy-voice/lib/index.js"
 node --check "$DSH_ROOT/fairy-voice/dsh-fairy-voice/lib/client.js"
-node --check "$DSH_ROOT/.agent-presets/fairy/runtime/index.js"
-node --check "$DSH_ROOT/.agent-presets/fairy/runtime/compiler.js"
+node --check "$DSH_ROOT/fairy-persona/dsh-fairy-persona/lib/index.js"
+node --check "$DSH_ROOT/fairy-persona/dsh-fairy-persona/lib/client.js"
+node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/index.js"
+node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/bridge.js"
+node --check "$DSH_ROOT/fairy-modes/dsh-fairy-modes/lib/client.js"
+node --check "$DSH_ROOT/fairy-search/dsh-fairy-search/lib/index.js"
+node --check "$DSH_ROOT/fairy-search/dsh-fairy-search/lib/client.js"
+node --check "$ROOT/skill-audit.js"
+node --check "$ROOT/scaffold-plugin.js"
+# runtime/ 是私有资产,公开仓库不含;存在才检查。
+for runtime_file in "$DSH_ROOT/.agent-presets/fairy/runtime/index.js" "$DSH_ROOT/.agent-presets/fairy/runtime/compiler.js"; do
+  if [[ -f "$runtime_file" ]]; then
+    node --check "$runtime_file"
+  fi
+done
 node --check "$ROOT/preflight-build.js"
 node --check "$ROOT/upgrade-preflight.js"
 node --check "$ROOT/accepted-baseline.js"
@@ -67,11 +80,17 @@ fi
 # verify.js owns cross-module/static/live contracts only. Package tests run once
 # below so the complete check has one deterministic owner for every test suite.
 node "$ROOT/verify.js" --live
-python3 "$DSH_ROOT/.agent-presets/fairy/runtime/test_fairy_core.py"
-node --test "$DSH_ROOT/.agent-presets/fairy/runtime"/test_*.mjs
+# 私有 runtime 的 Python/mjs 测试只在资产存在时运行(公开仓库不含 runtime/)。
+if [[ -f "$DSH_ROOT/.agent-presets/fairy/runtime/test_fairy_core.py" ]]; then
+  python3 "$DSH_ROOT/.agent-presets/fairy/runtime/test_fairy_core.py"
+  node --test "$DSH_ROOT/.agent-presets/fairy/runtime"/test_*.mjs
+fi
 node --test "$DSH_ROOT/balance-meter/dsh-balance-meter/test"/*.test.js
 node --test "$DSH_ROOT/browser-dock/dsh-browser-dock/test"/*.test.js
 node --test "$DSH_ROOT/fairy-visual/dsh-fairy-visual/test"/*.test.js
 node --test "$DSH_ROOT/fairy-startup/dsh-fairy-startup/test"/*.test.js
 node --test "$DSH_ROOT/fairy-voice/dsh-fairy-voice/test"/*.test.js
+node --test "$DSH_ROOT/fairy-persona/dsh-fairy-persona/test"/*.test.js
+node --test "$DSH_ROOT/fairy-modes/dsh-fairy-modes/test"/*.test.js
+node --test "$DSH_ROOT/fairy-search/dsh-fairy-search/test"/*.test.js
 node --test "$ROOT/test"/*.test.js

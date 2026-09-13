@@ -3,34 +3,166 @@ import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
-import { chmod, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { createLocalTtsTransport, createPcmStreamHandler } from './server/local-tts-proxy.js';
+import { settingsNamespace } from '@deepseek-ai/dsh-settings';
+import z from '@deepseek-ai/schemastery';
+import { createPcmStreamHandler } from './server/pcm-forward.js';
 import { createVoiceBriefFallback, createVoiceBrainServerBoundary } from './server/voice-brief-fallback.js';
+import {
+  PROVIDER_CONFIG_DEFAULTS,
+  PROVIDER_CONFIG_FIELDS,
+  PROVIDER_IDS,
+  configKeyForProvider,
+  createProviderRegistry,
+} from './providers/index.js';
+import { LOCAL_SOVITS_ID } from './providers/local-sovits.js';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 
-const LOCAL_TTS_URL = 'http://127.0.0.1:9880/tts';
-const LOCAL_DOCS_URL = 'http://127.0.0.1:9880/docs';
-const REFERENCE_AUDIO_PATH = join(homedir(), '.dsh', 'fairy-voice', 'runtime', 'reference', 'fairy_ref.wav');
-const REFERENCE_PROMPT_PATH = join(homedir(), '.dsh', 'fairy-voice', 'runtime', 'reference', 'fairy_ref.txt');
-const REFERENCE_PROMPT_FALLBACK = '根据用户协议，我无权回复该问题。主人将在合适的时间与合适的场合获知答案。';
+export const FAIRY_VOICE_SETTINGS_NAMESPACE = 'fairy-voice';
+const FAIRY_VOICE_SETTINGS = settingsNamespace(FAIRY_VOICE_SETTINGS_NAMESPACE);
 const diagnostics = createFairyDiagnostics('dsh-fairy-voice');
 
-function readReferencePrompt() {
-  try {
-    return readFileSync(REFERENCE_PROMPT_PATH, 'utf8').trim();
-  } catch (error) {
-    diagnostics.warn('reference.prompt.load', { file: 'fairy_ref.txt', fallback: true }, error);
-    return REFERENCE_PROMPT_FALLBACK;
-  }
+export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
+  version: 1,
+  provider: LOCAL_SOVITS_ID,
+  providers: Object.freeze({
+    localSovits: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.localSovits }),
+    openai: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.openai }),
+    customHttp: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
+  }),
+});
+
+export const FairyVoiceSettings = z.object({
+  version: z.number().step(1).default(1),
+  // Free-form ids on purpose: an unknown provider (typo, or a pack written for
+  // a newer plugin) must degrade to the documented fallback, not fail the
+  // registration of this namespace on host startup.
+  provider: z.string().default(LOCAL_SOVITS_ID),
+  providers: z.object({
+    localSovits: z.object({
+      baseURL: z.string().default(PROVIDER_CONFIG_DEFAULTS.localSovits.baseURL),
+      referenceAudioPath: z.string().default(PROVIDER_CONFIG_DEFAULTS.localSovits.referenceAudioPath),
+      referencePromptPath: z.string().default(PROVIDER_CONFIG_DEFAULTS.localSovits.referencePromptPath),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.localSovits }),
+    openai: z.object({
+      baseURL: z.string().default(PROVIDER_CONFIG_DEFAULTS.openai.baseURL),
+      apiKey: z.string().default(''),
+      model: z.string().default(PROVIDER_CONFIG_DEFAULTS.openai.model),
+      voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.openai.voice),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.openai }),
+    customHttp: z.object({
+      url: z.string().default(''),
+      // Constrained by the provider at request time, for the same reason as provider.
+      method: z.string().default('POST'),
+      headersJson: z.string().default(PROVIDER_CONFIG_DEFAULTS.customHttp.headersJson),
+      bodyTemplate: z.string().default(PROVIDER_CONFIG_DEFAULTS.customHttp.bodyTemplate),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
+  }).default({ ...FAIRY_VOICE_SETTINGS_DEFAULTS.providers }),
+});
+
+/** Every settings field whose value must never reach the browser verbatim. */
+const SENSITIVE_FIELD = /authorization|credential|password|secret|token|api[_-]?key|cookie/i;
+const REDACTED = '***';
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
-const REFERENCE_PROMPT = readReferencePrompt();
+function mergePatch(under, patch) {
+  if (patch === undefined) return under;
+  if (!under || typeof under !== 'object' || Array.isArray(under)
+    || !patch || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const merged = { ...under };
+  for (const [key, value] of Object.entries(patch)) merged[key] = key in merged ? mergePatch(merged[key], value) : value;
+  return merged;
+}
+
+/** Settings boundary used by handlers; `attach` swaps it onto the live scope. */
+export function createVoiceSettingsBoundary(initial = FAIRY_VOICE_SETTINGS_DEFAULTS) {
+  let current = cloneJson(initial);
+  const boundary = {
+    read: () => current,
+    async write(patch) {
+      current = mergePatch(current, patch);
+      return current;
+    },
+    attach(scope) {
+      current = scope.get();
+      boundary.read = () => scope.get();
+      boundary.write = async (patch) => {
+        await scope.update(patch);
+        return scope.get();
+      };
+    },
+  };
+  return boundary;
+}
+
+/** Wire form: provider section with every sensitive field masked. */
+function sanitizeVoiceSettings(value) {
+  const providers = {};
+  for (const [key, fields] of Object.entries(value?.providers || {})) {
+    providers[key] = Object.fromEntries(Object.entries(fields || {}).map(([name, entry]) => [
+      name,
+      SENSITIVE_FIELD.test(name) && typeof entry === 'string' && entry ? REDACTED : entry,
+    ]));
+  }
+  return { provider: PROVIDER_IDS.includes(value?.provider) ? value.provider : LOCAL_SOVITS_ID, providers };
+}
+
+/** Inbound write form: known keys only, masked secrets left untouched. */
+function buildVoiceSettingsPatch(body = {}) {
+  const patch = {};
+  if (body.provider !== undefined) {
+    const provider = String(body.provider);
+    if (!PROVIDER_IDS.includes(provider)) throw Object.assign(new Error('unknown provider'), { code: 'provider-unknown' });
+    patch.provider = provider;
+  }
+  const providers = body.providers;
+  if (providers !== undefined) {
+    if (!providers || typeof providers !== 'object' || Array.isArray(providers)) throw Object.assign(new Error('invalid providers'), { code: 'invalid-json' });
+    const next = {};
+    for (const [key, fields] of Object.entries(providers)) {
+      const allowed = PROVIDER_CONFIG_FIELDS[key];
+      if (!allowed || !fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
+      const picked = {};
+      for (const [name, value] of Object.entries(fields)) {
+        if (!allowed.includes(name) || typeof value !== 'string') continue;
+        // A masked value means "the operator did not touch this field".
+        if (SENSITIVE_FIELD.test(name) && value === REDACTED) continue;
+        picked[name] = value;
+      }
+      if (Object.keys(picked).length) next[key] = picked;
+    }
+    if (Object.keys(next).length) patch.providers = next;
+  }
+  return patch;
+}
+
+/** Persona voice binding: persona packets describe a provider plus its config. */
+export function personaVoicePatch(voice) {
+  const provider = typeof voice?.provider === 'string' ? voice.provider : '';
+  if (!provider || !PROVIDER_IDS.includes(provider)) {
+    if (voice) diagnostics.warn('persona.binding', { provider, skipped: true });
+    return null;
+  }
+  const key = configKeyForProvider(provider);
+  const config = voice.config;
+  if (!key || !config || typeof config !== 'object' || Array.isArray(config)) return { provider };
+  const allowed = PROVIDER_CONFIG_FIELDS[key];
+  const picked = {};
+  for (const [name, value] of Object.entries(config)) {
+    if (!allowed.includes(name) || typeof value !== 'string' || !value) continue;
+    if (SENSITIVE_FIELD.test(name) && value === REDACTED) continue;
+    picked[name] = value;
+  }
+  return Object.keys(picked).length ? { provider, providers: { [key]: picked } } : { provider };
+}
+
 const MAX_TTS_TEXT_LENGTH = 500;
 const MAX_SENTENCE_LENGTH = 40;
 const TTS_TIMEOUT_MS = 180_000;
-const STATUS_TIMEOUT_MS = 3_000;
 const VOICE_BRIEF_TIMEOUT_MS = 6_500;
 const MAX_VOICE_BRIEF_INPUT_LENGTH = 32_000;
 const MAX_VOICE_BRIEF_OUTPUT_LENGTH = 260;
@@ -58,6 +190,21 @@ async function readVoiceBrainConfig() {
   }
 }
 
+/* Windows refuses a replace-rename while the destination is held by another
+ * writer, so two concurrent writers of the same file would otherwise leave a
+ * phantom EPERM failure. Retry the replace; the last writer still wins. */
+async function replaceFile(temporaryPath, file) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(temporaryPath, file);
+      return;
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code) || attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5 * (attempt + 1)));
+    }
+  }
+}
+
 export async function writePrivateJson(file, value) {
   const directory = dirname(file);
   const temporaryPath = `${file}.${process.pid}.${randomUUID()}.tmp`;
@@ -72,7 +219,7 @@ export async function writePrivateJson(file, value) {
     await fileHandle.writeFile(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
     await fileHandle.close();
     fileHandle = null;
-    await rename(temporaryPath, file);
+    await replaceFile(temporaryPath, file);
     committed = true;
     await chmod(file, 0o600);
   } finally {
@@ -391,6 +538,12 @@ function publicError(code) {
     'local-service-failed': '本地 Fairy 服务未能生成音频。',
     timeout: '本地 Fairy 生成超时。',
     'client-aborted': 'Request cancelled.',
+    'client-side': '浏览器端朗读',
+    'provider-unavailable': '语音服务连接失败。',
+    'provider-failed': '语音服务未能生成音频。',
+    'provider-timeout': '语音服务生成超时。',
+    'provider-config-invalid': '语音服务配置无效。',
+    'provider-unknown': '未知的语音提供方。',
     'voice-brief-unconfigured': '请先在 Fairy Voice Brain 设置中配置 DeepSeek API Key。',
     'voice-brief-input-too-large': '最终回答过长，已使用原文朗读。',
     'voice-brief-config-invalid': 'Voice Brain 配置文件无效。',
@@ -402,11 +555,12 @@ function publicError(code) {
 }
 
 function statusFor(code) {
-  if (['empty-text', 'text-too-large', 'invalid-json', 'voice-brief-input-too-large'].includes(code)) return 400;
+  if (['empty-text', 'text-too-large', 'invalid-json', 'voice-brief-input-too-large', 'provider-config-invalid', 'provider-unknown'].includes(code)) return 400;
   if (['voice-brief-unconfigured', 'voice-brief-config-invalid'].includes(code)) return 422;
   if (code === 'client-aborted') return 499;
-  if (code === 'local-service-unavailable') return 503;
-  if (code === 'timeout') return 504;
+  if (code === 'client-side') return 409;
+  if (['local-service-unavailable', 'provider-unavailable'].includes(code)) return 503;
+  if (['timeout', 'provider-timeout'].includes(code)) return 504;
   return 502;
 }
 
@@ -457,18 +611,16 @@ const createVoiceBrief = createVoiceBriefFallback({
   endpoint: DEEPSEEK_CHAT_COMPLETIONS_URL,
 });
 
-export function createFairyVoiceHandlers({ fetchImpl = fetch, readConfig = readVoiceBrainConfig, writeConfig = writeVoiceBrainConfig, clearConfig = clearVoiceBrainConfig } = {}) {
+export function createFairyVoiceHandlers({
+  fetchImpl = fetch,
+  readConfig = readVoiceBrainConfig,
+  writeConfig = writeVoiceBrainConfig,
+  clearConfig = clearVoiceBrainConfig,
+  settings = createVoiceSettingsBoundary(),
+  providers = createProviderRegistry({ fetchImpl }),
+} = {}) {
   const sentencePreparation = createSentencePreparation();
   const pcmStreamHandler = createPcmStreamHandler();
-  const localTtsTransport = createLocalTtsTransport({
-    fetchImpl,
-    ttsUrl: LOCAL_TTS_URL,
-    docsUrl: LOCAL_DOCS_URL,
-    referenceAudioPath: REFERENCE_AUDIO_PATH,
-    referencePrompt: REFERENCE_PROMPT,
-    ttsTimeoutMs: TTS_TIMEOUT_MS,
-    statusTimeoutMs: STATUS_TIMEOUT_MS,
-  });
   const voiceBrainBoundary = createVoiceBrainServerBoundary({
     createBrief: createVoiceBrief,
     fetchImpl,
@@ -491,13 +643,42 @@ export function createFairyVoiceHandlers({ fetchImpl = fetch, readConfig = readV
     },
     status: async (_req, res) => {
       const startedAt = diagnostics.start();
+      let providerId = LOCAL_SOVITS_ID;
       try {
-        sendJson(res, 200, await localTtsTransport.status());
+        providerId = providers.resolve(settings.read()).id;
+        const value = await providers.check(providerId, settings.read());
+        sendJson(res, 200, { available: value.available === true, reason: value.reason ?? null, provider: providerId });
       } catch (error) {
-        diagnostics.warn('status.request', {}, error);
-        sendJson(res, 200, { available: false, reason: '本地 Fairy 服务未启动。' });
+        diagnostics.warn('status.request', { provider: providerId }, error);
+        sendJson(res, 200, { available: false, reason: '语音服务未就绪。', provider: providerId });
       } finally {
         diagnostics.metric('status.request', startedAt, {}, { thresholdMs: 100 });
+      }
+    },
+    providers: async (_req, res) => {
+      const startedAt = diagnostics.start();
+      try {
+        sendJson(res, 200, await providers.list(settings.read()));
+      } catch (error) {
+        diagnostics.warn('providers.request', {}, error);
+        sendJson(res, 200, PROVIDER_IDS.map((id) => ({ id, available: false, reason: '检查失败。' })));
+      } finally {
+        diagnostics.metric('providers.request', startedAt, {}, { thresholdMs: 100 });
+      }
+    },
+    providerConfig: async (req, res) => {
+      try {
+        if (req.method === 'GET') {
+          sendJson(res, 200, sanitizeVoiceSettings(settings.read()));
+          return;
+        }
+        const body = await readJson(req, 20_000);
+        await settings.write(buildVoiceSettingsPatch(body));
+        sendJson(res, 200, sanitizeVoiceSettings(settings.read()));
+      } catch (error) {
+        const code = error?.code || (error?.message === 'invalid-json' ? 'invalid-json' : 'provider-config-invalid');
+        diagnostics.warn('provider.config', { code }, error);
+        sendJson(res, statusFor(code), { error: publicError(code) });
       }
     },
     prepare: async (req, res) => {
@@ -573,13 +754,17 @@ export function createFairyVoiceHandlers({ fetchImpl = fetch, readConfig = readV
         if (Array.from(text).length > MAX_TTS_TEXT_LENGTH) throw Object.assign(new Error('large'), { code: 'text-too-large' });
         activeTtsController?.abort('superseded');
         activeTtsController = controller;
-        const upstream = await localTtsTransport.stream(text, controller.signal);
+        const { id: providerId, provider, config } = providers.resolve(settings.read());
+        const upstream = await provider.stream(text, config, { signal: controller.signal });
         const response = upstream.response || upstream;
         releaseUpstream = upstream.release || null;
-        if (!response.ok) throw Object.assign(new Error('local synthesis failed'), { code: 'local-service-failed' });
+        if (!response?.ok) throw Object.assign(new Error('synthesis failed'), { code: providerId === LOCAL_SOVITS_ID ? 'local-service-failed' : 'provider-failed' });
         res.statusCode = 200;
         res.setHeader('Content-Type', response.headers.get('content-type') || 'audio/raw');
         res.setHeader('Cache-Control', 'no-store');
+        // Providers that synthesize at a rate other than the client's default
+        // must announce it, or Web Audio would play the PCM at the wrong speed.
+        if (Number.isFinite(upstream.sampleRate)) res.setHeader('X-Fairy-Sample-Rate', String(upstream.sampleRate));
         await pcmStreamHandler.pipe(response, res, controller.signal);
         if (!res.destroyed && !res.writableEnded) res.end();
       } catch (error) {
@@ -608,11 +793,27 @@ export function createFairyVoiceHandlers({ fetchImpl = fetch, readConfig = readV
 
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {
-  const handlers = createFairyVoiceHandlers();
+  const settings = createVoiceSettingsBoundary();
+  const handlers = createFairyVoiceHandlers({ settings });
+  ctx.inject(['settings'], (settingsCtx) => {
+    settings.attach(settingsCtx.settings.register(FAIRY_VOICE_SETTINGS, FairyVoiceSettings));
+  }, { surface: 'host' });
+  /* Persona packets own no voice schema themselves: they announce a provider
+   * and the config for it, and this plugin is the only writer of its own
+   * namespace. A pack without a voice block keeps the current binding. */
+  ctx.effect(() => ctx.on('fairy-persona/change', (payload) => {
+    const patch = personaVoicePatch(payload?.voice);
+    if (!patch) return undefined;
+    return Promise.resolve(settings.write(patch)).catch((error) => {
+      diagnostics.warn('persona.binding', { provider: patch.provider }, error);
+    });
+  }), 'dsh-fairy-voice persona voice binding');
   ctx.inject(['webServer'], (ws) => ws.effect(() => {
     const unregisterStatus = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/status', handler: handlers.status });
     const unregisterPrepare = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/prepare', handler: handlers.prepare });
     const unregisterTts = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/tts', handler: handlers.tts });
+    const unregisterProviders = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/providers', handler: handlers.providers });
+    const unregisterProviderConfig = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/provider-config', handler: handlers.providerConfig });
     const unregisterBrainStatus = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/status', handler: handlers.voiceBrainStatus });
     const unregisterBrainConfig = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/config', handler: handlers.voiceBrainConfig });
     const unregisterBrainBrief = ws.webServer.register({ kind: 'exact', path: '/fairy-voice/brain/brief', handler: handlers.voiceBrief });
@@ -621,6 +822,8 @@ export function apply(ctx) {
       unregisterStatus?.();
       unregisterPrepare?.();
       unregisterTts?.();
+      unregisterProviders?.();
+      unregisterProviderConfig?.();
       unregisterBrainStatus?.();
       unregisterBrainConfig?.();
       unregisterBrainBrief?.();
