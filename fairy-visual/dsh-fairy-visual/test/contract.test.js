@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+/* The assertions below anchor on LF boundaries (`...;\n  };`, `\n  function`);
+ * a CRLF checkout would silently miss them, so the line ending the platform
+ * happened to write is normalized away here instead of in every pattern. */
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((value) => value.replace(/\r\n/g, '\n'));
 const [clientEntrySource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerNativeSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, serverSource, contractTypes] = await Promise.all([
   read('../src/client/index.js'),
   read('../src/client/constants.js'),

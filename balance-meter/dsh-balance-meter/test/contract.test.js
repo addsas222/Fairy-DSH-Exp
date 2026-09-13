@@ -3,10 +3,14 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const server = await readFile(new URL('../lib/index.js', import.meta.url), 'utf8');
-const client = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
+/* A CRLF checkout would otherwise defeat every LF-terminated boundary and
+ * `[\s\S]*?\n}` extraction below - the assertions are about source content,
+ * not about the line ending the platform happened to check out. */
+const normalize = (value) => value.replace(/\r\n/g, '\n');
+const server = normalize(await readFile(new URL('../lib/index.js', import.meta.url), 'utf8'));
+const client = normalize(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'));
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-const canonicalClientDiagnostics = await readFile(new URL('../../../fairy-contracts/client-diagnostics.cjs', import.meta.url), 'utf8');
+const canonicalClientDiagnostics = normalize(await readFile(new URL('../../../fairy-contracts/client-diagnostics.cjs', import.meta.url), 'utf8'));
 
 function embeddedClientDiagnostics(value) {
   const begin = '// DSH_FAIRY_CLIENT_DIAGNOSTICS_BEGIN\n';

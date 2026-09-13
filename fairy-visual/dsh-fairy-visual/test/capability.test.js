@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import vm from 'node:vm';
 
@@ -115,7 +115,9 @@ test('keeps official data-slot and data-phase queries inside dom-adapter', () =>
   const directOfficialQuery = /querySelector(?:All)?\([^\n]*(?:data-slot|data-phase|data-composer|data-conversation-scroll|data-input-scroll|data-chat-flow)/;
   const files = readdirSync(sourceRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.js') && entry.name !== 'dom-adapter.js')
-    .map((entry) => join(sourceRoot.pathname, entry.name));
+    // `URL.pathname` keeps a leading slash (`/C:/...`), which resolves to
+    // `C:\C:\...` when read on Windows; resolve through the URL instead.
+    .map((entry) => fileURLToPath(new URL(entry.name, sourceRoot)));
 
   const offenders = files.filter((file) => directOfficialQuery.test(readFileSync(file, 'utf8')));
   assert.deepEqual(offenders, []);

@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const source = fs.readFileSync(path.join(root, 'lib', 'client.js'), 'utf8');
-const canonicalClientDiagnostics = fs.readFileSync(path.resolve(root, '..', '..', 'fairy-contracts', 'client-diagnostics.cjs'), 'utf8');
+/* The embedded-diagnostics boundaries are LF literals; a CRLF checkout would
+ * make them unmatchable, so the platform's line ending is normalized away. */
+const normalize = (value) => value.replace(/\r\n/g, '\n');
+const source = normalize(fs.readFileSync(path.join(root, 'lib', 'client.js'), 'utf8'));
+const canonicalClientDiagnostics = normalize(fs.readFileSync(path.resolve(root, '..', '..', 'fairy-contracts', 'client-diagnostics.cjs'), 'utf8'));
 
 function embeddedClientDiagnostics(value) {
   const begin = '// DSH_FAIRY_CLIENT_DIAGNOSTICS_BEGIN\n';
