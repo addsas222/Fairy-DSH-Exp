@@ -41,12 +41,33 @@ if [ ! -L "$DSH_HOME/profiles/web" ]; then
   ln -s "$repo_root/profiles/web" "$DSH_HOME/profiles/web"
 fi
 
+# The fairy-system gate tests compare a candidate against the installed layout,
+# so they need the official 0.1.1-rc.2 paths. Derive them from the environment
+# when the caller exported them; otherwise say exactly what is missing instead
+# of reporting 13 unexplained failures.
+if [ -n "${DSH_OFFICIAL_PACKAGE:-}" ] && [ -n "${DSH_OFFICIAL_RUNTIME:-}" ]; then
+  :
+elif [ -f "$HOME/.local/lib/node_modules/@deepseek-ai/dsh/package.json" ]; then
+  DSH_OFFICIAL_PACKAGE="$HOME/.local/lib/node_modules/@deepseek-ai/dsh/package.json"
+  DSH_OFFICIAL_RUNTIME="$HOME/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js"
+else
+  echo "note: set DSH_OFFICIAL_PACKAGE and DSH_OFFICIAL_RUNTIME to your installed" >&2
+  echo "      DSH 0.1.1-rc.2 before running fairy-system/test (live-layout gate)." >&2
+fi
+export DSH_OFFICIAL_PACKAGE DSH_OFFICIAL_RUNTIME
+export DSH_CAPABILITY_MATRIX="$repo_root/fairy-system/capability-matrix.json"
+
 echo "[1/3] package tests"
 (cd "$repo_root/fairy-visual/dsh-fairy-visual" && npm test)
 (cd "$repo_root/fairy-voice/dsh-fairy-voice" && npm test)
 (cd "$repo_root/fairy-persona/dsh-fairy-persona" && npm test)
 (cd "$repo_root/fairy-modes/dsh-fairy-modes" && npm test)
 (cd "$repo_root/fairy-search/dsh-fairy-search" && npm test)
+if [ -n "$DSH_OFFICIAL_PACKAGE" ] && [ -n "$DSH_OFFICIAL_RUNTIME" ]; then
+  # Live-layout gate suite: it compares candidates against the installed
+  # 0.1.1-rc.2, so it runs only when that comparison target exists.
+  node --test --test-timeout=45000 "$repo_root"/fairy-system/test/*.test.js
+fi
 
 echo "[2/3] profile dependency check"
 if command -v pnpm >/dev/null 2>&1; then

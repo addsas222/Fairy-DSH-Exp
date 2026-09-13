@@ -151,16 +151,45 @@ function compare(expected, actual) {
   return changes.sort((left, right) => left.file.localeCompare(right.file) || left.kind.localeCompare(right.kind));
 }
 
+/**
+ * Unified diff without platform assumptions: `/usr/bin/diff` and `/dev/null` do
+ * not exist on Windows, where this report silently printed nothing. `git
+ * diff --no-index` is the same tool the repository is already a checkout of,
+ * and exit code 1 simply means "differences found".
+ */
+function diffFiles(left, right) {
+  const result = spawnSync('git', ['--no-pager', 'diff', '--no-index', '--', left, right], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  if (!result.error && typeof result.stdout === 'string' && result.stdout !== '') return result.stdout;
+  // No git, or nothing captured: report the drift as one whole-file hunk
+  // instead of printing nothing at all.
+  const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n') : []);
+  return `--- ${left}\n+++ ${right}\n${[...read(left).map((line) => `-${line}`), ...read(right).map((line) => `+${line}`)].join('\n')}\n`;
+}
+
 function showUnifiedDiff(baseline, changes) {
-  for (const change of changes) {
+  const empty = path.join(os.tmpdir(), `dsh-baseline-empty-${process.pid}`);
+  let placeholder = null;
+  const side = (file) => {
+    if (fs.existsSync(file)) return file;
+    if (placeholder === null) {
+      fs.writeFileSync(empty, '');
+      placeholder = empty;
+    }
+    return placeholder;
+  };
+  try {
+    for (const change of changes) {
     if (change.expected?.type === 'symlink' || change.actual?.type === 'symlink') continue;
     const acceptedFile = path.join(baseline.directory, 'snapshot', change.file);
     const currentFile = path.join(sourceRoot, change.file);
-    const left = fs.existsSync(acceptedFile) ? acceptedFile : '/dev/null';
-    const right = fs.existsSync(currentFile) ? currentFile : '/dev/null';
-    const result = spawnSync('/usr/bin/diff', ['-u', left, right], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.error) throw result.error;
+    const left = side(acceptedFile);
+    const right = side(currentFile);
+    process.stdout.write(diffFiles(left, right));
+    }
+  } finally {
+    if (placeholder !== null) {
+      try { fs.unlinkSync(placeholder); } catch { /* best effort */ }
+    }
   }
 }
 

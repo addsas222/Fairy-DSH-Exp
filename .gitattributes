@@ -1,0 +1,21 @@
+# One checkout, one byte stream. The validation chain pins content hashes (patch
+# files, contract files), so a line ending that depends on the platform would
+# make the same commit pass on one OS and fail on another. `eol=lf` gives every
+# checkout the bytes the baselines were recorded from.
+* text=auto eol=lf
+
+# Binary assets never take part in text conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.onnx binary
+*.zip binary
+
+# Hash-pinned artifacts: the pinned hash is over these exact bytes, so git must
+# never rewrite them for a platform (and drift by an editor is then visible).
+profiles/web/patches/*.patch -text

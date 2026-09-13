@@ -1,25 +1,37 @@
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-const script = new URL('../upgrade-preflight.js', import.meta.url);
-const dshHome = join(homedir(), '.dsh');
+/* Creating a real symlink on Windows needs elevation (EPERM); a directory
+ * junction is the platform's equivalent, is reported as a symbolic link by
+ * lstat, and resolves through realpath exactly like the POSIX form. */
+function linkDirectory(target, linkPath) {
+  if (process.platform === 'win32') symlinkSync(resolve(dirname(linkPath), target), linkPath, 'junction');
+  else symlinkSync(target, linkPath);
+}
+
+const script = fileURLToPath(new URL('../upgrade-preflight.js', import.meta.url));
+// The documented isolated-home flow sets DSH_HOME; the live layout is the fallback.
+const dshHome = process.env.DSH_HOME ? resolve(process.env.DSH_HOME) : join(homedir(), '.dsh');
 const currentProfile = join(dshHome, 'profiles', 'web');
-const currentRuntime = join(homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js');
+const currentRuntime = process.env.DSH_OFFICIAL_RUNTIME
+  ? resolve(process.env.DSH_OFFICIAL_RUNTIME)
+  : join(homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js');
 const currentRuntimePackage = join(currentRuntime, '..', '..', 'package.json');
 const expectedHash = '13a5fe0ee8cddda2306d302eb0dbfdd601e96d14baeb512867b4b6d1d72f6679';
 const expectedVersion = '0.1.1-rc.2';
 
 function run(args, env = {}) {
-  return spawnSync(process.execPath, [script.pathname, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+  return spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 }
 
 function createIsolatedFixture() {
-  const rootDir = mkdtempSync(join('/tmp', 'dsh-upgrade-preflight-'));
+  const rootDir = mkdtempSync(join(tmpdir(), 'dsh-upgrade-preflight-'));
   const profile = join(rootDir, 'profile');
   const nodeModules = join(profile, 'node_modules');
   const runtime = join(rootDir, 'runtime', 'lib', 'client.js');
@@ -27,17 +39,17 @@ function createIsolatedFixture() {
   mkdirSync(join(rootDir, 'runtime', 'lib'), { recursive: true });
   for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search']) {
     const source = realpathSync(join(currentProfile, 'node_modules', name));
-    symlinkSync(source, join(nodeModules, name));
+    linkDirectory(source, join(nodeModules, name));
   }
   for (const name of ['dsh-reasoning-effort', 'dsh-message-edit']) {
     const source = realpathSync(join(currentProfile, 'node_modules', name));
-    symlinkSync(source, join(nodeModules, name));
+    linkDirectory(source, join(nodeModules, name));
   }
   const officialConversationManifest = createRequire(join(currentProfile, 'package.json'))
     .resolve('@deepseek-ai/dsh-client-ui-conversation/package.json');
   const officialConversation = realpathSync(join(officialConversationManifest, '..'));
   mkdirSync(join(nodeModules, '@deepseek-ai'), { recursive: true });
-  symlinkSync(officialConversation, join(nodeModules, '@deepseek-ai', 'dsh-client-ui-conversation'));
+  linkDirectory(officialConversation, join(nodeModules, '@deepseek-ai', 'dsh-client-ui-conversation'));
   const profilePackage = JSON.parse(readFileSync(join(currentProfile, 'package.json'), 'utf8'));
   for (const name of ['dsh-browser-dock', 'dsh-balance-meter', 'dsh-fairy-startup', 'dsh-fairy-visual', 'dsh-fairy-voice', 'dsh-fairy-persona', 'dsh-fairy-modes', 'dsh-fairy-search']) {
     profilePackage.dependencies[name] = `link:${realpathSync(join(currentProfile, 'node_modules', name))}`;

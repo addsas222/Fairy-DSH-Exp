@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-const script = new URL('../accepted-baseline.js', import.meta.url).pathname;
+// `URL.pathname` keeps a leading slash (`/C:/...`), which spawns as `C:\C:\...`.
+const script = fileURLToPath(new URL('../accepted-baseline.js', import.meta.url));
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'dsh-accepted-baseline-test-'));

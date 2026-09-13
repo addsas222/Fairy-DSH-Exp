@@ -153,8 +153,14 @@ fairy    user BROKEN: …      ← 见下
 - **不要**把插件包名写进 preset 行：preset 行只接受字面字符串 / preset 相对
   路径 / 文件路径，`$DSH_HOME` 下被 link 的包只能经 preset 内 shim 或文件路径加载。
 - **不要**把 preset 目录以链接形式放进 `$DSH_HOME/.agent-presets/`（见上）。
-- Windows 检出处注意：CRLF 会让若干"源码文本断言"型测试失败（
-  `fairy-visual` 2 例、`fairy-system` 16 例为既有；linux/macOS CI 不受影响）。
+- 行尾：仓库根 `.gitattributes` 已固定 `eol=lf`，`profiles/web/patches/*.patch`
+  另标 `-text`（其哈希是被 pin 的字节）。CRLF 检出不再制造"源码文本断言"型
+  失败；若本地仍见此类失败，先 `git checkout -- .` 让工作区回到属性声明的
+  行尾，再重跑。
+- `fairy-system/test/*` 里比较"当前 live 布局"的用例需要真实安装前提：
+  `DSH_HOME`（隔离 home）+ `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME`
+  指向已安装的 0.1.1-rc.2。缺这两个旋钮时它们无法比较对象（不是断言放宽）：
+  先装好并在同一 shell 导出，或按 `scripts/test-isolated.sh` 的打印提示补上。
   需要本机全绿时用 LF 检出（`git config core.autocrlf false` 后重新 checkout）。
 
 ## 6. 目录速查

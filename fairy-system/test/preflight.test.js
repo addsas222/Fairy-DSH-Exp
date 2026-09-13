@@ -2,9 +2,16 @@ import assert from 'node:assert/strict';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+
+/* Creating a real symlink on Windows needs elevation (EPERM); a directory
+ * junction is the platform's equivalent and is what AGENTS.md prescribes. */
+function linkDirectory(target, linkPath) {
+  if (process.platform === 'win32') symlinkSync(resolve(dirname(linkPath), target), linkPath, 'junction');
+  else symlinkSync(target, linkPath);
+}
 
 const verifier = fileURLToPath(new URL('../preflight-build.js', import.meta.url));
 const approvedProfile = fileURLToPath(new URL('../../profiles/web/', import.meta.url));
@@ -53,7 +60,7 @@ function createFixture() {
     }
     writeFileSync(join(source, 'lib', 'index.js'), 'export function apply() {}\n');
     writeFileSync(join(source, 'lib', 'client.js'), `window.__ModuleLoader__.load({ id: ${JSON.stringify(name)}, factory: () => ({}) });\n`);
-    symlinkSync(relative(nodeModules, source), join(nodeModules, name));
+    linkDirectory(relative(nodeModules, source), join(nodeModules, name));
   }
   return root;
 }
@@ -90,7 +97,7 @@ test('fails when a profile link targets the wrong package', (t) => {
   const nodeModules = join(root, 'profiles', 'web', 'node_modules');
   const link = join(nodeModules, 'dsh-fairy-visual');
   unlinkSync(link);
-  symlinkSync('../../../fairy-voice/dsh-fairy-voice', link);
+  linkDirectory('../../../fairy-voice/dsh-fairy-voice', link);
   const result = runVerifier(root);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /scope="profile_symlink" package="dsh-fairy-visual"/);

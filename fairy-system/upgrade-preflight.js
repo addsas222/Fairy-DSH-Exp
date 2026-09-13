@@ -20,8 +20,11 @@ const LOCAL_PACKAGES = [
   ['dsh-fairy-modes', 'fairy-modes', 'dsh-fairy-modes'],
   ['dsh-fairy-search', 'fairy-search', 'dsh-fairy-search'],
 ];
-const DEFAULT_PROFILE = path.join(os.homedir(), '.dsh', 'profiles', 'web');
-const DEFAULT_RUNTIME = path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js');
+// Same knobs as preflight-build.js: the validation chain runs against an
+// isolated home and a candidate runtime, never the developer's live install.
+const DEFAULT_PROFILE = path.resolve(process.env.DSH_PROFILE_ROOT || path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'profiles', 'web'));
+const DEFAULT_RUNTIME = path.resolve(process.env.DSH_OFFICIAL_RUNTIME
+  || path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js'));
 const VISUAL_SETTINGS_VERSION = '0.1.1-rc.2';
 const REASONING_VERSION = '0.6.2';
 const REASONING_SOURCE = 'github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994';
@@ -354,8 +357,12 @@ function reportMatrix(scope, runtime, compatibility) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const profileRoot = path.resolve(args.profile || DEFAULT_PROFILE);
-  const runtimeFile = path.resolve(args.runtime || DEFAULT_RUNTIME);
+  // AGENTS.md presents the profile at $DSH_HOME/profiles/web as a link while the
+  // packages live beside it. Compare everything through the resolved root, or a
+  // `link:../../<area>/<pkg>` declaration can never match the linked source
+  // (preflight-build.js canonicalizes its roots for the same reason).
+  const profileRoot = realpath(path.resolve(args.profile || DEFAULT_PROFILE), 'profile root');
+  const runtimeFile = realpath(path.resolve(args.runtime || DEFAULT_RUNTIME), 'runtime file');
   const capabilityMatrix = readJson(CAPABILITY_MATRIX_PATH);
   if (args.report) {
     const packages = LOCAL_PACKAGES.map(([name, folder, packageDirName]) => verifyPackage(profileRoot, name, folder, packageDirName));

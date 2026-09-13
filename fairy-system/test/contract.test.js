@@ -66,7 +66,7 @@ test('compares code content to an external accepted snapshot without trusting mt
   assert.match(acceptedBaseline, /kind: 'modified'/);
   assert.match(acceptedBaseline, /kind: 'added'/);
   assert.match(acceptedBaseline, /kind: 'deleted'/);
-  assert.match(acceptedBaseline, /spawnSync\('\/usr\/bin\/diff'/);
+  assert.match(acceptedBaseline, /git', \['--no-pager', 'diff', '--no-index'/);
   assert.match(acceptedBaseline, /--accept requires --reason/);
   assert.match(acceptedBaseline, /accepted snapshot content drifted/);
   assert.doesNotMatch(acceptedBaseline, /mtimeMs/);
