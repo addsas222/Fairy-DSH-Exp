@@ -83,7 +83,7 @@ voice:                 # 可选；切换人格时同步给 fairy-voice
 
 `ponytail: 主机面全局人格作用域。` prompt registry 的 `deployment:persona-prefix` 名字在全局层由 registry 自己持有，主机面再注册同名 section 会因层内重名而抛错；因此主机面挂载退回到插件自有名字 `fairy:persona-prefix`（同一 order、同一渲染位置），并在诊断里记一条 `persona.section.shadow`。真正「替换部署配置的人格文本」以及**按会话**人格，需要在 agent 作用域内挂载——那时同名覆盖是合法的，本文件的换装逻辑不变，只换挂载上下文。部署若显式配置了 `personaSuffix`，在回退路径下不会被遮蔽。
 
-`ponytail: 每次 list/select/preview 重新扫描磁盘。` 没人手写缓存失效逻辑，代价是每个请求读一遍包目录（几十 KB 级）。包规模变大或出现高频轮询时，再加基于 mtime 的缓存。
+`ponytail: 目录扫描结果按 1s 窗口记忆化（单条目，替换不追加），写路径（select/scaffold/restore）显式失效。` 代价是手工放进扫描根的人格包最多 1 秒后才可见；prompt.md/tone.json 的**内容**不缓存，编辑立即生效。项目规模再大时改为按 mtime 失效。
 
 ## 开发
 

@@ -206,6 +206,21 @@ test('registers the settings card and the switchable header chip in their author
   assert.equal(typeof bundle.cleanups[0], 'function');
 });
 
+test('a render tick that mounts both surfaces reads the catalog once', async () => {
+  const bundle = register();
+  // The read never settles, so the only thing under test is how many requests
+  // one render tick fans out to. Both slots commit in the same tick — the
+  // settings card and the header chip share the single in-flight catalog read
+  // instead of paying for a scan each.
+  bundle.onFetch(() => new Promise(() => {}));
+
+  bundle.driver.render(bundle.registrations[0].component, {});
+  bundle.driver.render(bundle.registrations[1].component, {});
+  await settle(bundle);
+
+  assert.equal(bundle.requests.filter(request => request.url === '/fairy-persona/list').length, 1);
+});
+
 test('the persona card lists the scan roots and creates a pack from the id input', async () => {
   const bundle = register();
   bundle.onFetch(async (url) => {

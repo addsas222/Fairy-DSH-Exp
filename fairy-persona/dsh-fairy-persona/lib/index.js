@@ -42,6 +42,15 @@ const PACK_ID = /^[a-z0-9-]+$/;
 const PROMPT_HEAD_LENGTH = 500;
 
 /**
+ * How long one catalog scan is reused. Long enough to absorb the catalog
+ * reads of a single settings-card render, short enough that a pack copied
+ * into a scan root by hand — the documented way to add one, no plugin call
+ * involved — still shows up the next time the panel is opened. The directory
+ * stays the source of truth; the memo only absorbs re-reads.
+ */
+const PACK_SCAN_TTL_MS = 1000;
+
+/**
  * The tone schema skeleton a scaffolded pack opens with: every key the
  * renderer reads, holding neutral values, so a fresh pack is already valid.
  */
@@ -356,19 +365,22 @@ async function readJson(req, maxBytes = 64_000) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > maxBytes) throw new Error('payload-too-large');
+    // Both refusals carry a code like every other persona error, so the
+    // handler maps them through `statusFor` instead of falling through to 500.
+    if (size > maxBytes) throw personaError('payload-too-large');
     chunks.push(chunk);
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
-    throw new Error('invalid-json');
+    throw personaError('invalid-json');
   }
 }
 
 function publicError(code) {
   const messages = {
     'invalid-json': '请求体不是合法 JSON。',
+    'payload-too-large': '请求体超过大小上限。',
     'persona-invalid-id': '人格包 id 只能包含小写字母、数字和连字符。',
     'persona-not-found': '未找到该人格包。',
     'persona-exists': '该人格包已存在，未覆盖。',
@@ -379,6 +391,7 @@ function publicError(code) {
 
 function statusFor(code) {
   if (code === 'invalid-json') return 400;
+  if (code === 'payload-too-large') return 413;
   if (code === 'persona-invalid-id') return 422;
   if (code === 'persona-not-found') return 404;
   if (code === 'persona-exists') return 409;
@@ -437,13 +450,61 @@ function registerPersonaSections(systemPrompt, promptText, logger) {
  * Build the `fairyPersona` service. Its host dependencies arrive through
  * {@link bind} once the settings and prompt registries are available.
  * @param ctx - the plugin context the service emits on.
- * @param options - scan roots and diagnostics sink.
+ * @param options - scan roots, diagnostics sink, and the two catalog-memo
+ * seams (the scan itself and its window), which tests replace so the memo can
+ * be observed without timing.
  * @returns the persona service.
  */
-export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), logger = diagnostics } = {}) {
+export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), logger = diagnostics, scan = scanPersonaPacks, scanTtlMs = PACK_SCAN_TTL_MS } = {}) {
   let settings = null;
   let systemPrompt = null;
   let disposeSections = null;
+
+  /**
+   * The memo the catalog reads are served from. A scan costs one readdir per
+   * root plus one read per pack, and the settings card reads the catalog more
+   * than once per render, so a re-read that lands inside the same window is
+   * served from the last result instead of repeating the scan. One entry is
+   * the whole bound: it is replaced, never appended to, and the entry's
+   * promise is what readers share while a scan is in flight.
+   */
+  let packsScan = null;
+
+  /**
+   * Drop the memo. Every write path calls this before it returns, so a read
+   * that follows a write can never replay the catalog the write replaced.
+   */
+  function invalidatePacks() {
+    packsScan = null;
+  }
+
+  /** The scanned packs: one scan per write, or per TTL window. */
+  function scanPacks() {
+    if (packsScan !== null && Date.now() - packsScan.at < scanTtlMs) return packsScan.packs;
+    const entry = { at: Date.now(), packs: Promise.resolve().then(() => scan(roots, logger)) };
+    entry.packs.catch(() => {
+      // A rejection is not a result: clearing the memo lets the next reader
+      // retry instead of replaying the same failure for the rest of the TTL.
+      if (packsScan === entry) packsScan = null;
+    });
+    packsScan = entry;
+    return entry.packs;
+  }
+
+  /**
+   * The mutation queue. `select` and `restore` each read the persisted id and
+   * then swap what is mounted, so letting them interleave would let a restore
+   * that read the old id mount its pack after a select had already mounted the
+   * new one — memory and the settings document would disagree until a restart.
+   * One promise chain runs them in order; a rejected task never breaks it.
+   */
+  let queue = Promise.resolve();
+
+  function serialize(task) {
+    const run = queue.then(task, task);
+    queue = run.then(() => {}, () => {});
+    return run;
+  }
 
   function requireReady() {
     if (!settings || !systemPrompt) throw personaError('persona-not-ready');
@@ -457,17 +518,15 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
     disposeSections = registerPersonaSections(systemPrompt, promptText, logger);
   }
 
-  async function findPack(id) {
-    const packs = await scanPersonaPacks(roots, logger);
-    const pack = packs.get(id);
-    if (!pack) throw personaError('persona-not-found');
-    return pack;
+  /** Compose and mount one already-loaded pack document. */
+  function mountDocument(document) {
+    mount(composePersonaText(document.prompt, document.tone));
   }
 
-  async function activate(pack) {
-    const document = await loadPackDocument(pack, logger);
-    mount(composePersonaText(document.prompt, document.tone));
-    return document;
+  async function findPack(id) {
+    const pack = (await scanPacks()).get(id);
+    if (!pack) throw personaError('persona-not-found');
+    return pack;
   }
 
   function announce(packId, voice) {
@@ -484,9 +543,13 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
       systemPrompt = registry;
     },
 
-    /** Every discovered pack, in scan order, as public descriptors. */
+    /**
+     * Every discovered pack, in scan order, as public descriptors. Served from
+     * the memo: the scan is repeated only after a write invalidated it or the
+     * memo window lapsed.
+     */
     async list() {
-      const packs = await scanPersonaPacks(roots, logger);
+      const packs = await scanPacks();
       return [...packs.values()].map(pack => ({
         id: pack.id,
         name: pack.name,
@@ -500,26 +563,36 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
     },
 
     /**
-     * Select a pack deployment-wide: swap the persona sections, persist the
-     * choice, then announce the voice binding. An empty id clears the persona.
+     * Select a pack deployment-wide: persist the choice, then swap the persona
+     * sections, then announce the voice binding. An empty id clears the persona.
+     * The settings document is written first so it stays the source of truth: a
+     * reader that sees the persisted id never disagrees with what is mounted,
+     * and a failed write leaves the mounted persona untouched.
      * @param id - pack id, or `''` to clear.
      * @returns `{ok: true, active}`.
      */
     async select(id) {
       requireReady();
       const packId = typeof id === 'string' ? id.trim() : '';
-      if (packId === '') {
-        mount(null);
-        await settings.update({ active: '' });
-        announce('', null);
-        return { ok: true, active: '' };
-      }
-      if (!PACK_ID.test(packId)) throw personaError('persona-invalid-id');
-      const pack = await findPack(packId);
-      await activate(pack);
-      await settings.update({ active: packId });
-      announce(packId, pack.voice);
-      return { ok: true, active: packId };
+      if (packId !== '' && !PACK_ID.test(packId)) throw personaError('persona-invalid-id');
+      return serialize(async () => {
+        if (packId === '') {
+          await settings.update({ active: '' });
+          invalidatePacks();
+          mount(null);
+          announce('', null);
+          return { ok: true, active: '' };
+        }
+        const pack = await findPack(packId);
+        // Read the documents before persisting: a pack whose prompt vanished
+        // must fail here, with nothing written and nothing mounted.
+        const document = await loadPackDocument(pack, logger);
+        await settings.update({ active: packId });
+        invalidatePacks();
+        mountDocument(document);
+        announce(packId, pack.voice);
+        return { ok: true, active: packId };
+      });
     },
 
     /**
@@ -541,9 +614,9 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
 
     /**
      * Create a new pack skeleton under the user root (the first scan root), so
-     * the next `list()` scan already serves it: nothing is cached between
-     * requests. The id is validated first and the target directory is created
-     * non-recursively, so an existing pack is never overwritten.
+     * the very next `list()` serves it: the write invalidates the catalog memo
+     * before it returns. The id is validated first and the target directory is
+     * created non-recursively, so an existing pack is never overwritten.
      * @param request - `{id, name?}`; `name` defaults to the id.
      * @returns `{ok: true, id, path}` with the created pack directory.
      */
@@ -577,26 +650,34 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
         }
         throw error;
       }
+      // The directory now exists: drop the memo so the next catalog read sees it.
+      invalidatePacks();
       return { ok: true, id: packId, path: target };
     },
 
     /**
-     * Re-apply the persisted pack, so a restart keeps the persona. A pack that
-     * disappeared from disk only warns: the deployment falls back to no persona.
+     * Re-apply the persisted pack, so a restart keeps the persona. The
+     * persisted id is read inside the mutation queue, so a restore queued
+     * behind a select applies that select's pack rather than the one it
+     * replaced. A pack that disappeared from disk only warns: the deployment
+     * falls back to no persona.
      * @returns `{restored, packId?}`.
      */
     async restore() {
       requireReady();
-      const packId = settings.get().active;
-      if (!packId || !PACK_ID.test(packId)) return { restored: false };
-      const pack = (await scanPersonaPacks(roots, logger)).get(packId);
-      if (!pack) {
-        logger.warn('persona.restore.missing', { packId });
-        return { restored: false };
-      }
-      await activate(pack);
-      announce(packId, pack.voice);
-      return { restored: true, packId };
+      return serialize(async () => {
+        const packId = settings.get().active;
+        if (!packId || !PACK_ID.test(packId)) return { restored: false };
+        const pack = (await scanPacks()).get(packId);
+        if (!pack) {
+          logger.warn('persona.restore.missing', { packId });
+          return { restored: false };
+        }
+        mountDocument(await loadPackDocument(pack, logger));
+        invalidatePacks();
+        announce(packId, pack.voice);
+        return { restored: true, packId };
+      });
     },
   };
 }
@@ -604,7 +685,9 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
 /** HTTP handlers for the `/fairy-persona/*` routes. */
 export function createFairyPersonaHandlers(service) {
   const fail = (res, error) => {
-    const code = error?.code || (error?.message === 'invalid-json' ? 'invalid-json' : undefined);
+    // Every expected refusal carries `code` (readJson included); anything else
+    // is an unexpected 500 and gets diagnosed as such.
+    const code = error?.code;
     if (!code) diagnostics.warn('persona.http', {}, error);
     sendJson(res, statusFor(code), { ok: false, error: publicError(code) });
   };

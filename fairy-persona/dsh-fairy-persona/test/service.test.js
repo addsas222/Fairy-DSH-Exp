@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { composePersonaText, createFairyPersonaHandlers, createFairyPersonaService, parsePersonaYaml } from '../lib/index.js';
+import { composePersonaText, createFairyPersonaHandlers, createFairyPersonaService, parsePersonaYaml, scanPersonaPacks } from '../lib/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, 'fixtures');
@@ -59,13 +59,13 @@ function createSettings(active = '') {
   };
 }
 
-function createService({ active = '', reserved = [], logger = recorder(), roots = ROOTS } = {}) {
+function createService({ active = '', reserved = [], logger = recorder(), roots = ROOTS, ...options } = {}) {
   const events = [];
   const registry = createRegistry(reserved);
   const settings = createSettings(active);
   const service = createFairyPersonaService(
     { emit: (name, payload) => events.push({ name, payload }) },
-    { roots, logger },
+    { roots, logger, ...options },
   );
   service.bind({ settings, systemPrompt: registry });
   return { events, registry, service, settings, logger };
@@ -429,6 +429,125 @@ test('the scaffold route answers 200, 409, 422, and 400 for its outcomes', async
     await handlers.scaffold(Readable.from([Buffer.from('not json')]), unparseable);
     assert.equal(unparseable.statusCode, 400);
     assert.equal(unparseable.body.error.code, 'invalid-json');
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('an oversized request body is refused with 413 instead of an unexplained 500', async () => {
+  const service = createService().service;
+  const res = createResponse();
+  // readJson's own cap is 64 000 bytes; a body past it is a client-side
+  // refusal (413), the same family as the 400 for an unparseable one.
+  const body = Buffer.from(JSON.stringify({ id: 'fairy', pad: 'x'.repeat(64_000) }));
+  assert.ok(body.length > 64_000);
+
+  await createFairyPersonaHandlers(service).select(Readable.from([body]), res);
+
+  assert.equal(res.statusCode, 413);
+  assert.deepEqual(res.body, { ok: false, error: { code: 'payload-too-large', message: '请求体超过大小上限。' } });
+  // The refusal happens before the service sees the request.
+  assert.equal(service.active(), '');
+});
+
+test('a select that cannot persist leaves the mounted persona untouched', async () => {
+  const { events, registry, service, settings } = createService({ active: 'greet' });
+  await service.restore();
+  const mounted = registry.sections.get(PREFIX).text;
+
+  settings.update = async () => { throw new Error('disk full'); };
+  await assert.rejects(service.select('fairy'));
+
+  // The settings document was written first, so the failure changed nothing:
+  // the mount still matches what a restart would restore.
+  assert.equal(registry.sections.get(PREFIX).text, mounted);
+  assert.equal(service.active(), 'greet');
+  assert.equal(events.at(-1).payload.packId, 'greet');
+});
+
+test('a restore queued behind a select applies the pack that select persisted', async () => {
+  let persisted = false;
+  const { registry, service, settings } = createService({ active: 'greet' });
+
+  // Every persisted-id read is stamped with whether the select it queued
+  // behind had already written. A restore that reads the pre-select id would
+  // stamp `false` and mount the pack the select just replaced.
+  const reads = [];
+  const current = settings.get;
+  settings.get = () => { reads.push(persisted); return current(); };
+
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const persist = settings.update;
+  settings.update = async (patch) => {
+    await gate;
+    const value = await persist(patch);
+    persisted = true;
+    return value;
+  };
+
+  const selecting = service.select('fairy');
+  const restoring = service.restore();
+
+  // The select is between intent and persist, so nothing is mounted yet and
+  // the restore is still waiting in the queue behind it.
+  assert.deepEqual([...registry.sections.keys()], []);
+
+  release();
+  await Promise.all([selecting, restoring]);
+
+  assert.deepEqual(reads, [true], 'the restore read the id the select had persisted');
+  // Memory and the settings document agree: what is mounted is what persists.
+  assert.equal(service.active(), 'fairy');
+  assert.equal(registry.sections.get(PREFIX).text, await composed('fairy'));
+});
+
+test('the catalog scan is memoized until a write invalidates it', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const scans = [];
+    const scan = (roots, logger) => { scans.push(roots); return scanPersonaPacks(roots, logger); };
+    const service = createService({ roots: [sandbox, join(FIXTURES, 'repo', 'persona-packs')], scan }).service;
+
+    const first = await service.list();
+    assert.deepEqual(await service.list(), first);
+    assert.equal(scans.length, 1, 'a repeated read reuses the scan it already has');
+
+    await service.scaffold({ id: 'fresh' });
+    assert.ok((await service.list()).some(pack => pack.id === 'fresh'), 'the created pack is served on the next read');
+    assert.equal(scans.length, 2, 'the write ended the scan generation');
+
+    await service.select('fresh');
+    await service.list();
+    assert.equal(scans.length, 3, 'select ended the scan generation');
+
+    await service.restore();
+    await service.list();
+    assert.equal(scans.length, 4, 'restore ended the scan generation');
+  } finally {
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('a pack dropped into a scan root outside the plugin appears when the memo window lapses', async () => {
+  const sandbox = await tempUserRoot();
+  try {
+    const userRoot = join(sandbox, 'personas');
+    // A zero window makes the reuse rule observable without sleeping: the
+    // next read scans again, which is what the shipped one-second window
+    // ultimately does for a pack copied in by hand (no plugin call involved).
+    const service = createService({ roots: [userRoot, join(FIXTURES, 'repo', 'persona-packs')], scanTtlMs: 0 }).service;
+
+    assert.ok(!(await service.list()).some(pack => pack.id === 'dropped'));
+
+    await mkdir(join(userRoot, 'dropped'), { recursive: true });
+    await writeFile(join(userRoot, 'dropped', 'persona.yml'), 'id: dropped\nname: Dropped\nprompt: prompt.md\n', 'utf8');
+    await writeFile(join(userRoot, 'dropped', 'prompt.md'), '由文件管理器放入的人格文档。\n', 'utf8');
+
+    const packs = await service.list();
+    assert.ok(packs.some(pack => pack.id === 'dropped' && pack.name === 'Dropped'), 'the directory stays the source of truth');
+    // A pack the plugin never wrote is selectable and previewable like any other.
+    assert.deepEqual(await service.preview('dropped'), { promptHead: '由文件管理器放入的人格文档。\n', tone: null });
   } finally {
     await rm(sandbox, { recursive: true, force: true });
   }
