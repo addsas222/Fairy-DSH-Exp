@@ -104,6 +104,8 @@ export function apply(ctx) {
   let stateWatcher = null;
   let watcherAvailable = false;
   let watcherErrorReported = false;
+  // One burst of fs events must not become one SSE write each: collapse them
+  // into a single notification per turn.
   let stateNotifyScheduled = false;
   const closeStateClients = () => {
     stateClients.forEach((res) => {
@@ -127,10 +129,10 @@ export function apply(ctx) {
     queueMicrotask(() => {
       stateNotifyScheduled = false;
       if (stateClients.size === 0) return;
-    stateClients.forEach((res) => {
-      if (res.writableEnded || res.destroyed) stateClients.delete(res);
-      else res.write('event: state\ndata: changed\n\n');
-    });
+      stateClients.forEach((res) => {
+        if (res.writableEnded || res.destroyed) stateClients.delete(res);
+        else res.write('event: state\ndata: changed\n\n');
+      });
     });
   };
 
