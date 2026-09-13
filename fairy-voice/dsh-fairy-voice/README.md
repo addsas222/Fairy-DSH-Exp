@@ -31,6 +31,7 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 | `openai` | 已填 `baseURL` 与 `apiKey` | `POST {baseURL}/audio/speech`，`response_format: pcm` | 24 kHz |
 | `elevenlabs-ws` | 已填 `apiKey` 与 `voiceId`，运行时存在 `WebSocket` | `wss://…/stream-input`：init 帧 → 文本帧 → 空帧 flush，`audio` 帧 base64 解码为 PCM 转发 | 由 `outputFormat`（`pcm_32000` 等）决定 |
 | `kokoro-web` | 总是「可用」 | 浏览器内：动态导入 `moduleUrl`（默认 jsDelivr 的 kokoro-js），`KokoroTTS.from_pretrained(modelId)` 后逐句合成 | 24 kHz |
+| `kitten-web` | 总是可用（需浏览器能跑 WASM） | **KittenTTS-Nano**（StyleTTS2 系 ONNX，~25MB，8 音色）：`kitten-tts-js` 在页面内合成，模型从 HuggingFace 拉（可填镜像）；无 dtype/device 旋钮，引擎自管 onnxruntime-web |
 | `piper-web` | 总是「可用」 | 浏览器内：动态导入 `moduleUrl`（默认 jsDelivr 的 piper-tts-web），`predict({text, voiceId})` 得 WAV，`decodeAudioData` 后播放 | 由 WAV 决定 |
 | `custom-http` | `url` 合法且 `headersJson` 可解析 | `method url`，请求体由 `bodyTemplate` 插值 | 未知（按 32 kHz 播放） |
 | `browser` | 总是可用 | 不合成：`/tts` 返回 409，客户端改用 `speechSynthesis` | — |
@@ -169,3 +170,15 @@ ctx.emit('fairy-persona/change', { packId, voice: { provider, config } })
 - 语速：输入框左侧控制器的第二个滑杆（0.5×–2×，步进 0.05，持久化于 `localStorage['dsh.fairyVoice.rate.v1']`），对全部提供方统一生效——Web Audio 走 `source.playbackRate`（时间轴按 `buffer.duration / rate` 推进），系统语音走 `utterance.rate`。
 - Blink 长句保活：`speechSynthesis` 在 Chrome/Edge 上约 15 秒会停住，播放期间每 6 秒做一次 `pause()/resume()`（`BROWSER_SPEECH_BUMP_MS`），停止/结束时清掉定时器。
 - 设置卡片「语音引擎」：切换提供方、编辑其字段、保存后刷新可用性并重新探测 `/status`；可用性在挂载、保存和手动刷新时更新（不轮询）。
+
+## 待接入的引擎（已取证，未实现）
+
+调研结论与接入路线（**不猜测接口**，各自缺什么写明）：
+
+| 引擎 | 形态（已核实） | 缺什么 / 接入路线 |
+| --- | --- | --- |
+| **Pocket TTS**（kyutai-labs/pocket-tts，100M，MIT） | 自带本地服务：`pocket-tts serve` → `http://localhost:8000`，社区集成报告为 `POST /tts`（`text=…` 表单） | 该端点来自第三方集成报告而非上游文档；确认后按 `local-sovits` 同形的宿主 provider 接入（声纹/音色目录字段一并确认） |
+| **MOSS-TTS-Nano**（OpenMOSS，0.1B，多语种，CPU/ONNX） | 官方 PyTorch + 社区 ONNX 导出（HF `Supbatomic/…`、ModelScope `MOSS-Audio-Tokenizer-ONNX`），"runs directly on ONNX Runtime CPU" | 是"文本→token→声学→声码"多段流水线，不是 transformers.js 的单个 `pipeline()`；需要一个确定的 HTTP 服务（自建或官方 demo 的稳定端点）才能接成宿主 provider |
+| **LuxTTS**（ysharma3501/LuxTTS，zipvoice 系，150× 实时） | 官方称 "API-ready"、有 HF Space；本地服务形态未见上游文档 | 同 Pocket TTS：需要确切的 HTTP 形态；或等其 ONNX/JS 导出后按 `kitten-web` 同形接成浏览器内引擎 |
+
+（本仓库的规矩是"接口必须来自上游证据"——本轮 KittenTTS 的 API 取自包内 README，故一次接通；上面三个在拿到同等证据前不写适配器。）

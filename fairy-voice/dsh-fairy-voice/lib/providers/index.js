@@ -2,7 +2,7 @@
  * probe per provider. Settings ownership stays with the host plugin. */
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 import { BROWSER_ID, browserProvider } from './browser.js';
-import { KOKORO_WEB_DEFAULTS, KOKORO_WEB_ID, PIPER_WEB_DEFAULTS, PIPER_WEB_ID, kokoroWebProvider, piperWebProvider } from './client-engines.js';
+import { KITTEN_WEB_DEFAULTS, KITTEN_WEB_ID, KOKORO_WEB_DEFAULTS, KOKORO_WEB_ID, PIPER_WEB_DEFAULTS, PIPER_WEB_ID, kokoroWebProvider, kittenWebProvider, piperWebProvider } from './client-engines.js';
 import { CUSTOM_HTTP_DEFAULTS, CUSTOM_HTTP_ID, createCustomHttpProvider } from './custom-http.js';
 import { ELEVENLABS_WS_DEFAULTS, ELEVENLABS_WS_ID, createElevenLabsWsProvider } from './elevenlabs-ws.js';
 import { LOCAL_SOVITS_DEFAULTS, LOCAL_SOVITS_ID, createLocalSovitsProvider } from './local-sovits.js';
@@ -15,6 +15,7 @@ export const PROVIDER_IDS = [
   OPENAI_ID,
   ELEVENLABS_WS_ID,
   KOKORO_WEB_ID,
+  KITTEN_WEB_ID,
   PIPER_WEB_ID,
   BROWSER_ID,
   CUSTOM_HTTP_ID,
@@ -24,6 +25,7 @@ const PROVIDER_CONFIG_KEYS = {
   [OPENAI_ID]: 'openai',
   [ELEVENLABS_WS_ID]: 'elevenlabsWs',
   [KOKORO_WEB_ID]: 'kokoroWeb',
+  [KITTEN_WEB_ID]: 'kittenWeb',
   [PIPER_WEB_ID]: 'piperWeb',
   [CUSTOM_HTTP_ID]: 'customHttp',
 };
@@ -32,6 +34,7 @@ export const PROVIDER_CONFIG_DEFAULTS = {
   openai: OPENAI_DEFAULTS,
   elevenlabsWs: ELEVENLABS_WS_DEFAULTS,
   kokoroWeb: KOKORO_WEB_DEFAULTS,
+  kittenWeb: KITTEN_WEB_DEFAULTS,
   piperWeb: PIPER_WEB_DEFAULTS,
   customHttp: CUSTOM_HTTP_DEFAULTS,
 };
@@ -40,6 +43,7 @@ export const PROVIDER_CONFIG_FIELDS = {
   openai: ['baseURL', 'apiKey', 'model', 'voice'],
   elevenlabsWs: ['baseUrl', 'apiKey', 'voiceId', 'modelId', 'outputFormat'],
   kokoroWeb: ['moduleUrl', 'modelId', 'dtype', 'device', 'voice', 'resourceBase'],
+  kittenWeb: ['moduleUrl', 'modelId', 'voice', 'resourceBase'],
   piperWeb: ['moduleUrl', 'voiceId', 'resourceBase'],
   customHttp: ['url', 'method', 'headersJson', 'bodyTemplate'],
 };
@@ -66,6 +70,7 @@ export function createProviderRegistry({
     [OPENAI_ID, createOpenAiProvider({ fetchImpl })],
     [ELEVENLABS_WS_ID, createElevenLabsWsProvider({ WebSocketImpl })],
     [KOKORO_WEB_ID, kokoroWebProvider],
+    [KITTEN_WEB_ID, kittenWebProvider],
     [PIPER_WEB_ID, piperWebProvider],
     [CUSTOM_HTTP_ID, createCustomHttpProvider({ fetchImpl })],
     [BROWSER_ID, browserProvider],

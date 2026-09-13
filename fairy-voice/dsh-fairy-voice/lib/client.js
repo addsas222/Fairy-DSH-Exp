@@ -197,11 +197,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 
     const voiceTimelineStore = createVoiceTimelineStore();
 
-    /* Browser-side neural engines (Kokoro on WebGPU/WASM, Piper on WASM).
+    /* Browser-side neural engines: Kokoro (WebGPU/WASM), KittenTTS-Nano (WASM,
+     * ~25MB, 8 voices), Piper (WASM).
      * The host only stores their configuration — it answers 409 `client-side` —
      * so the model download, capability check, and synthesis all live here.
      * Every failure path degrades to system speech rather than to silence. */
-    const LOCAL_ENGINE_IDS = ['kokoro-web', 'piper-web'];
+    const LOCAL_ENGINE_IDS = ['kokoro-web', 'kitten-web', 'piper-web'];
     const KOKORO_SAMPLE_RATE = 24_000;
     const localEngineModules = new Map();
     const localEngineHandles = new Map();
@@ -211,7 +212,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     function localEngineConfig(settingsValue, id) {
-      const key = id === 'kokoro-web' ? 'kokoroWeb' : 'piperWeb';
+      const key = id === 'kokoro-web' ? 'kokoroWeb' : id === 'kitten-web' ? 'kittenWeb' : 'piperWeb';
       return settingsValue?.providers?.[key] || {};
     }
 
@@ -314,6 +315,17 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             ));
             return { kind: 'kokoro', tts, sampleRate: KOKORO_SAMPLE_RATE };
           }
+          if (id === 'kitten-web') {
+            const module = await importLocalEngineModule(config.moduleUrl);
+            const KittenTTS = module?.KittenTTS || module?.default?.KittenTTS;
+            if (typeof KittenTTS?.from_pretrained !== 'function') throw new Error('kitten-tts-js 未导出 KittenTTS。');
+            // 模型与音色都从 HuggingFace 取，走 resourceBase 镜像；引擎自己管
+            // onnxruntime-web，故只需单线程守卫（页面没有 SAB）。
+            const tts = await withResourceMirror(config.resourceBase, () => withSingleThreadHint(
+              () => KittenTTS.from_pretrained(config.modelId),
+            ));
+            return { kind: 'kitten', tts, sampleRate: KOKORO_SAMPLE_RATE };
+          }
           const module = await importLocalEngineModule(config.moduleUrl);
           const api = typeof module?.TtsSession === 'function' ? module : module?.default ?? null;
           if (typeof api?.TtsSession !== 'function') throw new Error('piper-tts-web 未导出 TtsSession。');
@@ -349,10 +361,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     async function synthesizeLocalEngine(handle, text, config, context) {
-      if (handle.kind === 'kokoro') {
+      if (handle.kind === 'kokoro' || handle.kind === 'kitten') {
+        // Both engines answer with { data: Float32Array, sampling_rate }
+        // (KittenTTS returns RawAudio, Kokoro an audio object): one mapping.
         const audio = await withResourceMirror(config.resourceBase, () => handle.tts.generate(text, { voice: config.voice }));
         const samples = audio?.audio ?? audio?.data ?? null;
-        if (!samples || typeof samples.length !== 'number') throw new Error('Kokoro 未返回音频。');
+        if (!samples || typeof samples.length !== 'number') throw new Error(`${handle.kind} 未返回音频。`);
         return {
           samples: samples instanceof Float32Array ? samples : Float32Array.from(samples),
           sampleRate: Number(audio?.sampling_rate || audio?.samplingRate) || handle.sampleRate,
@@ -1349,6 +1363,17 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
           { name: 'modelId', label: '模型', placeholder: 'eleven_multilingual_v2' },
           { name: 'outputFormat', label: '输出格式', placeholder: 'pcm_32000' },
           { name: 'baseUrl', label: '服务地址', placeholder: 'wss://api.elevenlabs.io' }
+        ]
+      },
+      {
+        id: 'kitten-web',
+        label: 'KittenTTS-Nano（浏览器内 WASM，约 25MB）',
+        key: 'kittenWeb',
+        fields: [
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/+esm' },
+          { name: 'modelId', label: '模型 ID', placeholder: 'KittenML/kitten-tts-nano-0.8（micro/mini 可换）' },
+          { name: 'voice', label: '音色', placeholder: 'Bella / Luna / Rosie / Kiki / Leo / Jasper / Bruno / Hugo' },
+          { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
         ]
       },
       {

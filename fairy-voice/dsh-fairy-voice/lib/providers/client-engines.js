@@ -11,6 +11,7 @@ import { providerError } from './http.js';
 
 export const KOKORO_WEB_ID = 'kokoro-web';
 export const PIPER_WEB_ID = 'piper-web';
+export const KITTEN_WEB_ID = 'kitten-web';
 
 /** jsDelivr ESM builds keep the default zero-config; a self-hosted URL works
  * too. Versions are pinned: the repo pins every dependency, and a floating
@@ -28,6 +29,16 @@ export const KOKORO_WEB_DEFAULTS = {
 /* @realtimex/piper-tts-web 而非上游两个 fork：它们把 onnxruntime-web 基址钉在
  * cdnjs 的 1.18.0 目录上，而该目录没有 1.19+ 才有的 ort-wasm-simd-threaded
  * 加载器（实测 404），会让引擎每次初始化都失败。 */
+/* KittenTTS-Nano：StyleTTS2 系 ONNX（~25MB，8 个音色），kitten-tts-js 是浏览器
+ * WASM 实现。它没有 dtype/device 旋钮（自己管 onnxruntime-web），所以字段比
+ * kokoro 少；模型与音色从 HuggingFace 拉，`resourceBase` 同 kokoro 用于镜像。
+ * 包自带 `esm.sh` 文档地址，这里按仓库惯例钉 jsDelivr 的 ESM 构建与版本。 */
+export const KITTEN_WEB_DEFAULTS = {
+  moduleUrl: 'https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/+esm',
+  modelId: 'KittenML/kitten-tts-nano-0.8',
+  voice: 'Bella',
+  resourceBase: '',
+};
 export const PIPER_WEB_DEFAULTS = {
   moduleUrl: 'https://cdn.jsdelivr.net/npm/@realtimex/piper-tts-web@1.1.1/+esm',
   voiceId: 'en_US-hfc_female-medium',
@@ -43,4 +54,5 @@ function clientEngineProvider(id) {
 }
 
 export const kokoroWebProvider = clientEngineProvider(KOKORO_WEB_ID);
+export const kittenWebProvider = clientEngineProvider(KITTEN_WEB_ID);
 export const piperWebProvider = clientEngineProvider(PIPER_WEB_ID);

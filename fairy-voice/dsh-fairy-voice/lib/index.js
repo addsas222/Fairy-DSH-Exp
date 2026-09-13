@@ -37,6 +37,7 @@ export const FAIRY_VOICE_SETTINGS_DEFAULTS = Object.freeze({
     openai: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.openai }),
     elevenlabsWs: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.elevenlabsWs }),
     kokoroWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
+    kittenWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.kittenWeb }),
     piperWeb: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: Object.freeze({ ...PROVIDER_CONFIG_DEFAULTS.customHttp }),
   }),
@@ -89,6 +90,13 @@ export const FairyVoiceSettings = z.object({
       // Model-resource mirror (HuggingFace); empty keeps the engine default.
       resourceBase: z.string().default(''),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
+    // KittenTTS-Nano 自己管理 onnxruntime，没有 dtype/device 字段。
+    kittenWeb: z.object({
+      moduleUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.kittenWeb.moduleUrl),
+      modelId: z.string().default(PROVIDER_CONFIG_DEFAULTS.kittenWeb.modelId),
+      voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.kittenWeb.voice),
+      resourceBase: z.string().default(PROVIDER_CONFIG_DEFAULTS.kittenWeb.resourceBase),
+    }).default({ ...PROVIDER_CONFIG_DEFAULTS.kittenWeb }),
     piperWeb: z.object({
       moduleUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.moduleUrl),
       voiceId: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.voiceId),

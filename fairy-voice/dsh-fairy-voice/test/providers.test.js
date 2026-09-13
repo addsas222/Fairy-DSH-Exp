@@ -15,6 +15,7 @@ import {
 import { REFERENCE_PROMPT_FALLBACK, createLocalSovitsProvider } from '../lib/providers/local-sovits.js';
 import { createOpenAiProvider } from '../lib/providers/openai.js';
 import { parseStaticHeaders, renderCustomBody, createCustomHttpProvider } from '../lib/providers/custom-http.js';
+import { KITTEN_WEB_DEFAULTS } from '../lib/providers/client-engines.js';
 import { createProviderRegistry } from '../lib/providers/index.js';
 import { KOKORO_WEB_DEFAULTS, PIPER_WEB_DEFAULTS } from '../lib/providers/client-engines.js';
 import { ELEVENLABS_WS_DEFAULTS, createElevenLabsWsProvider } from '../lib/providers/elevenlabs-ws.js';
@@ -151,6 +152,7 @@ test('provider availability is reported per provider without leaking config', as
     'openai',
     'elevenlabs-ws',
     'kokoro-web',
+    'kitten-web',
     'piper-web',
     'browser',
     'custom-http',
@@ -161,9 +163,10 @@ test('provider availability is reported per provider without leaking config', as
   // Browser engines answer `ready`: only the browser can judge WebGPU/memory,
   // and their failure path degrades to system speech.
   assert.deepEqual(list[3], { id: 'kokoro-web', available: true });
-  assert.deepEqual(list[4], { id: 'piper-web', available: true });
-  assert.deepEqual(list[5], { id: 'browser', available: true });
-  assert.deepEqual(list[6], { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' });
+  assert.deepEqual(list[4], { id: 'kitten-web', available: true });
+  assert.deepEqual(list[5], { id: 'piper-web', available: true });
+  assert.deepEqual(list[6], { id: 'browser', available: true });
+  assert.deepEqual(list[7], { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' });
 
   const unreachable = createProviderRegistry({ fetchImpl: async () => { throw new Error('ECONNREFUSED'); }, WebSocketImpl: FakeWebSocket });
   assert.deepEqual(await unreachable.list(FAIRY_VOICE_SETTINGS_DEFAULTS), [
@@ -171,6 +174,7 @@ test('provider availability is reported per provider without leaking config', as
     { id: 'openai', available: false, reason: '未配置 OpenAI API Key。' },
     { id: 'elevenlabs-ws', available: false, reason: '未配置 ElevenLabs API Key。' },
     { id: 'kokoro-web', available: true },
+    { id: 'kitten-web', available: true },
     { id: 'piper-web', available: true },
     { id: 'browser', available: true },
     { id: 'custom-http', available: false, reason: '未配置自定义语音服务地址。' },
@@ -284,6 +288,7 @@ test('provider config reads and writes stay sanitized and never clobber a stored
       openai: { baseURL: 'https://api.example.com/v1', apiKey: '***', model: 'tts-1-hd', voice: 'alloy' },
       elevenlabsWs: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.elevenlabsWs,
       kokoroWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.kokoroWeb,
+      kittenWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.kittenWeb,
       piperWeb: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.piperWeb,
       customHttp: FAIRY_VOICE_SETTINGS_DEFAULTS.providers.customHttp,
     },
@@ -317,6 +322,7 @@ test('provider config lists every provider availability entry for the settings c
     'openai',
     'elevenlabs-ws',
     'kokoro-web',
+    'kitten-web',
     'piper-web',
     'browser',
     'custom-http',
@@ -410,6 +416,15 @@ test('browser engine providers answer client-side and keep their configuration',
   assert.equal(kokoro.config.modelId, KOKORO_WEB_DEFAULTS.modelId);
   await assert.rejects(
     () => kokoro.provider.stream('hi', kokoro.config, {}),
+    (error) => error.code === 'client-side',
+  );
+
+  const kitten = registry.resolve({ provider: 'kitten-web', providers: { kittenWeb: { voice: 'Luna' } } });
+  assert.equal(kitten.id, 'kitten-web');
+  assert.equal(kitten.config.voice, 'Luna');
+  assert.equal(kitten.config.modelId, KITTEN_WEB_DEFAULTS.modelId);
+  await assert.rejects(
+    () => kitten.provider.stream('hi', kitten.config, {}),
     (error) => error.code === 'client-side',
   );
 
