@@ -43,11 +43,19 @@
 
 `fairy-contracts`、`dsh-browser-dock`、`dsh-balance-meter`、
 `dsh-fairy-startup`、`dsh-fairy-visual`、`dsh-fairy-voice`、
-`dsh-fairy-persona`、`dsh-fairy-modes`、`dsh-fairy-search`、`dsh-fairy-memory` 是本仓库的原创
+`dsh-fairy-persona`、`dsh-fairy-modes`、`dsh-fairy-search`、`dsh-fairy-memory`、
+`dsh-fairy-roleplay` 是本仓库的原创
 代码（除其自身依赖外），按根目录 `LICENSE` 和 `NOTICE` 处理。
 
 发布新版本时，应从最终 lockfile 重新核对版本、来源和许可证，并把新增的
 第三方依赖补入本表；不能因为依赖被锁定就把它们当作本项目原创内容。
+
+## MaiBot（fairy-roleplay 的规则结构参考）
+
+- 参考对象：**MaiBot**（<https://github.com/Mai-with-u/MaiBot>），GPL-3.0。
+- **只参考流水线结构**（规划器 → 回复器 → 去AI味 → 记忆印象），`fairy-roleplay` 的提示词
+  文本与词表全部由本仓库自行撰写；不包含其源码或提示词原文的复制。
+- 因此本仓库不继承 GPL-3.0 义务；上表列出的运行时依赖仍各自按原许可证处理。
 
 ## KittenTTS / kitten-tts-js（fairy-voice 的 `kitten-web` 引擎）
 

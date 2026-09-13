@@ -64,6 +64,7 @@ echo "[1/3] package tests"
 (cd "$repo_root/fairy-modes/dsh-fairy-modes" && npm test)
 (cd "$repo_root/fairy-search/dsh-fairy-search" && npm test)
 (cd "$repo_root/fairy-memory/dsh-fairy-memory" && npm test)
+(cd "$repo_root/fairy-roleplay/dsh-fairy-roleplay" && npm test)
 if [ -n "$DSH_OFFICIAL_PACKAGE" ] && [ -n "$DSH_OFFICIAL_RUNTIME" ]; then
   # Live-layout gate suite: it compares candidates against the installed
   # 0.1.1-rc.2, so it runs only when that comparison target exists.

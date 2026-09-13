@@ -13,6 +13,7 @@
     "dsh-fairy-modes": "link:../../fairy-modes/dsh-fairy-modes",
     "dsh-fairy-search": "link:../../fairy-search/dsh-fairy-search",
     "dsh-fairy-memory": "link:../../fairy-memory/dsh-fairy-memory",
+    "dsh-fairy-roleplay": "link:../../fairy-roleplay/dsh-fairy-roleplay",
     "dsh-message-edit": "0.2.3",
     "dsh-reasoning-effort": "github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994",
     "hono": "4.13.2"

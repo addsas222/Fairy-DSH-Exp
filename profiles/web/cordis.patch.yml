@@ -96,3 +96,7 @@
     - id: fairy-memory
       name: 'dsh-fairy-memory'
       inject: [clientModules]
+
+    - id: fairy-roleplay
+      name: 'dsh-fairy-roleplay'
+      inject: [clientModules]

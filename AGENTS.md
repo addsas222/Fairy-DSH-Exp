@@ -28,6 +28,7 @@
 | `fairy-modes/dsh-fairy-modes/` | 三模式引擎（极简 Explore&Check / PTC Build&Work / 创造 Memory&Dream），含 `session_recall` 工具。端点 `/fairy-modes/*` |
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成。端点 `/fairy-search/*` |
 | `fairy-memory/dsh-fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`），mem0 / 自定义 HTTP / 本地 Markdown 备选；`memory_recall`/`memory_remember` 工具 + CLI。端点 `/fairy-memory/*` |
+| `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（第四会话模式 `/mode roleplay`）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
 | `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT（网上：browser / openai / deepgram / azure / custom-http；本地：whisper-web、或 openai 指向 loopback）。端点 `/fairy-voice/*` |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
 | `balance-meter/` | 余额指示 |
@@ -90,7 +91,8 @@ for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
             fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search \
-            fairy-memory/dsh-fairy-memory; do
+            fairy-memory/dsh-fairy-memory \
+            fairy-roleplay/dsh-fairy-roleplay; do
   git -C "$REPO" archive HEAD -- "$area" | tar -x -C "$DSH_HOME"
 done
 git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
@@ -101,7 +103,8 @@ for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
             fairy-modes/dsh-fairy-modes fairy-search/dsh-fairy-search \
-            fairy-memory/dsh-fairy-memory; do
+            fairy-memory/dsh-fairy-memory \
+            fairy-roleplay/dsh-fairy-roleplay; do
   (cd "$DSH_HOME/$area" && pnpm install --ignore-scripts)
 done
 
@@ -147,6 +150,7 @@ node fairy-system/skill-audit.js      # 技能/插件冗余审计（--self-test 
 # 全矩阵（10 个测试面）
 node --test --test-timeout=45000 fairy-system/test/*.test.js   # 35 例
 (cd fairy-memory/dsh-fairy-memory && node --test test/*.test.js)  # 其余包同理
+(cd fairy-roleplay/dsh-fairy-roleplay && node --test test/*.test.js)
 ```
 
 `fairy-system/test/*` 里比较"当前 live 布局"的用例需要真实安装前提：

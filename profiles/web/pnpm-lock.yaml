@@ -33,6 +33,9 @@ importers:
       dsh-fairy-persona:
         specifier: link:../../fairy-persona/dsh-fairy-persona
         version: link:../../fairy-persona/dsh-fairy-persona
+      dsh-fairy-roleplay:
+        specifier: link:../../fairy-roleplay/dsh-fairy-roleplay
+        version: link:../../fairy-roleplay/dsh-fairy-roleplay
       dsh-fairy-search:
         specifier: link:../../fairy-search/dsh-fairy-search
         version: link:../../fairy-search/dsh-fairy-search
