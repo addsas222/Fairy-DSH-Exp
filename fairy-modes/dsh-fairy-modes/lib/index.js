@@ -79,7 +79,7 @@ export const fairyModeProjectionDefinition = {
   stateSchema: {
     parse(value) {
       const mode = value !== null && typeof value === 'object' ? normalizeFairyMode(value.mode) : undefined;
-      if (mode === undefined) throw new Error('fairyMode projection state must be { mode: off|ptc|create }');
+      if (mode === undefined) throw new Error('fairyMode projection state must be { mode: off|ptc|create|roleplay }');
       return { mode };
     },
   },
