@@ -39,8 +39,8 @@ export const PROVIDER_CONFIG_FIELDS = {
   localSovits: ['baseURL', 'referenceAudioPath', 'referencePromptPath'],
   openai: ['baseURL', 'apiKey', 'model', 'voice'],
   elevenlabsWs: ['baseUrl', 'apiKey', 'voiceId', 'modelId', 'outputFormat'],
-  kokoroWeb: ['moduleUrl', 'modelId', 'dtype', 'device', 'voice'],
-  piperWeb: ['moduleUrl', 'voiceId'],
+  kokoroWeb: ['moduleUrl', 'modelId', 'dtype', 'device', 'voice', 'resourceBase'],
+  piperWeb: ['moduleUrl', 'voiceId', 'resourceBase'],
   customHttp: ['url', 'method', 'headersJson', 'bodyTemplate'],
 };
 const AVAILABILITY_TIMEOUT_MS = 3_000;

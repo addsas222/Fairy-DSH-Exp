@@ -55,11 +55,25 @@ Fairy 朗读插件：把 DSH 的最终回答转成语音，负责「文本 → �
 模型完全在浏览器里加载与合成，host 只保存配置（`/tts` 对它们返回 409
 `client-side`，客户端按自己选中的引擎 id 走本地合成）：
 
-- `moduleUrl` 默认指向 jsDelivr 的 ESM 构建；离线或自托管时改成自己的地址即可。
+- `moduleUrl` 默认指向 jsDelivr 的 ESM 构建，且**钉精确版本**（`kokoro-js@1.2.1`、
+  `@mintplex-labs/piper-tts-web@1.0.5`）；离线或自托管时改成自己的地址即可。
+  该地址会在页面内执行代码，**只填可信来源**。
+- `resourceBase`（可选）是模型/音色下载的镜像基址：填了之后，加载与合成期间
+  发往 `huggingface.co`（含 `cdn-lfs*.huggingface.co`、`cas-bridge.xethub.hf.co`）
+  的请求会被改写到该基址，其余请求不受影响。家在 HuggingFace 不可达的网络
+  （如大陆直连）时，填 `https://hf-mirror.com` 之类的镜像即可；留空用引擎默认。
+- **同源/线程约束**：DSH 页面没有 CSP，所以 CDN 动态 import 可用；但页面
+  `crossOriginIsolated === false`、没有 `SharedArrayBuffer`，跨源 Worker 也被拦，
+  因此 onnxruntime-web 必须单线程。`piper-web` 在自己的 `init()` 里把线程数设成
+  `navigator.hardwareConcurrency`，客户端在初始化窗口内把它固定为 1
+  （`withSingleThreadHint`）再恢复。若将来要跑 worker/多线程，只能由宿主
+  webServer 以同源方式转发引擎资源。
 - `kokoro-web`：`device` 选 `webgpu` 时自动把精度收敛到 `fp32`，否则用 `q8`（WASM）。
   首次加载需下载模型（约 80MB，之后走浏览器缓存）。
 - `piper-web`：`voiceId` 首次使用会预下载音色（30–60MB，存入 OPFS）。
-- **降级语义**：任一环节失败（无 WebGPU、模块被 CSP 拦截、显存不足、下载失败）
+- **piper 会话复用**：整段朗读共用一个 `TtsSession`（`init()` 只下载/初始化一次），
+  逐句 `predict()`。
+- **降级语义**：任一环节失败（无 WebGPU、模块被拦截、显存不足、下载失败）
   都会把**剩余句子**交给系统语音继续朗读，而不是静默或报错停机；
   host 路径中途失败同样如此（见下）。
 

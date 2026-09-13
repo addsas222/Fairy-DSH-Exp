@@ -12,17 +12,23 @@ import { providerError } from './http.js';
 export const KOKORO_WEB_ID = 'kokoro-web';
 export const PIPER_WEB_ID = 'piper-web';
 
-/** jsDelivr ESM builds keep the default zero-config; a self-hosted URL works too. */
+/** jsDelivr ESM builds keep the default zero-config; a self-hosted URL works
+ * too. Versions are pinned: the repo pins every dependency, and a floating
+ * major would drift silently behind the CDN. `resourceBase` is the mirror for
+ * the model/voice downloads (HuggingFace hosts), empty = use the engine's own
+ * defaults. */
 export const KOKORO_WEB_DEFAULTS = {
-  moduleUrl: 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm',
+  moduleUrl: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm',
   modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
   dtype: 'q8',
   device: 'wasm',
   voice: 'af_heart',
+  resourceBase: '',
 };
 export const PIPER_WEB_DEFAULTS = {
-  moduleUrl: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1/+esm',
+  moduleUrl: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm',
   voiceId: 'en_US-hfc_female-medium',
+  resourceBase: '',
 };
 
 function clientEngineProvider(id) {

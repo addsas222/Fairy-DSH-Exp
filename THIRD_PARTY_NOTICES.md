@@ -25,6 +25,20 @@
 | --- | --- | --- | --- |
 | ponytail 技能组 | `.agent-presets/ponytail/skills/ponytail*/SKILL.md` | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)；许可证全文见 `.agent-presets/ponytail/skills/ponytail.LICENSE` |
 
+## 运行期从 CDN 加载的第三方引擎（未随仓库分发）
+
+`fairy-voice` 的浏览器内引擎 provider 在**用户浏览器**里按配置的 `moduleUrl`
+加载以下包（默认 jsDelivr，钉精确版本；仓库不分发其代码，仅保存默认地址与
+许可证信息）：
+
+| 包 | 版本 | 许可证 | 来源 |
+| --- | --- | --- | --- |
+| `kokoro-js`（内含 `@huggingface/transformers`） | 1.2.1 | Apache-2.0 | hexgrad/kokoro（Kokoro-82M 权重另见其模型卡） |
+| `@mintplex-labs/piper-tts-web`（内含 `onnxruntime-web`） | 1.0.5 | MIT | Mintplex-Labs 对 diffusion-studio/vits-web 的 fork；Piper 模型 MIT（Rhasspy） |
+
+引擎默认从 HuggingFace 拉取模型/音色；不可达时可在设置里填 `resourceBase`
+镜像，或改用其他 provider。
+
 ## 本仓库内的本地包
 
 `fairy-contracts`、`dsh-browser-dock`、`dsh-balance-meter`、

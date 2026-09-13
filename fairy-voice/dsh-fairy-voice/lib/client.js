@@ -191,6 +191,72 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return settingsValue?.providers?.[key] || {};
     }
 
+    /* Harness pages are not cross-origin isolated (no COOP/COEP, so no
+     * SharedArrayBuffer) and cross-origin Workers are blocked. onnxruntime-web
+     * therefore has to run single-threaded, and piper-tts-web sizes its pool
+     * from navigator.hardwareConcurrency inside its own init — the value is the
+     * only lever, held for exactly the init window. */
+    async function withSingleThreadHint(task) {
+      let patched = false;
+      try {
+        Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 1 });
+        patched = true;
+      } catch (error) {
+        diagnostics.warn('local-engine.threads', {}, error);
+      }
+      try {
+        return await task();
+      } finally {
+        if (patched) {
+          try { delete navigator.hardwareConcurrency; } catch (error) { diagnostics.warn('local-engine.threads.restore', {}, error); }
+        }
+      }
+    }
+
+    /* Model and voice files come from HuggingFace. A mirror base redirects
+     * exactly those hosts for the duration of a load or a synthesis call, so a
+     * blocked HF (or a self-hosted mirror) does not make the engine unusable. */
+    const MIRROR_HOSTS = /(^|\.)huggingface\.co$|^cdn-lfs[^.]*\.huggingface\.co$|^cas-bridge\.xethub\.hf\.co$/;
+    let mirrorDepth = 0;
+    let unmaskedFetch = null;
+
+    function rewrittenMirrorUrl(rawInput, base) {
+      const raw = typeof rawInput === 'string' ? rawInput : rawInput?.url;
+      if (!raw) return null;
+      try {
+        const url = new URL(raw, window.location.href);
+        if (!MIRROR_HOSTS.test(url.hostname)) return null;
+        return `${new URL(base).origin}${url.pathname}${url.search}`;
+      } catch {
+        return null;
+      }
+    }
+
+    async function withResourceMirror(base, task) {
+      const mirrorBase = String(base || '').trim();
+      if (!mirrorBase) return task();
+      const rewrite = (input) => {
+        const next = rewrittenMirrorUrl(input, mirrorBase);
+        if (!next) return input;
+        if (typeof input === 'string') return next;
+        try { return new Request(next, input); } catch { return next; }
+      };
+      if (mirrorDepth === 0) {
+        unmaskedFetch = window.fetch;
+        window.fetch = (input, init) => unmaskedFetch.call(window, rewrite(input), init);
+      }
+      mirrorDepth += 1;
+      try {
+        return await task();
+      } finally {
+        mirrorDepth -= 1;
+        if (mirrorDepth === 0 && unmaskedFetch) {
+          window.fetch = unmaskedFetch;
+          unmaskedFetch = null;
+        }
+      }
+    }
+
     function importLocalEngineModule(url) {
       const key = String(url || '').trim();
       if (!key) return Promise.reject(new Error('未配置引擎模块地址。'));
@@ -219,24 +285,22 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             const dtype = webgpu
               ? (config.dtype === 'fp32' || config.dtype === 'fp16' ? config.dtype : 'fp32')
               : (config.dtype && config.dtype !== 'fp32' ? config.dtype : 'q8');
-            const tts = await KokoroTTS.from_pretrained(config.modelId, { dtype, device: webgpu ? 'webgpu' : 'wasm' });
+            const tts = await withResourceMirror(config.resourceBase, () => withSingleThreadHint(
+              () => KokoroTTS.from_pretrained(config.modelId, { dtype, device: webgpu ? 'webgpu' : 'wasm' }),
+            ));
             return { kind: 'kokoro', tts, sampleRate: KOKORO_SAMPLE_RATE };
           }
           const module = await importLocalEngineModule(config.moduleUrl);
-          const api = typeof module?.predict === 'function' ? module : module?.default ?? null;
-          if (typeof api?.predict !== 'function') throw new Error('piper-tts-web 未导出 predict。');
-          // Pre-download so the first sentence does not stall mid-read.
-          if (typeof api.stored === 'function' && typeof api.download === 'function') {
-            const stored = await api.stored().catch(() => []);
-            if (!Array.isArray(stored) || !stored.includes(config.voiceId)) {
-              // Not fatal: predict() downloads on demand. Reporting keeps this
-              // failure visible instead of swallowing it.
-              await api.download(config.voiceId).catch((error) => {
-                diagnostics.warn('local-engine.predownload', { engine: 'piper-web' }, error);
-              });
-            }
-          }
-          return { kind: 'piper', api, sampleRate: null };
+          const api = typeof module?.TtsSession === 'function' ? module : module?.default ?? null;
+          if (typeof api?.TtsSession !== 'function') throw new Error('piper-tts-web 未导出 TtsSession。');
+          // One session for the whole read: the model and voice download once
+          // inside init() and every group reuses the same inference session.
+          const session = await withResourceMirror(config.resourceBase, () => withSingleThreadHint(async () => {
+            const opened = new api.TtsSession({ voiceId: config.voiceId });
+            await opened.init();
+            return opened;
+          }));
+          return { kind: 'piper', session, sampleRate: null };
         })().catch((error) => {
           localEngineHandles.delete(key);
           throw error;
@@ -247,7 +311,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 
     async function synthesizeLocalEngine(handle, text, config, context) {
       if (handle.kind === 'kokoro') {
-        const audio = await handle.tts.generate(text, { voice: config.voice });
+        const audio = await withResourceMirror(config.resourceBase, () => handle.tts.generate(text, { voice: config.voice }));
         const samples = audio?.audio ?? audio?.data ?? null;
         if (!samples || typeof samples.length !== 'number') throw new Error('Kokoro 未返回音频。');
         return {
@@ -256,7 +320,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         };
       }
       if (!context?.decodeAudioData) throw new Error('浏览器无法解码音频。');
-      const blob = await handle.api.predict({ text, voiceId: config.voiceId });
+      const blob = await withResourceMirror(config.resourceBase, () => handle.session.predict(text));
       const decoded = await context.decodeAudioData(await blob.arrayBuffer());
       return { samples: decoded.getChannelData(0), sampleRate: decoded.sampleRate };
     }
@@ -931,11 +995,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         label: 'Kokoro（浏览器内 WebGPU/WASM）',
         key: 'kokoroWeb',
         fields: [
-          { name: 'moduleUrl', label: '模块地址', placeholder: 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm' },
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm' },
           { name: 'modelId', label: '模型 ID', placeholder: 'onnx-community/Kokoro-82M-v1.0-ONNX' },
           { name: 'device', label: '设备', placeholder: 'wasm 或 webgpu' },
           { name: 'dtype', label: '精度', placeholder: 'q8（WASM）或 fp32（WebGPU）' },
-          { name: 'voice', label: '音色', placeholder: 'af_heart' }
+          { name: 'voice', label: '音色', placeholder: 'af_heart' },
+          { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
         ]
       },
       {
@@ -943,8 +1008,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         label: 'Piper（浏览器内 WASM）',
         key: 'piperWeb',
         fields: [
-          { name: 'moduleUrl', label: '模块地址', placeholder: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1/+esm' },
-          { name: 'voiceId', label: '音色 ID', placeholder: 'en_US-hfc_female-medium' }
+          { name: 'moduleUrl', label: '模块地址（仅填可信来源，会在页面内执行）', placeholder: 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm' },
+          { name: 'voiceId', label: '音色 ID', placeholder: 'en_US-hfc_female-medium' },
+          { name: 'resourceBase', label: '资源镜像（可选，HF 不可达时填）', placeholder: 'https://hf-mirror.com' }
         ]
       },
       { id: 'browser', label: '浏览器朗读', key: null, fields: [] }

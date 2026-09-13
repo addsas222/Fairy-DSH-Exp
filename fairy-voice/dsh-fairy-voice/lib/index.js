@@ -69,10 +69,13 @@ export const FairyVoiceSettings = z.object({
       dtype: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.dtype),
       device: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.device),
       voice: z.string().default(PROVIDER_CONFIG_DEFAULTS.kokoroWeb.voice),
+      // Model-resource mirror (HuggingFace); empty keeps the engine default.
+      resourceBase: z.string().default(''),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.kokoroWeb }),
     piperWeb: z.object({
       moduleUrl: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.moduleUrl),
       voiceId: z.string().default(PROVIDER_CONFIG_DEFAULTS.piperWeb.voiceId),
+      resourceBase: z.string().default(''),
     }).default({ ...PROVIDER_CONFIG_DEFAULTS.piperWeb }),
     customHttp: z.object({
       url: z.string().default(''),

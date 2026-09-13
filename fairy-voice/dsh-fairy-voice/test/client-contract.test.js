@@ -302,11 +302,30 @@ test('browser engines synthesize locally with the shared scheduler and degrade t
   assert.match(source, /const LOCAL_ENGINE_IDS = \['kokoro-web', 'piper-web'\]/);
   assert.match(source, /function isLocalEngine\(id\) \{/);
   assert.match(source, /KokoroTTS\.from_pretrained\(config\.modelId/);
-  assert.match(source, /await handle\.api\.predict\(\{ text, voiceId: config\.voiceId \}\)/);
+  // One piper session per read: init() downloads once, every group reuses it.
+  assert.match(source, /const opened = new api\.TtsSession\(\{ voiceId: config\.voiceId \}\);/);
+  assert.match(source, /handle\.session\.predict\(text\)/);
   assert.match(source, /await context\.decodeAudioData\(await blob\.arrayBuffer\(\)\)/);
   assert.match(source, /await playLocalEngine\(engine, messageId, sentences, volume\)/);
   assert.match(source, /localEngineConfig\(settingsValue, engineId\)/);
   assert.match(source, /createWebAudioScheduler\(\{ current, getNextStart: \(\) => nextStart \}\)/);
+});
+
+test('browser engines are pinned, single-threaded, and can be mirrored', () => {
+  // Exact versions: the repo pins every dependency, and a floating major would
+  // drift behind the CDN without touching this repo.
+  assert.match(source, /kokoro-js@1\.2\.1\/\+esm/);
+  assert.match(source, /@mintplex-labs\/piper-tts-web@1\.0\.5\/\+esm/);
+  // No SharedArrayBuffer on harness pages: hold the thread count at 1 for the
+  // window in which an engine sizes its pool (piper reads it in init()).
+  assert.match(source, /Object\.defineProperty\(navigator, 'hardwareConcurrency', \{ configurable: true, get: \(\) => 1 \}\)/);
+  assert.match(source, /delete navigator\.hardwareConcurrency;/);
+  assert.match(source, /withSingleThreadHint\(/);
+  // Model/voice mirror: only HuggingFace hosts are rewritten, only while a
+  // load or synthesis call is in flight.
+  assert.match(source, /const MIRROR_HOSTS = /);
+  assert.match(source, /withResourceMirror\(config\.resourceBase, /);
+  assert.match(source, /if \(mirrorDepth === 0 && unmaskedFetch\) \{/);
 });
 
 test('empty PCM responses cannot be reported as successful playback', () => {
