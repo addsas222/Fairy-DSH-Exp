@@ -109,13 +109,13 @@ function verifyPackage(contract) {
   const outputs = [...new Set([...targets.values()].map((target) => path.resolve(packageDir, target)))];
   const outputMtime = Math.min(...outputs.map((output) => fs.statSync(output).mtimeMs));
   const manifestMtime = fs.statSync(manifestPath).mtimeMs;
-  // Only a package that generates its outputs can have stale ones. Seven of the
+  // Only a package that generates its outputs can have stale ones. Six of the
   // nine are hand-written: their lib files ARE the sources, so "output newer
   // than manifest" could only ever hold by the order files happened to be
   // written - a manifest edit would fail the gate for nothing. The criterion is
   // the build script rather than `sourceRoot` because that is the actual reason
-  // (today the two coincide: only browser-dock and fairy-visual both declare a
-  // src root and generate lib/* from it).
+  // (today the two coincide: browser-dock, fairy-visual and fairy-memory both
+  // declare a src root and generate lib/* from it).
   const buildScript = manifest.scripts?.bundle || manifest.scripts?.build;
   if (typeof buildScript === 'string' && buildScript.length > 0 && manifestMtime > outputMtime + 1) {
     fail(`${manifest.name} manifest is newer than its generated outputs; rebuild and re-verify`);

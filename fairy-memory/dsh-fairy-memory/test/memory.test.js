@@ -313,6 +313,77 @@ test('a failing provider becomes a 502 with the upstream text attached', async (
   assert.match(body.error.message, /quota exceeded/);
 });
 
+test('EvoMap join registers through a fake hub and keeps the secret local', async () => {
+  await withTempDir('fairy-evomap-', async (directory) => {
+    const previous = process.env.EVOMAP_HOME;
+    process.env.EVOMAP_HOME = directory;
+    try {
+      const { joinEvoMap, evoMapStatus, recoverIdentity } = await import('../lib/evomap.js');
+      const calls = [];
+      const hub = async (url, options) => {
+        calls.push({ url, body: JSON.parse(options.body), headers: options.headers });
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              payload: {
+                your_node_id: 'node_fake123',
+                node_secret: 'f'.repeat(64),
+                claim_url: 'https://evomap.ai/claim/fake-token',
+                heartbeat_interval_ms: 60_000,
+              },
+            };
+          },
+        };
+      };
+
+      // No credentials yet: register, store, and hand back the claim URL.
+      const registered = await joinEvoMap({ name: 'Probe Agent', model: 'probe-1', fetchImpl: hub });
+      assert.equal(registered.status, 'registered');
+      assert.equal(registered.nodeId, 'node_fake123');
+      assert.equal(registered.claimUrl, 'https://evomap.ai/claim/fake-token');
+      // The secret never appears in what a caller would print.
+      assert.equal(JSON.stringify(registered).includes('f'.repeat(64)), false);
+      assert.equal(calls[0].url, 'https://evomap.ai/a2a/hello');
+      assert.equal(calls[0].headers.authorization, undefined, 'a first hello carries no credential');
+      assert.equal(calls[0].body.payload.name, 'Probe Agent');
+      assert.equal(calls[0].body.payload.env_fingerprint.platform, process.platform);
+
+      // It lands under EVOMAP_HOME only - never in the user's home.
+      const stored = await recoverIdentity();
+      assert.deepEqual({ found: stored.found, id: stored.id, source: stored.source }, { found: true, id: 'node_fake123', source: 'file' });
+
+      // A second join probes the stored identity instead of registering again.
+      const probedCalls = [];
+      const probed = await joinEvoMap({
+        fetchImpl: async (url, options) => {
+          probedCalls.push({ url, headers: options.headers });
+          return { ok: true, status: 200, async json() { return { payload: { claimed: false, claim_url: 'https://evomap.ai/claim/fake-token' } }; } };
+        },
+      });
+      assert.equal(probed.status, 'claim-required');
+      assert.equal(probedCalls.length, 1, 'a recovered identity is probed, not re-registered');
+      assert.equal(probedCalls[0].headers.authorization, `Bearer ${'f'.repeat(64)}`);
+
+      // An invalid secret is reported as-is: this command never rotates it.
+      const invalid = await joinEvoMap({
+        fetchImpl: async () => ({ ok: false, status: 403, async json() { return { payload: { error: 'node_secret_invalid' } }; } }),
+      });
+      assert.equal(invalid.status, 'invalid-secret');
+      assert.match(invalid.note, /不会自动轮换/);
+
+      const status = await evoMapStatus();
+      assert.equal(status.configured, true);
+      assert.equal(status.nodeId, 'node_fake123');
+      assert.equal(JSON.stringify(status).includes('f'.repeat(64)), false);
+    } finally {
+      if (previous === undefined) delete process.env.EVOMAP_HOME;
+      else process.env.EVOMAP_HOME = previous;
+    }
+  });
+});
+
 test('the agent tools write and read through the same configuration', async () => {
   await withTempDir('fairy-memory-tools-', async (directory) => {
     const settings = { provider: 'local-markdown', providers: { localMarkdown: { directory } } };

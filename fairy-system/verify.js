@@ -112,7 +112,7 @@ function verifyGeneratedArtifactFreshness() {
     [paths.personaPlugin, null],
     [paths.modesPlugin, null],
     [paths.searchPlugin, null],
-    [paths.memoryPlugin, 'src'],
+    [path.join(paths.memoryPlugin, 'src'), 'src'],
   ]);
   const forbiddenClient = new Map([
     [paths.browserDock, [/child_process/, /playwright-profile/, /Google Chrome\.app/]],
