@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createFairyPersonaHandlers, createFairyPersonaService } from '../lib/index.js';
+import { composePersonaText, createFairyPersonaHandlers, createFairyPersonaService } from '../lib/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, 'fixtures');
@@ -16,6 +16,12 @@ const FALLBACK_PREFIX = 'fairy:persona-prefix';
 const PERSONA_ORDER = 0;
 
 const packFile = (...segments) => readFile(join(FIXTURES, ...segments), 'utf8');
+/** The text one pack actually mounts: its document plus the generated tone block. */
+async function composed(personaId) {
+  const prompt = await packFile('home', 'personas', personaId, 'prompt.md');
+  const tone = JSON.parse(await packFile('home', 'personas', personaId, 'tone.json'));
+  return composePersonaText(prompt, tone);
+}
 
 /** The fixture roots hold deliberately broken packs; only persona operations matter here. */
 const personaWarnings = logger => logger.warnings
@@ -84,7 +90,7 @@ test('select mounts the pack document as the deployment persona and announces it
 
   assert.deepEqual(registry.sections.get(PREFIX), {
     order: PERSONA_ORDER,
-    text: await packFile('home', 'personas', 'fairy', 'prompt.md'),
+    text: await composed('fairy'),
   });
   assert.deepEqual(settings.writes, [{ active: 'fairy' }]);
   assert.equal(service.active(), 'fairy');
@@ -146,7 +152,7 @@ test('a host-plane mount falls back to a plugin-owned section name it cannot sha
   assert.deepEqual([...registry.sections.keys()], [PREFIX, FALLBACK_PREFIX]);
   assert.deepEqual(registry.sections.get(FALLBACK_PREFIX), {
     order: PERSONA_ORDER,
-    text: await packFile('home', 'personas', 'fairy', 'prompt.md'),
+    text: await composed('fairy'),
   });
   assert.deepEqual(personaWarnings(logger), ['persona.section.shadow']);
 });
@@ -164,7 +170,14 @@ test('preview serves the prompt head and the tone attributes', async () => {
 
   assert.equal(preview.promptHead.length, 500);
   assert.equal(preview.promptHead, prompt.slice(0, 500));
-  assert.deepEqual(preview.tone, { register: '操作播报', humor: 0.2, address: '主人' });
+  assert.deepEqual(preview.tone, {
+    schema_version: '1.0',
+    registers: { operational: 0.7, narrative: 0.3 },
+    formality: 'formal',
+    humor: { density: 'low', style: 'dry', max_per_turn: 1 },
+    address: { signal: '主人', policy: 'selective', never_in: ['技术成品', '工具参数'] },
+    speech_habits: { openers: ['分析：', '提示：'], banned: ['作为一个 AI'] },
+  });
 });
 
 test('preview reports a pack without tone attributes as tone-less', async () => {
@@ -257,4 +270,43 @@ test('the preview route serves the prompt head over HTTP', async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.promptHead, await packFile('repo', 'persona-packs', 'greet', 'prompt.md'));
+});
+
+test('the mounted persona text carries the tone attributes as constraints', async () => {
+  const { registry, service } = createService();
+
+  await service.select('fairy');
+
+  const text = registry.sections.get(PREFIX).text;
+  const prompt = await packFile('home', 'personas', 'fairy', 'prompt.md');
+  assert.ok(text.startsWith(prompt.replace(/\s*$/, '')), 'the pack document leads the composed text');
+  assert.match(text, /【调色属性（由 tone.json 生成，运行时约束）】/);
+  assert.match(text, /- 语域配比：/);
+  assert.match(text, /- 幽默：/);
+  assert.match(text, /- 称呼/);
+  assert.match(text, /- 禁用表达：/);
+});
+
+test('a pack without tone mounts its document unchanged', async () => {
+  const { registry, service } = createService();
+
+  await service.select('no-voice');
+
+  const text = registry.sections.get(PREFIX).text;
+  assert.doesNotMatch(text, /调色属性/);
+});
+
+test('composePersonaText degrades on absent, empty, or malformed tone', () => {
+  assert.equal(composePersonaText('body', null), 'body');
+  assert.equal(composePersonaText('body', {}), 'body');
+  assert.equal(composePersonaText('body', []), 'body');
+  assert.equal(composePersonaText('body', 'nope'), 'body');
+  const composed = composePersonaText('body\n', { formality: 'formal' });
+  assert.equal(composed, 'body\n\n【调色属性（由 tone.json 生成，运行时约束）】\n- 正式度：formal\n');
+  const percent = composePersonaText('b', { registers: { operational: 0.7, narrative: 0.25 } });
+  assert.match(percent, /- 语域配比：operational 70% \/ narrative 25%/);
+  const muted = composePersonaText('b', { humor: { density: 'none', max_per_turn: 0 }, address: { policy: 'none' } });
+  assert.match(muted, /- 幽默：不使用/);
+  assert.match(muted, /- 称呼：不使用/);
+  assert.doesNotMatch(muted, /none密度/);
 });

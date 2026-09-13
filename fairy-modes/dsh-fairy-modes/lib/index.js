@@ -30,7 +30,14 @@
  */
 
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
-import { FAIRY_MODE_EVENT, FAIRY_MODE_PROJECTION, FAIRY_MODES, normalizeFairyMode } from './contract.js';
+import {
+  FAIRY_MODE_EVENT,
+  FAIRY_MODE_PROJECTION,
+  FAIRY_MODES,
+  codePresentationMode,
+  modeSectionOrder,
+  normalizeFairyMode,
+} from './contract.js';
 import { createSessionRecallTool } from './recall.js';
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-modes');
@@ -197,11 +204,9 @@ export class FairyModeService {
     const section = MODE_SECTIONS[mode];
     const sectionDispose = section === undefined ? null : this.ctx.systemPrompt.section({
       name: section.name,
-      // 51 = one step after the official plan:policy section (order 50 in this
-      // harness cohort): mode guidance reads next to it, above tool guidance.
-      // ponytail: literal order 51; a centrally allocated order name arrives
-      // with the systemPrompt.getSectionOrder API of newer cohorts.
-      order: 51,
+      // One step after the official plan policy (order 50 on 0.1.1, 500 on
+      // 0.1.2+): mode guidance reads next to it, above tool guidance.
+      order: modeSectionOrder(this.ctx.systemPrompt),
       text: section.text,
     });
     let presentation = live?.presentation ?? null;
@@ -210,7 +215,7 @@ export class FairyModeService {
       presentation = null;
     } else if (presentation === null) {
       try {
-        presentation = this.ctx.tools.presentAs('ptc');
+        presentation = this.ctx.tools.presentAs(codePresentationMode(this.ctx.systemPrompt));
       } catch (error) {
         /* A scope that already declared a presentation (a preset row, or
          * another mode instance) owns it; the mode is still recorded, and the

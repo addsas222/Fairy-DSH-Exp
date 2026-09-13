@@ -208,6 +208,68 @@ function normalizeVoice(block) {
   return { provider, config };
 }
 
+/**
+ * Render one tone attribute group as constraint lines, or [] when the pack
+ * declares nothing for it. Values are whatever the pack author wrote; only
+ * shapes that render as readable text are emitted.
+ */
+function toneLines(tone) {
+  const lines = [];
+  const registers = tone.registers;
+  if (registers !== null && typeof registers === 'object') {
+    const parts = Object.entries(registers)
+      .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+      .map(([name, value]) => `${name} ${Math.round(value * 100)}%`);
+    if (parts.length) lines.push(`- 语域配比：${parts.join(' / ')}`);
+  }
+  if (typeof tone.formality === 'string' && tone.formality) lines.push(`- 正式度：${tone.formality}`);
+  const humor = tone.humor;
+  if (humor !== null && typeof humor === 'object') {
+    const density = typeof humor.density === 'string' ? humor.density : '';
+    const maxPerTurn = Number.isInteger(humor.max_per_turn) ? humor.max_per_turn : undefined;
+    if (density === 'none' || maxPerTurn === 0) {
+      lines.push('- 幽默：不使用');
+    } else {
+      const parts = [];
+      if (density) parts.push(`${density}密度`);
+      if (humor.style) parts.push(humor.style);
+      if (maxPerTurn !== undefined) parts.push(`单轮最多 ${maxPerTurn} 处`);
+      if (parts.length) lines.push(`- 幽默：${parts.join(' · ')}`);
+    }
+  }
+  const address = tone.address;
+  if (address !== null && typeof address === 'object') {
+    if (address.signal && address.policy) lines.push(`- 称呼「${address.signal}」：${address.policy}`);
+    else if (address.policy === 'none') lines.push('- 称呼：不使用');
+    else if (address.policy) lines.push(`- 称呼策略：${address.policy}`);
+    if (Array.isArray(address.never_in) && address.never_in.length) {
+      lines.push(`- 称呼禁用场景：${address.never_in.join('、')}`);
+    }
+  }
+  const habits = tone.speech_habits;
+  if (habits !== null && typeof habits === 'object') {
+    if (Array.isArray(habits.openers) && habits.openers.length) lines.push(`- 可用开场：${habits.openers.join('、')}`);
+    if (Array.isArray(habits.banned) && habits.banned.length) lines.push(`- 禁用表达：${habits.banned.join('、')}`);
+  }
+  return lines;
+}
+
+/**
+ * Compose the text one persona pack mounts: the pack document, followed by
+ * the tone attributes rendered as executable constraints. The tone block is
+ * what makes `tone.json` a live part of the persona rather than decoration.
+ *
+ * @param prompt - the pack's prompt document.
+ * @param tone - parsed tone.json, or null when the pack declares none.
+ * @returns the prompt, with a tone block appended when attributes exist.
+ */
+export function composePersonaText(prompt, tone) {
+  if (tone === null || typeof tone !== 'object' || Array.isArray(tone)) return prompt;
+  const lines = toneLines(tone);
+  if (lines.length === 0) return prompt;
+  return `${prompt.replace(/\s*$/, '')}\n\n【调色属性（由 tone.json 生成，运行时约束）】\n${lines.join('\n')}\n`;
+}
+
 /** Read a pack's prompt document and tone attributes. */
 async function loadPackDocument(pack, logger) {
   const prompt = await readFile(pack.promptPath, 'utf8');
@@ -345,7 +407,7 @@ export function createFairyPersonaService(ctx, { roots = defaultScanRoots(), log
 
   async function activate(pack) {
     const document = await loadPackDocument(pack, logger);
-    mount(document.prompt);
+    mount(composePersonaText(document.prompt, document.tone));
     return document;
   }
 

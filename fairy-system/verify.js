@@ -29,6 +29,9 @@ const paths = {
   runtime: path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js'),
   language: path.join(dshRoot, '.agent-presets', 'fairy'),
   audio: path.join(dshRoot, 'fairy-voice'),
+  personaPlugin: path.join(dshRoot, 'fairy-persona', 'dsh-fairy-persona'),
+  modesPlugin: path.join(dshRoot, 'fairy-modes', 'dsh-fairy-modes'),
+  searchPlugin: path.join(dshRoot, 'fairy-search', 'dsh-fairy-search'),
   profile: path.join(dshRoot, 'profiles', 'web'),
 };
 
@@ -38,6 +41,9 @@ const publishedPackages = [
   paths.startupPlugin,
   paths.visualPlugin,
   path.join(paths.audio, 'dsh-fairy-voice'),
+  paths.personaPlugin,
+  paths.modesPlugin,
+  paths.searchPlugin,
 ];
 
 function fail(message) {
@@ -101,6 +107,9 @@ function verifyGeneratedArtifactFreshness() {
     [paths.startupPlugin, null],
     [paths.visualPlugin, path.join(paths.visualPlugin, 'src')],
     [path.join(paths.audio, 'dsh-fairy-voice'), null],
+    [paths.personaPlugin, null],
+    [paths.modesPlugin, null],
+    [paths.searchPlugin, null],
   ]);
   const forbiddenClient = new Map([
     [paths.browserDock, [/child_process/, /playwright-profile/, /Google Chrome\.app/]],
@@ -255,6 +264,7 @@ function verifyStaticContracts() {
   const audioPackage = JSON.parse(read(path.join(paths.audio, 'dsh-fairy-voice', 'package.json')));
   const audioServer = read(path.join(paths.audio, 'dsh-fairy-voice', 'lib', 'index.js'));
   const audioClient = read(path.join(paths.audio, 'dsh-fairy-voice', 'lib', 'client.js'));
+  const audioProviders = read(path.join(paths.audio, 'dsh-fairy-voice', 'lib', 'providers', 'local-sovits.js'));
   const audioLaunchAgent = read(path.join(paths.audio, 'com.origen.fairy-voice-api.plist'));
   const audioStop = read(path.join(paths.audio, 'stop_fairy_voice.sh'));
   const profilePackage = JSON.parse(read(path.join(paths.profile, 'package.json')));
@@ -356,8 +366,9 @@ function verifyStaticContracts() {
     && audioPackage.dependencies?.['micromark-extension-gfm'] === '3.0.0', 'audio Markdown dependencies must remain exactly pinned');
   assert(profilePackage.dependencies?.['dsh-fairy-voice'] === 'link:../../fairy-voice/dsh-fairy-voice', 'web profile must link the local audio package');
   assert(/id:\s*fairy-voice[\s\S]*?name:\s*['"]dsh-fairy-voice['"][\s\S]*?inject:\s*\[clientModules\]/.test(profilePatch), 'audio client module is not registered in the web profile');
-  assert(audioServer.includes('127.0.0.1:9880') && audioServer.includes('/fairy-voice/tts'), 'audio server contract is incomplete');
-  assert(audioServer.includes("import { homedir } from 'node:os'") && audioServer.includes("join(homedir(), '.dsh', 'fairy-voice'"), 'audio reference path must be rooted at the current DSH home');
+  assert(audioServer.includes('/fairy-voice/tts'), 'audio server contract is incomplete');
+  assert(audioProviders.includes('127.0.0.1:9880'), 'audio provider default endpoint is missing from lib/providers/local-sovits.js');
+  assert(audioProviders.includes("join(homedir(), '.dsh', 'fairy-voice'"), 'audio reference path must be rooted at the current DSH home');
   assert(audioClient.includes('conversation.chat.assistant-actions') && audioClient.includes('conversation.input.left'), 'audio client slots are not registered');
   assert(!/dsh-hdd-mode|agent\/pre-step|\.agent-presets/.test(audioServer + audioClient), 'audio module must not own language or visual state');
   assert(fs.existsSync(path.join(paths.audio, 'runtime', 'reference', 'fairy_ref.wav')), 'audio reference file is missing');

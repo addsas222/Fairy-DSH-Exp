@@ -9,7 +9,7 @@ profile 机制挂载（`dsh plugin --profile web add @linxin666/dsh-web-all@late
 | | Fairy-DSH | dsh-web |
 | --- | --- | --- |
 | DSH 固定 | `0.1.1-rc.2`(capability-matrix.json + 官方 runtime SHA-256) | `>=0.1.5-rc.1`(`packages/dsh-web-all/package.json` 的 `dsh.engines.dsh`) |
-| 客户端面孔 | 8 个插件 manifest 注入 `@deepseek-ai/dsh-client-runtime` | 0.1.2+ 队列已删除该面孔，改注入 `dsh-client-ui-renderer` / `dsh-client-store` / `dsh-api-*-controller` |
+| 客户端面孔 | 8 个插件 manifest 注入 `@deepseek-ai/dsh-client-runtime` | 0.1.2+ 队列已删除该面孔（实测:本机安装的 0.1.2-rc.1 `@deepseek-ai/` 下已无 `dsh-client-runtime`,仅 41 个 `dsh-client-*` 新面孔），改注入 `dsh-client-ui-renderer` / `dsh-client-store` / `dsh-api-*-controller` |
 
 两包分居 0.1.2 客户端面孔切换线两侧，**同一 profile 目前不能同时运行**。
 兼容的前置条件是把 Fairy-DSH 的官方运行时固定升级到 ≥ 0.1.5-rc.1，走仓库既有
@@ -49,6 +49,16 @@ dsh plugin --profile web add @linxin666/dsh-web-all@latest
 
 随后按 `fairy-system/BROWSER-EVIDENCE-MATRIX.md` 复核 chip 区、设置卡、
 mascot 舞台与 pet 层的视觉关系。
+
+## 本仓库新插件的暴露面
+
+`fairy-persona` / `fairy-modes` / `fairy-search` 的 `dsh.client.inject` 沿用
+0.1.1 面孔名（与既有 fairy 插件一致）。跨到 ≥0.1.5 时它们与既有插件一起需要
+面孔清单迁移——这是升级验收的一部分，不是本分支可代办的。
+
+另：本分支实测 0.1.1 上 `agent-presets.roots`（配置发现根）不参与 roster
+（用户根 `$DSH_HOME/.agent-presets` 生效），因此部署走用户根暂存；
+0.1.2+ 未验证。
 
 ## 结论
 

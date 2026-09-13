@@ -14,6 +14,9 @@ const packages = [
   ['dsh-fairy-startup', 'fairy-startup'],
   ['dsh-fairy-visual', 'fairy-visual'],
   ['dsh-fairy-voice', 'fairy-voice'],
+  ['dsh-fairy-persona', 'fairy-persona'],
+  ['dsh-fairy-modes', 'fairy-modes'],
+  ['dsh-fairy-search', 'fairy-search'],
 ];
 
 function createFixture() {

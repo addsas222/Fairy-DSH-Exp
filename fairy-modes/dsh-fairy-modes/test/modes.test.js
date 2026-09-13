@@ -22,7 +22,7 @@ function fakeSession(id = 'session-1') {
  * captured registrations, and one `presentAs` scope that behaves like the
  * official one (a second declaration throws).
  */
-function fakeHost({ presentAsConflicts = false } = {}) {
+function fakeHost({ presentAsConflicts = false, getSectionOrder } = {}) {
   const sections = new Map();
   const provided = new Map();
   const calls = { presentAs: [], releases: 0, commands: null, tools: [] };
@@ -77,6 +77,8 @@ function fakeHost({ presentAsConflicts = false } = {}) {
     },
     systemPrompt: {
       sections,
+      // 0.1.1 has no getSectionOrder; 0.1.2+ passes one to select the `ptc` cohort.
+      ...(getSectionOrder === undefined ? {} : { getSectionOrder }),
       section(definition) {
         if (sections.has(definition.name)) throw new Error(`duplicate prompt section ${definition.name}`);
         sections.set(definition.name, definition);
@@ -163,11 +165,12 @@ test('set appends the mode event and the projection folds the latest mode', () =
 test('ptc drives the scoped presentation and the prompt section, and off restores both', () => {
   const { service, agent, sections, calls, presentationOf } = mount();
   assert.equal(service.set(agent, 'ptc'), 'committed');
-  assert.deepEqual(calls.presentAs, ['ptc']);
-  assert.equal(presentationOf(), 'ptc');
+  assert.deepEqual(calls.presentAs, ['code']);
+  assert.equal(presentationOf(), 'code');
   assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
   // 51 = one step after the official plan:policy section (order 50), which is
   // the literal this harness cohort expects; getSectionOrder does not exist here.
+  // 0.1.1 cohort: plan:policy sits at literal order 50, the value is `code`.
   assert.equal(sections.get('fairy:mode-ptc').order, 51);
   assert.match(sections.get('fairy:mode-ptc').text, /run_code/);
 
@@ -211,7 +214,7 @@ test('get() reconciles a mode carried by the session log (resume and fork)', () 
   // A resumed log already holds the mode while the realm holds no effect.
   session.append('fairy/mode', { mode: 'ptc' });
   assert.deepEqual(service.get(agent), { mode: 'ptc' });
-  assert.equal(presentationOf(), 'ptc');
+  assert.equal(presentationOf(), 'code');
   assert.deepEqual([...sections.keys()], ['fairy:mode-ptc']);
   // Re-reading is idempotent.
   const registered = sections.get('fairy:mode-ptc');
@@ -249,4 +252,12 @@ test('/mode parses ptc|create|off and reports usage otherwise', () => {
   assert.deepEqual(service.command(undefined, 'ptc'), {
     kind: 'error', text: '/mode 需要一个会话：当前调用没有 agent。',
   });
+});
+
+test('the 0.1.2+ cohort gets the ptc presentation value and the 501 order', () => {
+  const { service, agent, sections, calls, presentationOf } = mount({ getSectionOrder: (name) => (name === 'PLAN_POLICY' ? 500 : 0) });
+  assert.equal(service.set(agent, 'ptc'), 'committed');
+  assert.deepEqual(calls.presentAs, ['ptc']);
+  assert.equal(presentationOf(), 'ptc');
+  assert.equal(sections.get('fairy:mode-ptc').order, 501);
 });

@@ -41,3 +41,11 @@ jobs:
       - name: Install and test search
         working-directory: fairy-search/dsh-fairy-search
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
+      # Dependency-free self-tests of the create-mode tooling (skill-audit,
+      # scaffold-plugin). The full fairy-system suite stays out of CI until an
+      # ubuntu pass is recorded for its symlink fixtures.
+      - name: Self-test fairy-system tooling
+        working-directory: fairy-system
+        run: |
+          node skill-audit.js --self-test
+          node scaffold-plugin.js --self-test

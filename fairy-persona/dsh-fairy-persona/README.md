@@ -21,6 +21,19 @@ voice:                 # 可选；切换人格时同步给 fairy-voice
 ```
 
 - `persona.yml` 由本包内建的最小 YAML 读取器解析：顶层 `key: value`，加一层缩进块（`voice`），`#` 开头为注释，值一律按字符串处理。列表、锚点、多行标量、行内注释均不支持——包需要的语法超出该子集时，再引入完整 YAML 解析器是升级路径。
+- `tone`（可选）是调色属性 JSON，由本包渲染成追加在人格文档后的运行时约束段
+  （`【调色属性（由 tone.json 生成，运行时约束）】`）。schema：
+
+  | 键 | 形状 | 渲染 |
+  | --- | --- | --- |
+  | `registers` | `{名称: 0..1 数值}` | 语域配比百分比 |
+  | `formality` | 字符串 | 正式度一行 |
+  | `humor` | `{density?, style?, max_per_turn?}` | 幽默一行（密度/风格/单轮上限） |
+  | `address` | `{signal?, policy?, never_in?[]}` | 称呼策略与禁用场景 |
+  | `speech_habits` | `{openers?[], banned?[]}` | 可用开场与禁用表达 |
+
+  未声明或形状不符的组静默跳过；`tone` 缺失、空对象或解析失败时人格文本保持原样。
+  TTS 速率/音高映射不在本 schema 内，属升级路径。
 - `voice` 块中除 `provider` 外的键整体作为 `config` 透传，persona 不解释任何 provider 私有键，也不 import voice 的 schema。
 - 扫描根：`$DSH_HOME/personas/`（缺省 `~/.dsh/personas/`）与仓库 `persona-packs/`（仓库根取 `DSH_FAIRY_REPO_ROOT`，缺省为包目录向上三级）。先扫到的同名 id 胜出，因此用户包覆盖内置包。
 - 坏包（`persona.yml` 读不到/解析失败、id 非法、`prompt` 缺失或指向包目录之外）只写 `diagnostics.warn` 并跳过，绝不影响其他包或插件加载；目录里没有 `persona.yml` 视为「不是包」，静默跳过。

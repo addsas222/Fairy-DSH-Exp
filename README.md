@@ -53,7 +53,9 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 ## 第三方依赖
 
-第三方包只通过 manifest/lockfile 引用，不复制其源码。许可证和来源在
+第三方包只通过 manifest/lockfile 引用，不复制其源码；唯一例外是
+`.agent-presets/ponytail/skills/` —— 该目录是 MIT 授权的 ponytail 技能文本
+（来源与许可见 `THIRD_PARTY_NOTICES.md`）。许可证与来源在
 `THIRD_PARTY_NOTICES.md` 中维护。
 
 ## 许可边界

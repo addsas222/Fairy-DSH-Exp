@@ -238,6 +238,9 @@ function createDefaultConfig(overrides = {}) {
     { name: 'dsh-fairy-startup', directory: path.join(dshHome, 'fairy-startup', 'dsh-fairy-startup'), sourceRoot: null },
     { name: 'dsh-fairy-voice', directory: path.join(dshHome, 'fairy-voice', 'dsh-fairy-voice'), sourceRoot: null },
     { name: 'dsh-fairy-visual', directory: path.join(dshHome, 'fairy-visual', 'dsh-fairy-visual'), sourceRoot: 'src' },
+    { name: 'dsh-fairy-persona', directory: path.join(dshHome, 'fairy-persona', 'dsh-fairy-persona'), sourceRoot: null },
+    { name: 'dsh-fairy-modes', directory: path.join(dshHome, 'fairy-modes', 'dsh-fairy-modes'), sourceRoot: null },
+    { name: 'dsh-fairy-search', directory: path.join(dshHome, 'fairy-search', 'dsh-fairy-search'), sourceRoot: null },
   ];
   return {
     dshHome,

@@ -14,12 +14,13 @@
   config:
     defaultPreset: danger-full-access
 
-# 人格文本由 dsh-fairy-persona 的人格包接管:清空部署默认 persona,避免与
-# 人格包的 fairy:persona-prefix 段同时渲染(同序不同层会叠加而非替换)。
-# 该行的 config 是整体替换,web-app bundle 此行原本只设这两个键,其余键
-# 维持 schema 默认,无漂移。
+# 人格文本由 dsh-fairy-persona 的人格包接管。patch 是整段 config 替换:该行
+# 原本的部署人格键被替换掉,这里把三个 cohort 的键都显式置空——
+# `persona` 是 0.1.1/0.1.2 的单段键,`personaPrefix`/`personaSuffix` 是 0.1.5+
+# 的前后缀键;各 cohort 会忽略不认识的键(0.1.1 已验证容忍)。
 - id: system-prompt
   config:
+    persona: ''
     personaPrefix: ''
     personaSuffix: ''
 

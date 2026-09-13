@@ -8,10 +8,10 @@
 
 | 对象 | 问题 | 处置 |
 | --- | --- | --- |
-| `.agent-presets/fairy/agent.cordis.yml` | 引用不存在的 `runtime/index.js`、`runtime/fairy_core.py`、`runtime/safety-gate.js`（私有运行时未随仓库发布）,preset 按发布态无法挂载 | 新 preset `ponytail` 不含悬空引用；fairy preset 原样保留给私有部署 |
+| `.agent-presets/fairy/agent.cordis.yml` | 依赖私有 runtime 行(`runtime/*`,在 .gitignore 内,发布树缺失);且行名是 `!!js` 表达式 → discovery 判 broken、picker 不可选。persona 行本身用的是本 cohort 的 `config.text`(0.1.1 合法;0.1.5 改为 prefix/suffix) | 公开入口为 `ponytail` preset;fairy preset 属私有部署资产,迁移到新 cohort 需改写 runtime 行与 persona 键 |
 | `fairy-startup` | host apply 为空操作,但 lib/client.js 承担真实启动动作(sessions.clear / workspaces.startSession,verify.js:349 钉死)且验证链全量引用 | 保持完整挂载;不是简化对象 |
 | `fairy-voice` | TTS 硬编码单一本地 GPT-SoVITS(127.0.0.1:9880)；音色与人格无绑定 | 抽象 provider 注册表；人格包绑定音色 |
-| 人格资产 | 单一人格，语料 JSON 与 prompt 静态耦合 | 人格包（pack）目录化，可切换 |
+| 人格资产 | 单一人格,语料 JSON 与 prompt 静态耦合 | 人格包(pack)目录化,可切换;tone 属性渲染进人格文本 |
 | 模式 | 无模式概念；官方 plan/ptc 分散 | 统一三模式引擎 + 主会话显示 |
 | 搜索 | `tool-web` 已在 preset 但 `fetch:false`;provider 固定 deepseek-official，无控制界面 | `fetch:true`;search-hub 元 provider + 设置卡 |
 
@@ -36,7 +36,8 @@
 persona-packs/fairy/                内置人格包(从 .agent-presets/fairy 提炼)
   persona.yml                       id/name/promptFile/tone/voice 绑定
   prompt.md                         人格文档(原 persona text)
-  tone.json                         调色属性(语域/幽默密度/称呼策略)
+  tone.json                         调色属性(语域/幽默密度/称呼策略);由引擎渲染成
+                                    追加在人格文档后的运行时约束段
 fairy-persona/dsh-fairy-persona/    新人格引擎插件(双面孔)
 fairy-modes/dsh-fairy-modes/        新模式引擎插件(双面孔)
 fairy-search/dsh-fairy-search/      新搜索枢纽插件(双面孔)
@@ -139,7 +140,13 @@ interface TtsProvider {
 4. **0.1.1 的 section 契约是字面 order**。无 `systemPrompt.getSectionOrder`:
    官方 plan:policy = 50 → 模式段用 51;人格段是单一 `deployment:persona`
    (order 0),同名跨层注册会抛错(system-prompt 拒绝),故人格引擎保留
-   `fairy:persona-prefix` 回退名 —— 这也是运行时可用的实际路径。
+   `fairy:persona-prefix` 回退名 —— 这也是运行时可用的实际路径。profile 的
+   system-prompt 行是**整段 config 替换**,部署人格键被替换后为空,因此模型
+   只看到人格包文本,不存在旧人格与包文本叠加。
+4b. **工具呈现取值随 cohort 改名**。0.1.1 的 tools 模式联合是
+   `native|code|both`(code-only 指令要求恰为 `code`),0.1.2+ 改为
+   `native|ptc|both`。fairy-modes 以 `getSectionOrder` 是否存在做代际探测
+   (存在→`ptc`+501;缺失→`code`+51),两代各有单测。
 5. **不依赖 harness 子包做独立安装**。`@deepseek-ai/dsh-tools` 在插件自有
    node_modules 中会解析出漂移的 peer 集合(如 dsh-llm 缺 `CallId`、dsh-session
    缺 `isJsonValue`),加载即崩;`session_recall` 因此改为手写原生

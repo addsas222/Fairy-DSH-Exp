@@ -16,6 +16,9 @@ const LOCAL_PACKAGES = [
   ['dsh-fairy-startup', 'fairy-startup', 'dsh-fairy-startup'],
   ['dsh-fairy-visual', 'fairy-visual', 'dsh-fairy-visual'],
   ['dsh-fairy-voice', 'fairy-voice', 'dsh-fairy-voice'],
+  ['dsh-fairy-persona', 'fairy-persona', 'dsh-fairy-persona'],
+  ['dsh-fairy-modes', 'fairy-modes', 'dsh-fairy-modes'],
+  ['dsh-fairy-search', 'fairy-search', 'dsh-fairy-search'],
 ];
 const DEFAULT_PROFILE = path.join(os.homedir(), '.dsh', 'profiles', 'web');
 const DEFAULT_RUNTIME = path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js');
@@ -241,6 +244,11 @@ function verifyProfileContracts(profileRoot, packages, matrix) {
   const positions = ['balance-meter', 'fairy-startup', 'fairy-voice', 'fairy-visual'].map((id) => patch.indexOf(`id: ${id}`));
   assert(positions.every((position) => position >= 0), 'profile inject declarations are incomplete');
   assert(positions.every((position, index) => index === 0 || position > positions[index - 1]), 'profile inject order drifted');
+
+  // The three Ponytail-era packages must stay wired into the web profile.
+  for (const id of ['fairy-persona', 'fairy-modes-bridge', 'fairy-search']) {
+    assert(patch.includes(`id: ${id}`), `profile inject declaration is missing: ${id}`);
+  }
 
   const balance = packages.find((item) => item.name === 'dsh-balance-meter');
   const startup = packages.find((item) => item.name === 'dsh-fairy-startup');
