@@ -107,4 +107,4 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 pnpm install --ignore-scripts && pnpm test
 ```
 
-`test/modes.test.js`（事件与投影折叠、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）。
+`test/modes.test.js`（事件与投影折叠、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）、`test/pipeline.test.js`（站点映射与环、`mode_pipeline` 四个动作、plan 闸门的解析/排队/降级三态、被挡住时不切站且不误报目标站、`advanced` 只认 committed/queued）、`test/client-contract.test.js`（chip 与设置卡契约：模式清单与术语、新会话默认值持久化、会话归属、极简走官方 `/plan`）。

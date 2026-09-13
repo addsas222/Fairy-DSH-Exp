@@ -199,6 +199,9 @@ curl -s -X POST -H 'content-type: application/json' \
 
 ## 6. 排障
 
+- **实机看到旧行为**：`$DSH_HOME` 下是各包的**一份副本**，改完包必须重新落位
+  （`scripts/deploy-live.sh`，或至少同步该包目录）再起服务，否则验证到的是旧代码。
+  客户端 bundle 按请求 + rev 现场读取，文件一换 rev 就变，无需重启服务。
 - **行尾**：`.gitattributes` 固定 `eol=lf`，`profiles/web/patches/*.patch` 另标
   `-text`（其哈希是被 pin 的字节）。若见"源码文本断言"型失败，把命中文件按索引
   字节落盘再重跑（`git checkout` 会跳过 stat 未变的文件，且会丢弃未提交改动）：
