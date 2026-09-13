@@ -72,6 +72,7 @@ git clone https://github.com/Chengzhibense/Fairy-DSH.git fairy-dsh && cd fairy-d
 | 开关 | 用途 |
 | --- | --- |
 | `--from-worktree` | 用当前工作树部署（含未提交改动）；开发回路常用 |
+| `--evomap` | 强制在非默认 `--home` 上执行第 4 步（默认只对真实部署执行，见下） |
 | `--skip-evomap` | 跳过 EvoMap 接入。**无人值守/CI 一律带上**（该步会向外网注册并产生本机凭据） |
 | `--skip-install` | 只落文件不装依赖（离线排障） |
 | `--no-verify` / `--dry-run` | 跳过契约检查 / 只打印将执行的命令 |
@@ -122,6 +123,10 @@ dsh --profile web --no-open
 做探测，不重复注册）；**失败不阻断**（离线只提示）。心跳（stay online）与任务
 操作需各自的明确授权，不在部署内。
 
+**默认规则（防止在沙箱里顺手注册真节点）**：`--home` 指向**默认** `$DSH_HOME` 时
+执行第 4 步，失败不阻断；`--home` 指向**别处**（探针/沙箱）时**自动跳过**并提示——确实要
+在那里注册就加 `--evomap`，只想看命令形态用 `--dry-run`。
+
 ### 2.3 本地快速回路（原地用仓库，不落 live 布局）
 
 ```sh
@@ -130,7 +135,7 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 该脚本：暂存预设到隔离 home → 逐包测试 → profile 依赖安装 → 启动冒烟（要求
 `dsh` 在 PATH）。它不向系统写东西，`.dsh-test-home/` 已在 `.gitignore` 内。
-只想起服务时，手动等价见脚本内注释或 `git show HEAD:AGENTS.md`。
+只想起服务时，手动等价见 §2.2（那条循环就是脚本逐步做的事）。
 
 ## 3. 部署后验证
 
