@@ -177,7 +177,7 @@ ctx.emit('fairy-persona/change', { packId, voice: { provider, config } })
 
 | 引擎 | 形态（已核实） | 缺什么 / 接入路线 |
 | --- | --- | --- |
-| **Pocket TTS**（kyutai-labs/pocket-tts，100M，MIT） | 自带本地服务：`pocket-tts serve` → `http://localhost:8000`，社区集成报告为 `POST /tts`（`text=…` 表单） | 该端点来自第三方集成报告而非上游文档；确认后按 `local-sovits` 同形的宿主 provider 接入（声纹/音色目录字段一并确认） |
+| **Pocket TTS**（kyutai-labs/pocket-tts，100M，MIT） | 自带本地服务：`uvx pocket-tts serve` → `http://localhost:8000`（FastAPI）。**契约已从已发布 wheel 的 `pocket_tts/main.py` 取证**：`POST /tts`，表单字段 `text`（必填）、`voice_url`（内置音色名如 `alba`/`marius`，或 `http(s)://…`/`hf://…`）、`voice_wav`（上传音色文件，与 `voice_url` 互斥），返回 `StreamingResponse` 音频字节；两个 voice 字段同时给或 `voice_url` 协议不对 → 400。内置音色清单在 `pocket_tts/utils/utils.py`（alba/marius/javert/jean/anna/vera/fantine/charles/paul/eponine/azelma/george/mary/jane/michael/eve/bill_boerst/peter_yearsley/stuart_bell/caro_davy/estelle/lola/giovanni 等） | **只差写适配器**：按 `local-sovits` 同形的宿主 provider（baseURL + 有界探测 + `POST /tts` 取音频字节流），字段 `baseUrl`/`voice`/（可选）`resourceBase` 无关；`voice` 留空即用服务端 `--default-voice` |
 | **MOSS-TTS-Nano**（OpenMOSS，0.1B，多语种，CPU/ONNX） | 官方 PyTorch + 社区 ONNX 导出（HF `Supbatomic/…`、ModelScope `MOSS-Audio-Tokenizer-ONNX`），"runs directly on ONNX Runtime CPU" | 是"文本→token→声学→声码"多段流水线，不是 transformers.js 的单个 `pipeline()`；需要一个确定的 HTTP 服务（自建或官方 demo 的稳定端点）才能接成宿主 provider |
 | **LuxTTS**（ysharma3501/LuxTTS，zipvoice 系，150× 实时） | 官方称 "API-ready"、有 HF Space；本地服务形态未见上游文档 | 同 Pocket TTS：需要确切的 HTTP 形态；或等其 ONNX/JS 导出后按 `kitten-web` 同形接成浏览器内引擎 |
 
