@@ -60,7 +60,10 @@ test('keeps frames private and controls same-origin', () => {
 });
 
 test('pushes state-file changes and falls back to an 800ms poll', () => {
-  assert.match(host, /watch\(RUNTIME_DIR/);
+  // The watched directory must be the resolved long form: a short (8.3) path
+  // component makes libuv assert and abort the host process on Windows.
+  assert.match(host, /watch\(canonicalDir\(RUNTIME_DIR\)/);
+  assert.match(host, /realpathSync\.native\(dir\)/);
   assert.match(host, /String\(filename \|\| ''\) === 'state\.json'/);
   assert.match(host, /event: state\\ndata: changed/);
   assert.match(host, /path: '\/browser-dock\/events'/);

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
@@ -20,6 +20,22 @@ function json(res, status, value) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.end(JSON.stringify(value));
+}
+
+/**
+ * libuv asserts that the directory it was handed and the names Windows reports
+ * share a prefix (`fs-event.c`, `!_wcsnicmp(filename, dir, dirlen)`). A short
+ * (8.3) path component - `C:\Users\ADMINI~1\...`, `RUNNER~1` on CI - breaks that
+ * assumption and the assertion aborts the whole host process, so the watcher
+ * always gets the resolved long form.
+ */
+function canonicalDir(dir) {
+  try {
+    return realpathSync.native(dir);
+  } catch (error) {
+    diagnostics.warn('runtime.canonical', { dir }, error);
+    return dir;
+  }
 }
 
 function readState() {
@@ -122,7 +138,7 @@ export function apply(ctx) {
     try {
       // The proxy publishes with atomic rename, so watch the stable directory
       // instead of the replaceable state.json inode.
-      stateWatcher = watch(RUNTIME_DIR, (event, filename) => {
+      stateWatcher = watch(canonicalDir(RUNTIME_DIR), (event, filename) => {
         if ((event === 'change' || event === 'rename') && String(filename || '') === 'state.json') notifyClients();
       });
       watcherAvailable = true;
