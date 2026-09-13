@@ -40,6 +40,15 @@ window.__ModuleLoader__.load({
     const VOICE_BRIEF_THRESHOLD = 260;
     /** Live brief threshold: the settings card owns it, playback reads it. */
     const briefThreshold = { value: VOICE_BRIEF_THRESHOLD };
+
+    /** One reader for the settings card and the runtime gate alike. `Number(null)`
+     * is 0, which used to make a fresh install brief every answer while the card
+     * showed the default; an explicitly stored 0 still means "brief always". */
+    function readStoredBriefThreshold() {
+      const raw = localStorage.getItem(SETTINGS_BRIEF_THRESHOLD);
+      const stored = Number(raw);
+      return raw !== null && Number.isFinite(stored) && stored >= 0 ? stored : VOICE_BRIEF_THRESHOLD;
+    }
     const AVAILABILITY_TTL_MS = 30_000;
     const VOICE_STYLE_ID = 'dsh-fairy-voice-controls-style';
     const BROWSER_SPEECH_RATE = 1.0;
@@ -173,6 +182,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         },
         clear(expected) {
           if (expected && snapshot !== expected) return;
+          if (snapshot === emptyVoiceTimeline) return;
           snapshot = emptyVoiceTimeline;
           listeners.forEach((listener) => listener());
         },
@@ -933,6 +943,19 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       (document.head || document.documentElement).appendChild(style);
     }
 
+    /** True when `text` holds at least `limit` code points. Materialising the
+     * array for a long answer costs far more than the check is worth, and the
+     * UTF-16 length already rejects anything short. */
+    function reachesCodePointCount(text, limit) {
+      if (text.length < limit) return false;
+      let count = 0;
+      for (const _character of text) {
+        count += 1;
+        if (count >= limit) return true;
+      }
+      return false;
+    }
+
     function messageText(finalNode) {
       return (finalNode?.blocks || []).filter((block) => block.kind === 'text').map((block) => block.text).join('\n').trim();
     }
@@ -965,7 +988,14 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         // their retained root call. The authoritative live list is merged
         // below from legacy.runningCalls.
       }
-      const userSeq = (snapshot?.chat?.legacy?.nodes || []).filter((node) => node.kind === 'user' || node.kind === 'steering').at(-1)?.seq || 0;
+      // Walking backwards beats filter().at(-1): this runs on every store
+      // update, over every message of the session.
+      const legacyNodes = snapshot?.chat?.legacy?.nodes || [];
+      let userSeq = 0;
+      for (let index = legacyNodes.length - 1; index >= 0; index -= 1) {
+        const node = legacyNodes[index];
+        if (node?.kind === 'user' || node?.kind === 'steering') { userSeq = node.seq || 0; break; }
+      }
       // An assistant-step finalNode is the final message for that step, not
       // necessarily the final answer for the whole turn. The official
       // turn-tail projection is the authoritative whole-turn boundary: it is
@@ -1196,10 +1226,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     function VoiceBrainSection() {
-      const [threshold, setThreshold] = React.useState(() => {
-        const stored = Number(localStorage.getItem(SETTINGS_BRIEF_THRESHOLD));
-        return Number.isFinite(stored) && stored > 0 ? stored : VOICE_BRIEF_THRESHOLD;
-      });
+      const [threshold, setThreshold] = React.useState(readStoredBriefThreshold);
       const changeThreshold = (raw) => {
         const next = Math.max(0, Math.min(5000, Math.round(Number(raw) || 0)));
         setThreshold(next);
@@ -2059,6 +2086,8 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const inputRef = React.useRef(liveInput);
       inputRef.current = liveInput;
       const speechRef = React.useRef(null);
+      const speechStarting = React.useRef(false);
+      const speechCancelRequested = React.useRef(false);
       const [speech, setSpeech] = React.useState({ status: 'idle', error: null });
       const finishSpeech = React.useCallback(async () => {
         const active = speechRef.current;
@@ -2075,6 +2104,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         }
       }, [cordisCtx, inputActions]);
       const startSpeech = React.useCallback(async () => {
+        // Starting happens over two awaits; without this gate a second press
+        // created a second capture session and the first one leaked with the
+        // microphone still open.
+        if (speechStarting.current) { speechCancelRequested.current = true; return; }
+        speechStarting.current = true;
+        speechCancelRequested.current = false;
         setSpeech({ status: 'listening', error: null });
         try {
           const sttSettings = await localTtsTransport.sttConfig();
@@ -2085,18 +2120,27 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             : provider === 'whisper-web'
               ? await startLocalWhisperSpeech(sttSettings)
               : await startRecordedSpeech(lang);
+          if (speechCancelRequested.current) { session.cancel?.(); setSpeech({ status: 'idle', error: null }); return; }
           speechRef.current = { ...session, provider };
           setSpeech({ status: 'listening', error: null, provider });
         } catch (speechError) {
           speechRef.current = null;
           setSpeech({ status: 'idle', error: speechError?.message || '无法启动语音输入。' });
+        } finally {
+          speechStarting.current = false;
         }
       }, []);
       const toggleSpeech = React.useCallback(() => {
         if (speechRef.current) { void finishSpeech(); return; }
         void startSpeech();
       }, [finishSpeech, startSpeech]);
-      React.useEffect(() => () => { speechRef.current?.cancel?.(); speechRef.current = null; }, []);
+      React.useEffect(() => () => {
+        // Also covers a start that is still awaiting: it sees the flag and
+        // cancels the session it was about to publish.
+        speechCancelRequested.current = true;
+        speechRef.current?.cancel?.();
+        speechRef.current = null;
+      }, []);
       const [audioReady, setAudioReady] = React.useState(false);
       const [baselineReady, setBaselineReady] = React.useState(false);
       const availability = React.useSyncExternalStore(availabilityStore.subscribe, availabilityStore.getSnapshot, availabilityStore.getSnapshot);
@@ -2106,6 +2150,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const seen = React.useRef(new Set());
       const autoReadRef = React.useRef(autoRead);
       autoReadRef.current = autoRead;
+      // The play listener owns request lifetime; volume only affects gain. Keeping
+      // it in that effect's dependencies tore the effect down mid-answer - the
+      // cleanup aborts the shared controller, so dragging the slider cut speech off.
+      const volumeRef = React.useRef(volume);
+      volumeRef.current = volume;
       const audioUnlocked = React.useRef(false);
       const prepareController = React.useRef(null);
       const prepareScope = React.useRef(null);
@@ -2302,7 +2351,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             // Acquire browser playback permission, then suspend while text and
             // optional briefing are prepared. play() resumes immediately before
             // scheduling PCM, so preparation never holds an idle render thread.
-            await primeAudio(volume);
+            await primeAudio(volumeRef.current);
             if (!isCurrentRequest()) return;
             audioUnlocked.current = true;
             setAudioReady(true);
@@ -2310,7 +2359,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             // Only final, visibly long answers are sent to the optional cloud
             // brief endpoint. Process reports, reasoning, tools, and short
             // replies always remain local.
-            if (kind === 'final' && Array.from(String(markdown || '')).length >= briefThreshold.value) {
+            if (kind === 'final' && reachesCodePointCount(String(markdown || ''), briefThreshold.value)) {
               // Resolve the status race on cold start. The normal status
               // effect usually completes first; this bounded wait makes the
               // long-answer path deterministic without delaying short speech.
@@ -2326,7 +2375,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
                 }
               }
             }
-            if (kind === 'final' && voiceBrainConfigured.current && Array.from(String(markdown || '')).length >= briefThreshold.value) {
+            if (kind === 'final' && voiceBrainConfigured.current && reachesCodePointCount(String(markdown || ''), briefThreshold.value)) {
               dispatchVoiceState({ status: 'briefing', messageId, error: null, sessionKey });
               try {
                 const brief = await createVoiceBrief(markdown, controller.signal);
@@ -2347,15 +2396,15 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
               return;
             }
             const played = engine === 'system'
-              ? await playSystem(messageId, sentences, volume)
+              ? await playSystem(messageId, sentences, volumeRef.current)
               : isLocalEngine(engine)
-                ? await playLocalEngine(engine, messageId, sentences, volume)
-                : await play(messageId, sentences, volume);
+                ? await playLocalEngine(engine, messageId, sentences, volumeRef.current)
+                : await play(messageId, sentences, volumeRef.current);
             if (played === 'client-side') {
               // This provider has no host-side engine; the browser must speak.
               // Publish the switch so the next answer skips the round trip.
               publishAvailability({ available: true, provider: 'browser' });
-              const fallback = await playSystem(messageId, sentences, volume);
+              const fallback = await playSystem(messageId, sentences, volumeRef.current);
               if (fallback === true) return;
             }
             if (played !== true) retryAutomatic();
@@ -2382,7 +2431,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         };
         window.addEventListener(EVENT_PLAY, onPlay);
         return () => { pendingStatus.current = null; prepareScope.current?.cancel('effect-cleanup'); prepareScope.current = null; prepareController.current = null; for (const timer of autoRetryTimers.current.values()) clearTimeout(timer); autoRetryTimers.current.clear(); window.removeEventListener(EVENT_PLAY, onPlay); };
-      }, [activeSessions, cancelPlayback, drainPendingStatus, engine, play, playLocalEngine, playSystem, primeAudio, sessionKey, volume]);
+      }, [activeSessions, cancelPlayback, drainPendingStatus, engine, play, playLocalEngine, playSystem, primeAudio, sessionKey]);
       React.useEffect(() => {
         const onState = (event) => {
           const detail = event.detail || {};
@@ -2620,8 +2669,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return diagnostics.guard('apply', () => {
       ensureVoiceControlStyles();
       voiceClientCtx = ctx;
-      const storedThreshold = Number(localStorage.getItem(SETTINGS_BRIEF_THRESHOLD));
-      briefThreshold.value = Number.isFinite(storedThreshold) && storedThreshold >= 0 ? storedThreshold : VOICE_BRIEF_THRESHOLD;
+      briefThreshold.value = readStoredBriefThreshold();
       const activeSessions = createActiveSessionStore(ctx.sessions);
       activeSessionStore = activeSessions;
       ctx.effect(() => () => {

@@ -4,6 +4,9 @@ import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { gfm } from 'micromark-extension-gfm';
 import { createFairyVoiceHandlers, markdownToSpeechText, normalizeSpeechText, splitSpeechSentences, writePrivateJson } from '../lib/index.js';
 
 function requestWithJson(value) {
@@ -32,6 +35,28 @@ function jsonResponse(value, ok = true) {
     ok,
     async json() { return value; },
   };
+}
+
+function capturingResponse() {
+  const response = responseDouble();
+  response.payload = null;
+  response.end = (body) => { response.payload = body === undefined ? null : String(body); response.writableEnded = true; };
+  return response;
+}
+
+/** The shipped speech-text pipeline with a counting markdown parser. */
+async function loadingSpeechTextModule() {
+  const source = (await readFile(new URL('../lib/index.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const start = source.indexOf('const SPEECH_BLOCKS');
+  const end = source.indexOf('function sendJson(res, status, value)');
+  assert.ok(start >= 0 && end > start, 'speech text pipeline is missing');
+  const module = { exports: {} };
+  const parses = { count: 0 };
+  const countingFromMarkdown = (...args) => { parses.count += 1; return fromMarkdown(...args); };
+  new Function('module', 'exports', 'fromMarkdown', 'gfm', 'gfmFromMarkdown', 'normalizeSpeechText',
+    `${source.slice(start, end).replace(/^export /gm, '')}\nmodule.exports = { markdownToSpeechText, speechTextFromMarkdownAst };`,
+  )(module, module.exports, countingFromMarkdown, gfm, gfmFromMarkdown, normalizeSpeechText);
+  return { ...module.exports, parses };
 }
 
 test('markdown speech extraction removes code and image content', () => {
@@ -265,6 +290,71 @@ test('voice brain status never exposes the API key', async () => {
   await handlers.voiceBrainStatus({}, response);
   assert.equal(payload.includes('sk-secret'), false);
   assert.deepEqual(JSON.parse(payload), { configured: true, model: 'deepseek-v4-flash' });
+});
+
+test('plain prose skips the markdown parser without changing the speech text', async () => {
+  const { markdownToSpeechText: pipeline, speechTextFromMarkdownAst, parses } = await loadingSpeechTextModule();
+  const astOnly = (markdown) => normalizeSpeechText(speechTextFromMarkdownAst(String(markdown || '')));
+  const samples = [
+    '第一段没有标记，包含数字 12.5 与单位 300 ms。\n第二行仍在同一段。\n\n第二段：AI / GPU，范围 10-20。',
+    '单行纯文本',
+    '带空格的段落  \n硬换行\n\n结束。',
+    '段落没有终止符\n\n下一段。',
+    '   缩进代码块',
+    '实体 &amp; 与 &lt;tag&gt;',
+    '数学 a < b 与 x > y',
+    'issue #12 与 @user',
+    '---',
+    '- - -',
+    '***',
+    'a--b 与 3-4 与 --flag',
+    '# 标题\n\n正文',
+    '- 列表项\n- 第二项',
+    '1. 有序\n2. 列表',
+    '| a | b |\n| - | - |',
+    '> 引用',
+    '```js\ncode();\n```',
+    '行内 `code` 文本',
+    '[链接](https://example.com)',
+    '**加粗** 与 _下划线_',
+    '~~删除~~',
+    '段落\n====\n',
+    '<div>html</div>',
+    '脚注[^1]',
+    '',
+  ];
+  for (const sample of samples) {
+    assert.equal(pipeline(sample), astOnly(sample), `speech text drifted for ${JSON.stringify(sample.slice(0, 40))}`);
+  }
+  // The shortcut has to be real, not just equivalent: prose must not reach the
+  // parser, and anything markdown-shaped must.
+  parses.count = 0;
+  pipeline('纯文本没有控制符。\n\n第二段。');
+  assert.equal(parses.count, 0);
+  pipeline('# 标题');
+  assert.equal(parses.count, 1);
+});
+
+test('sentence splitting accepts already-normalized text', () => {
+  const prepared = markdownToSpeechText('结论 **已完成**。\n\n第二段包含 3.14 与 API 与 2024-05-06。');
+  // Idempotence is what makes the shortcut safe, so assert it directly.
+  assert.equal(normalizeSpeechText(prepared), prepared);
+  assert.deepEqual(splitSpeechSentences(prepared, { normalized: true }), splitSpeechSentences(prepared));
+});
+
+test('an oversized text body is reported as a client error', async () => {
+  const handlers = createFairyVoiceHandlers();
+  const ttsResponse = capturingResponse();
+  await handlers.tts(requestWithJson({ text: 'x'.repeat(25_000) }), ttsResponse);
+  // The cap is enforced while reading the body, before any provider runs:
+  // calling that a local service failure would hide the caller's mistake.
+  assert.equal(ttsResponse.statusCode, 400);
+  assert.deepEqual(JSON.parse(ttsResponse.payload), { error: { code: 'text-too-large', message: 'Text must not exceed 500 characters.' } });
+
+  const briefResponse = capturingResponse();
+  await handlers.voiceBrief(requestWithJson({ markdown: 'x'.repeat(150_000) }), briefResponse);
+  assert.equal(briefResponse.statusCode, 400);
+  assert.deepEqual(JSON.parse(briefResponse.payload), { error: { code: 'voice-brief-input-too-large', message: '最终回答过长，已使用原文朗读。' } });
 });
 
 test('server handlers use explicit speech, provider, and transport boundaries', async () => {

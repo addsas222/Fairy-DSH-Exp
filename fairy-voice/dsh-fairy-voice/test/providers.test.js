@@ -430,6 +430,47 @@ test('the /tts route answers 409 for a browser engine provider too', async () =>
   assert.deepEqual(JSON.parse(response.payload), { error: { code: 'client-side', message: '浏览器端朗读' } });
 });
 
+test('elevenlabs-ws settles when the socket never opens', async () => {
+  // A refused connection used to leave the open promise pending forever: the
+  // request hung, its controller stayed registered, and even abort could not
+  // release it. Every path must settle, so race each one against a timer.
+  class DeadSocket {
+    constructor() {
+      this.onopen = null; this.onmessage = null; this.onerror = null; this.onclose = null;
+      setTimeout(() => { if (this.onerror) this.onerror(new Error('ECONNREFUSED')); }, 5);
+    }
+    send() {}
+    close() { if (this.onclose) this.onclose({}); }
+  }
+  const provider = createElevenLabsWsProvider({ WebSocketImpl: DeadSocket });
+  const outcome = await Promise.race([
+    provider.stream('hi', { apiKey: 'k'.repeat(20) }, {}).then(() => 'resolved', (error) => error.code),
+    new Promise((resolve) => setTimeout(() => resolve('pending'), 1_000)),
+  ]);
+  assert.equal(outcome, 'provider-unavailable');
+
+  // Aborting while the socket is still connecting must settle too.
+  class HangingSocket {
+    constructor() { this.onopen = null; this.onmessage = null; this.onerror = null; this.onclose = null; }
+    send() {}
+    close() { if (this.onclose) this.onclose({}); }
+  }
+  const hanging = createElevenLabsWsProvider({ WebSocketImpl: HangingSocket });
+  const controller = new AbortController();
+  const aborted = hanging.stream('hi', { apiKey: 'k'.repeat(20) }, { signal: controller.signal });
+  abortSoon(controller);
+  const abortOutcome = await Promise.race([
+    aborted.then(() => 'resolved', (error) => error.code),
+    new Promise((resolve) => setTimeout(() => resolve('pending'), 1_000)),
+  ]);
+  assert.equal(abortOutcome, 'client-aborted');
+  assert.ok(hanging);
+});
+
+function abortSoon(controller) {
+  setTimeout(() => controller.abort('client-aborted'), 5);
+}
+
 test('elevenlabs-ws streams base64 frames as PCM over a Response-like body', async () => {
   FakeWebSocket.reset();
   const provider = createElevenLabsWsProvider({ WebSocketImpl: FakeWebSocket });

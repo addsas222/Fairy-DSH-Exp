@@ -591,18 +591,46 @@ function collectSpeechText(node, output) {
   }
 }
 
-export function markdownToSpeechText(markdown) {
-  const root = fromMarkdown(String(markdown || ''), {
+/* micromark parses at roughly 3 us/char, and the frequent texts - tool status
+ * announcements and voice briefs - are plain prose. When the text cannot carry
+ * markdown structure, mirror the paragraph rule below instead of paying for an
+ * AST; every marker that would change the extracted text falls back to it. */
+const MARKDOWN_SIGNAL = /[#`*_\[\]>|~\\<]|^ {4,}\S|^[ \t]+\S|&[a-zA-Z#][a-zA-Z0-9]*;|^ {0,3}(?:[-*_] *){3,}$|^\s*(?:[-+]|\d+[.)])\s|^ {0,3}\S.*\n {0,3}(?:=+|-+)\s*$/m;
+
+/** Paragraph boundaries for text that contains no markdown control syntax. */
+function speechTextFromParagraphs(markdown) {
+  const output = [];
+  for (const block of String(markdown).split(/\n{2,}/)) {
+    const text = block.trim();
+    if (!text) continue;
+    output.push(text);
+    if (!SPEECH_TERMINATORS.test(text)) output.push('；');
+  }
+  return output.join(' ');
+}
+
+function speechTextFromMarkdownAst(markdown) {
+  const root = fromMarkdown(markdown, {
     extensions: [gfm()],
     mdastExtensions: [gfmFromMarkdown()],
   });
   const output = [];
   collectSpeechText(root, output);
-  return normalizeSpeechText(output.join(' '));
+  return output.join(' ');
 }
 
-export function splitSpeechSentences(text) {
-  const normalized = normalizeSpeechText(text);
+export function markdownToSpeechText(markdown) {
+  const source = String(markdown || '');
+  return normalizeSpeechText(MARKDOWN_SIGNAL.test(source) ? speechTextFromMarkdownAst(source) : speechTextFromParagraphs(source));
+}
+
+/**
+ * @param {{ normalized?: boolean }} [options] `normalized` states that the input
+ * already came from normalizeSpeechText, which is idempotent; the sentence path
+ * passes it to avoid re-running the whole rule chain on its own output.
+ */
+export function splitSpeechSentences(text, options = {}) {
+  const normalized = options.normalized ? safeText(text) : normalizeSpeechText(text);
   if (!normalized) return [];
   const raw = [];
   let current = '';
@@ -781,7 +809,7 @@ function createSentencePreparation() {
       return markdownToSpeechText(markdown);
     },
     sentences(markdown) {
-      return splitSpeechSentences(markdownToSpeechText(markdown));
+      return splitSpeechSentences(markdownToSpeechText(markdown), { normalized: true });
     },
   };
 }
@@ -909,7 +937,9 @@ export function createFairyVoiceHandlers({
         if (!markdown.trim()) throw Object.assign(new Error('empty-text'), { code: 'empty-text' });
         sendJson(res, 200, await voiceBrainBoundary.brief(markdown, controller.signal));
       } catch (error) {
-        const code = error?.code || (error?.message === 'invalid-json' ? 'invalid-json' : 'voice-brief-request-failed');
+        const code = error?.code
+          || (error?.message === 'payload-too-large' ? 'voice-brief-input-too-large'
+            : (error?.message === 'invalid-json' ? 'invalid-json' : 'voice-brief-request-failed'));
         if (code !== 'client-aborted') diagnostics.warn('brain.brief', { code }, error);
         if (!res.writableEnded) sendJson(res, statusFor(code), { error: publicError(code) });
       } finally {
@@ -952,7 +982,11 @@ export function createFairyVoiceHandlers({
         await pcmStreamHandler.pipe(response, res, controller.signal);
         if (!res.destroyed && !res.writableEnded) res.end();
       } catch (error) {
-        const code = error.code || (error.message === 'invalid-json' ? 'invalid-json' : 'local-service-failed');
+        // The body cap is enforced while reading, before any provider runs:
+        // reporting it as a local service failure hides what the caller must fix.
+        const code = error.code
+          || (error.message === 'payload-too-large' ? 'text-too-large'
+            : (error.message === 'invalid-json' ? 'invalid-json' : 'local-service-failed'));
         if (!['client-aborted', 'superseded'].includes(code)) diagnostics.warn('tts.stream', { code, headers_sent: res.headersSent }, error);
         // Once audio headers/bytes are sent, a JSON body would corrupt the PCM
         // stream. Close the stream instead and let the browser retry/report it.

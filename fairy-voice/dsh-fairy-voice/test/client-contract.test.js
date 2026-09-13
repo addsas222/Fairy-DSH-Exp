@@ -166,7 +166,11 @@ test('idle Web Audio rendering is suspended after final playback', () => {
   assert.match(source, /current\.context\.suspend\(\)\.catch\(\(error\) => reportAudioLifecycleFailure\('suspend', error\)\)/);
   assert.match(source, /const primeAudio = React\.useCallback\(async[\s\S]*?suspendWhenIdle\(context\)/);
   assert.match(source, /primeAudio\(volume\)\.then\(\(\) => \{/);
-  assert.match(source, /await primeAudio\(volume\)/);
+  assert.match(source, /await primeAudio\(volumeRef\.current\)/);
+  // The play listener must not depend on volume: a slider change would tear the
+  // effect down and its cleanup aborts the request that is speaking.
+  assert.doesNotMatch(source, /primeAudio, sessionKey, volume\]\)/);
+  assert.match(source, /const volumeRef = React\.useRef\(volume\);/);
   assert.match(source, /const play = React\.useCallback\(async[\s\S]*?await unlockAudio\(volume\)/);
   assert.match(source, /const requestedWork = work\.current;[\s\S]*?await unlockAudio\(volume\);[\s\S]*?if \(work\.current !== requestedWork \|\| requestedWork\.stopped\) return false;/);
 });
@@ -309,7 +313,7 @@ test('browser engines synthesize locally with the shared scheduler and degrade t
   assert.match(source, /const opened = new api\.TtsSession\(\{ voiceId: config\.voiceId \}\);/);
   assert.match(source, /handle\.session\.predict\(text\)/);
   assert.match(source, /await context\.decodeAudioData\(await blob\.arrayBuffer\(\)\)/);
-  assert.match(source, /await playLocalEngine\(engine, messageId, sentences, volume\)/);
+  assert.match(source, /await playLocalEngine\(engine, messageId, sentences, volumeRef\.current\)/);
   assert.match(source, /localEngineConfig\(settingsValue, engineId\)/);
   assert.match(source, /createWebAudioScheduler\(\{ current, getNextStart: \(\) => nextStart \}\)/);
 });
@@ -468,6 +472,33 @@ test('the speech language header resolves the selected provider\'s own field', (
   // An untouched field still yields a usable default instead of an empty header.
   assert.equal(sttLanguage(settings('deepgram', { deepgram: { language: '  ' } })), 'zh-CN');
   assert.equal(sttLanguage(undefined), 'zh-CN');
+});
+
+test('a second microphone press during startup cancels instead of orphaning a stream', () => {
+  assert.match(source, /if \(speechStarting\.current\) \{ speechCancelRequested\.current = true; return; \}/);
+  assert.match(source, /if \(speechCancelRequested\.current\) \{ session\.cancel\?\.\(\); setSpeech\(\{ status: 'idle', error: null \}\); return; \}/);
+  assert.match(source, /speechCancelRequested\.current = true;\r?\n        speechRef\.current\?\.cancel\?\.\(\);/);
+});
+
+test('the brief threshold reads the same value the card shows', () => {
+  // Execute the shipped reader against stub storage: a fresh install must keep
+  // the default instead of silently enabling "brief every answer", while an
+  // explicitly stored 0 stays meaningful.
+  const body = source.match(/    function readStoredBriefThreshold\(\) \{[\s\S]*?\r?\n    \}/)[0];
+  // The defaults come from the bundle itself, so this cannot drift from them.
+  const key = source.match(/const SETTINGS_BRIEF_THRESHOLD = '([^']+)'/)[1];
+  const fallback = Number(source.match(/const VOICE_BRIEF_THRESHOLD = (\d+)/)[1]);
+  const storage = new Map();
+  const reader = new Function('localStorage', 'SETTINGS_BRIEF_THRESHOLD', 'VOICE_BRIEF_THRESHOLD',
+    `${body}\nreturn readStoredBriefThreshold;`)(
+    { getItem: (name) => (storage.has(name) ? storage.get(name) : null) }, key, fallback);
+  assert.equal(reader(), fallback);
+  storage.set(key, '0');
+  assert.equal(reader(), 0);
+  storage.set(key, '120');
+  assert.equal(reader(), 120);
+  storage.set(key, 'oops');
+  assert.equal(reader(), fallback);
 });
 
 test('the 语音输入 settings card owns provider, fields, and availability', () => {

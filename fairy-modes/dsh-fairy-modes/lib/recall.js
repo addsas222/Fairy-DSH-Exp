@@ -23,6 +23,15 @@
  * 3. Title scan — `listSessions` + `readTitleSnapshots` need no index at all, so
  *    recall still answers when the index is off, bounded and title-only.
  *
+ * Every path carries the caller's workspace boundary, read where the harness
+ * reads it (`dsh-tool-session-query/src/workspace-access.ts:58-70`: `exec.agent`
+ * → `session.header.cwd` and `session.id`): the indexed request pushes the
+ * harness's own clause, `{ kind: 'cwd', values: [cwd] }` (same package's
+ * `operations.ts:90`), and the caller's own session is never a hit
+ * (`operations.ts:101`). Without that clause recall answers with another
+ * project's history, so a caller whose workspace cannot be read is not silently
+ * left unscoped — the result says so instead.
+ *
  * @module dsh-fairy-modes/recall
  */
 
@@ -41,6 +50,13 @@ const INDEX_DISABLED_NOTE = '会话全文索引未打开（session-query-sqlite 
   + '把 profiles/web/cordis.patch.yml 里 session-query-sqlite.openAt 设为 first-search 即可恢复全文回忆。';
 const INDEX_ABSENT_NOTE = '本部署未组合会话检索后端，本次只按标题匹配。';
 const NO_MATCH_NOTE = '没有匹配的历史记录；换更具体的词，或确认那些会话的日志仍在本机。';
+/* The harness refuses the call outright when the caller has no workspace
+ * (`operations.ts:61-68`). Recall must still answer — it is registered in every
+ * mode and the create-mode prompt reaches for it first — but an unenforced
+ * boundary must never be invisible, so the degradation is a diagnostic on the
+ * result rather than a silently unscoped search. */
+const NO_WORKSPACE_NOTE = '调用会话的工作区（cwd）不可用，本次没有施加工作区边界，结果可能包含其他项目的历史。';
+const NO_CALLER_ID_NOTE = '调用会话的 id 不可用，本次无法排除当前会话自身的历史。';
 
 const QUERY_DESCRIPTION = '要查找的字面文本（大小写不敏感；按数据处理，不作为检索语法）。';
 const LIMIT_DESCRIPTION = `最多返回多少个会话（1-${MAX_LIMIT}，默认 ${DEFAULT_LIMIT}）。`;
@@ -72,6 +88,66 @@ function violationsOf(args) {
     else if (!Number.isFinite(args.limit)) violations.push('"limit" must be a finite JSON number');
   }
   return violations;
+}
+
+/**
+ * The caller's own session id and workspace, read exactly where the harness
+ * reads them (`workspace-access.ts:58-70`: `exec.agent.session.id` and
+ * `.session.header.cwd`). `cwd` is a header string the harness tests with
+ * `=== undefined` (`operations.ts:62-68`) — an empty-string workspace is still a
+ * workspace; an empty id cannot name a session, so it counts as absent too.
+ *
+ * @param exec - the tool run context the registry passed to `execute`.
+ * @returns `{ sessionId, cwd }`, either absent when the caller projection lacks it.
+ */
+function callerBoundary(exec) {
+  const session = exec?.agent?.session;
+  const id = session?.id;
+  const cwd = session?.header?.cwd;
+  return {
+    ...(typeof id === 'string' && id !== '' ? { sessionId: id } : {}),
+    ...(typeof cwd === 'string' ? { cwd } : {}),
+  };
+}
+
+/**
+ * The engine-side boundary clause, character for character the harness's
+ * (`operations.ts:90`), over the filter kind the engine matches with
+ * `values.includes(record.header.cwd ?? null)` (`session-query/src/filters.ts:124-125`).
+ *
+ * @param boundary - caller projection.
+ * @returns The clause, or an empty list when there is no workspace to scope to.
+ */
+function sessionFiltersOf(boundary) {
+  return boundary.cwd === undefined ? [] : [{ kind: 'cwd', values: [boundary.cwd] }];
+}
+
+/**
+ * One workspace predicate for both read paths: a record is visible only inside
+ * the caller's workspace and never the caller's own session — the harness's
+ * accept predicate (`operations.ts:101`) over `headerAuthorized`
+ * (`workspace-access.ts:99-102`). An unreadable workspace has no boundary to
+ * enforce (the diagnostic says so); an unreadable caller id still scopes by
+ * workspace, it only cannot drop the caller's own hits.
+ *
+ * @param header - the record header the engine ranked or listed.
+ * @param boundary - caller projection.
+ * @returns Whether recall may show this session.
+ */
+function inCallerWorkspace(header, boundary) {
+  if (boundary.cwd === undefined) return true;
+  if (header?.cwd !== boundary.cwd) return false;
+  return header?.id !== boundary.sessionId;
+}
+
+/** Append the boundary diagnostic when the caller projection was incomplete. */
+function withBoundaryNote(value, boundary) {
+  const notes = [];
+  if (boundary.cwd === undefined) notes.push(NO_WORKSPACE_NOTE);
+  if (boundary.sessionId === undefined) notes.push(NO_CALLER_ID_NOTE);
+  if (notes.length === 0) return value;
+  const prefix = typeof value.note === 'string' && value.note !== '' ? `${value.note} ` : '';
+  return { ...value, note: `${prefix}${notes.join('')}` };
 }
 
 /**
@@ -113,10 +189,13 @@ function hitSessionId(hit) {
 }
 
 /** Project one indexed page into the tool's result rows. */
-async function projectPage(page, limit, sessionQuery, signal) {
+async function projectPage(page, limit, sessionQuery, boundary, signal) {
   const rows = Array.isArray(page?.items) ? page.items : [];
-  // A hit with no resolvable id is not a session the model can act on.
-  const items = rows.slice(0, limit)
+  // Both guards are the harness's accept predicate: a hit with no resolvable id
+  // is not a session the model can act on, and a hit outside the caller's
+  // workspace (or the caller's own session) is not recall's to show.
+  const visible = rows.filter(hit => inCallerWorkspace(hit?.header, boundary));
+  const items = visible.slice(0, limit)
     .map(hit => ({ hit, sessionId: hitSessionId(hit) }))
     .filter(entry => entry.sessionId !== undefined);
   const folded = await readTitles(sessionQuery, items.map(entry => entry.sessionId), signal);
@@ -133,19 +212,23 @@ async function projectPage(page, limit, sessionQuery, signal) {
   });
   return {
     results,
-    truncated: page?.nextCursor !== undefined || rows.length > items.length,
+    truncated: page?.nextCursor !== undefined || visible.length > items.length,
     ...(results.length === 0 ? { note: NO_MATCH_NOTE } : {}),
   };
 }
 
 /** Index-free recall: newest-first titles matched by the query's tokens. */
-async function scanTitles(sessionQuery, query, limit, note, signal) {
+async function scanTitles(sessionQuery, query, limit, note, boundary, signal) {
   const list = typeof sessionQuery?.listSessions === 'function' ? sessionQuery.listSessions : undefined;
   if (list === undefined) {
     return { results: [], truncated: false, note: `${note}（本部署也没有可用的会话列表接口。）` };
   }
   const records = await list.call(sessionQuery, signal);
-  const rows = (Array.isArray(records) ? records : []).slice(0, SCAN_SESSION_LIMIT);
+  // `listSessions` takes no filters, so the same workspace predicate the engine
+  // would have applied is applied to the listed headers here.
+  const rows = (Array.isArray(records) ? records : [])
+    .filter(row => inCallerWorkspace(row?.header, boundary))
+    .slice(0, SCAN_SESSION_LIMIT);
   const folded = await readTitles(sessionQuery, rows.map(row => row.header.id), signal);
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   const matched = [];
@@ -170,18 +253,24 @@ async function scanTitles(sessionQuery, query, limit, note, signal) {
   };
 }
 
-async function recall(sessionQuery, args, signal) {
+async function recall(sessionQuery, args, exec) {
+  const signal = exec?.signal;
+  const boundary = callerBoundary(exec);
   const query = typeof args?.query === 'string' ? args.query.trim() : '';
   if (query === '') throw new Error(`${RECALL_TOOL_NAME} 需要一个非空的 query。`);
   const limit = clampLimit(args?.limit);
   const search = typeof sessionQuery?.searchSessions === 'function' ? sessionQuery.searchSessions : undefined;
-  if (search === undefined) return scanTitles(sessionQuery, query, limit, INDEX_ABSENT_NOTE, signal);
+  if (search === undefined) {
+    return withBoundaryNote(await scanTitles(sessionQuery, query, limit, INDEX_ABSENT_NOTE, boundary, signal), boundary);
+  }
+  const sessionFilters = sessionFiltersOf(boundary);
+  const request = { query, limit, ...sessionFilters.length === 0 ? {} : { sessionFilters } };
   try {
-    const page = await search.call(sessionQuery, { query, limit }, { signal });
-    return await projectPage(page, limit, sessionQuery, signal);
+    const page = await search.call(sessionQuery, request, { signal });
+    return withBoundaryNote(await projectPage(page, limit, sessionQuery, boundary, signal), boundary);
   } catch (error) {
     if (error?.code !== 'SESSION_QUERY_SEARCH_DISABLED') throw error;
-    return scanTitles(sessionQuery, query, limit, INDEX_DISABLED_NOTE, signal);
+    return withBoundaryNote(await scanTitles(sessionQuery, query, limit, INDEX_DISABLED_NOTE, boundary, signal), boundary);
   }
 }
 
@@ -256,7 +345,7 @@ export function createSessionRecallTool(sessionQuery) {
         error.code = 'INVALID_ARGS';
         throw error;
       }
-      return recall(sessionQuery, args, exec?.signal);
+      return recall(sessionQuery, args, exec);
     },
   };
 }

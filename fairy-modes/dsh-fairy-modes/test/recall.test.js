@@ -10,6 +10,21 @@ const INDEX_DISABLED = Object.assign(new Error('session search is disabled'), {
   code: 'SESSION_QUERY_SEARCH_DISABLED',
 });
 
+/** The caller's workspace and session id, as the harness projects them. */
+const CALLER_CWD = '/work/fairy';
+const CALLER_ID = 'caller-session';
+
+/**
+ * A harness-shaped run context: `workspaceAccess.callerOf`
+ * (tool-session-query/src/workspace-access.ts:58-70) reads `exec.agent.session`.
+ * Pass `null` for `cwd`/`sessionId` to model a caller whose projection lacks it.
+ */
+function callerExec({ cwd = CALLER_CWD, sessionId = CALLER_ID } = {}) {
+  const header = typeof cwd === 'string' ? { cwd } : {};
+  const session = { ...(typeof sessionId === 'string' ? { id: sessionId } : {}), header };
+  return { signal: undefined, agent: { session } };
+}
+
 /**
  * The registry validates a tool's returned value against `output.schema` before
  * rendering, so every value below is checked the same way. Narrowed to the JSON
@@ -60,13 +75,22 @@ function fakeEngine({ searchSessions, listSessions, readTitleSnapshots } = {}) {
   };
 }
 
-/** One indexed hit as `searchSessions` returns it. */
-function hit(sessionId, seq, snippet, createdAt = 1_700_000_000_000) {
+/** One indexed hit as `searchSessions` returns it, in the caller's workspace by default. */
+function hit(sessionId, seq, snippet, cwd = CALLER_CWD, createdAt = 1_700_000_000_000) {
   return {
-    header: { id: sessionId, createdAt, isSeeded: false, version: 3 },
+    header: { id: sessionId, createdAt, isSeeded: false, version: 3, ...(cwd === undefined ? {} : { cwd }) },
     live: false,
     persisted: true,
     bestMatch: { sessionId, seq, type: 'assistant/message', time: createdAt, surface: { kind: 'append' }, snippet },
+  };
+}
+
+/** One listed session for the index-free path. */
+function listed(sessionId, cwd = CALLER_CWD, createdAt = 1_700_000_000_000) {
+  return {
+    header: { id: sessionId, createdAt, isSeeded: false, version: 3, ...(cwd === undefined ? {} : { cwd }) },
+    live: false,
+    persisted: true,
   };
 }
 
@@ -127,7 +151,12 @@ test('the definition is a raw ToolDefinition with plain JSON Schema', () => {
 test('the indexed path projects hits, folds titles, and renders bullets', async () => {
   const engine = fakeEngine({
     async searchSessions(request) {
-      assert.deepEqual(request, { query: 'ponytail', limit: 5 });
+      // The harness's own clause (`operations.ts:90`): no recall without a workspace.
+      assert.deepEqual(request, {
+        query: 'ponytail',
+        limit: 5,
+        sessionFilters: [{ kind: 'cwd', values: [CALLER_CWD] }],
+      });
       return { items: [hit('session-a', 42, '  ponytail 规则集已落地  '), hit('session-b', 7, '另一处提到 ponytail')] };
     },
     async readTitleSnapshots(ids) {
@@ -136,7 +165,7 @@ test('the indexed path projects hits, folds titles, and renders bullets', async 
     },
   });
   const tool = createSessionRecallTool(engine);
-  const value = await tool.execute({ query: 'ponytail' }, { signal: undefined });
+  const value = await tool.execute({ query: 'ponytail' }, callerExec());
 
   assert.deepEqual(value, {
     results: [
@@ -158,16 +187,74 @@ test('a continuation cursor and extra hits report truncation', async () => {
     },
   });
   const tool = createSessionRecallTool(engine);
-  const value = await tool.execute({ query: 'x', limit: 2 }, {});
+  const value = await tool.execute({ query: 'x', limit: 2 }, callerExec());
   assert.deepEqual(value.results.map(row => row.sessionId), ['a', 'b']);
   assert.equal(value.truncated, true);
   assertDispatchable(tool, value);
 });
 
+test('the query is scoped to the caller workspace and never recalls the caller session', async () => {
+  const engine = fakeEngine({
+    async searchSessions(request) {
+      assert.deepEqual(request.sessionFilters, [{ kind: 'cwd', values: ['/work/fairy'] }]);
+      // Same workspace twice, the caller's own session, and another project's.
+      return {
+        items: [
+          hit('other-workspace', 9, 'ponytail 在别的项目里', '/work/other'),
+          hit('caller-session', 3, '本次会话自己的记录'),
+          hit('same-workspace', 5, 'ponytail 在本项目里'),
+        ],
+      };
+    },
+    async readTitleSnapshots(ids) {
+      assert.deepEqual(ids, ['same-workspace']);
+      return titles([['same-workspace', 'Ponytail 本项目', 1_700_000_300_000]]);
+    },
+  });
+  const value = await createSessionRecallTool(engine).execute({ query: 'ponytail' }, callerExec());
+
+  assert.deepEqual(value.results.map(row => row.sessionId), ['same-workspace']);
+  assert.equal(value.note, undefined);
+});
+
+test('a caller without a readable workspace is reported, not silently unscoped', async () => {
+  const engine = fakeEngine({
+    async searchSessions(request) {
+      // No workspace to scope to: the historic request shape survives, and the
+      // diagnostic below is what keeps that from being a silent leak.
+      assert.deepEqual(request, { query: 'ponytail', limit: 5 });
+      return { items: [hit('elsewhere', 1, 'ponytail 在别的项目里', '/work/other')] };
+    },
+  });
+  const tool = createSessionRecallTool(engine);
+  const value = await tool.execute({ query: 'ponytail' }, { signal: undefined });
+
+  assert.deepEqual(value.results.map(row => row.sessionId), ['elsewhere']);
+  assert.match(value.note, /工作区（cwd）不可用/);
+  assert.match(value.note, /无法排除当前会话自身的历史/);
+  assert.match(assertDispatchable(tool, value), /注：调用会话的工作区（cwd）不可用/);
+
+  // A known workspace with an unknown caller id still scopes by workspace.
+  const scoped = fakeEngine({
+    async searchSessions(request) {
+      assert.deepEqual(request.sessionFilters, [{ kind: 'cwd', values: [CALLER_CWD] }]);
+      return { items: [hit('elsewhere', 1, 'x', '/work/other'), hit('same', 2, 'y')] };
+    },
+  });
+  const partial = await createSessionRecallTool(scoped).execute({ query: 'x' }, callerExec({ sessionId: null }));
+  assert.deepEqual(partial.results.map(row => row.sessionId), ['same']);
+  assert.match(partial.note, /无法排除当前会话自身的历史/);
+
+  // The harness's own refusal case (`operations.ts:63-68`): an agent-bound
+  // caller whose session carries no workspace.
+  const workspaceLess = await createSessionRecallTool(engine).execute({ query: 'ponytail' }, callerExec({ cwd: null }));
+  assert.match(workspaceLess.note, /工作区（cwd）不可用/);
+});
+
 test('an empty index result explains itself', async () => {
   const engine = fakeEngine({ async searchSessions() { return { items: [] }; } });
   const tool = createSessionRecallTool(engine);
-  const value = await tool.execute({ query: 'nothing' }, {});
+  const value = await tool.execute({ query: 'nothing' }, callerExec());
   assert.deepEqual(value.results, []);
   assert.equal(value.truncated, false);
   assert.match(value.note, /没有匹配的历史记录/);
@@ -178,17 +265,14 @@ test('a disabled index degrades to the title scan and names the fix', async () =
   const engine = fakeEngine({
     async searchSessions() { throw INDEX_DISABLED; },
     async listSessions() {
-      return [
-        { header: { id: 's1', createdAt: 20, isSeeded: false, version: 3 }, live: true, persisted: true },
-        { header: { id: 's2', createdAt: 10, isSeeded: false, version: 3 }, live: false, persisted: true },
-      ];
+      return [listed('s1'), listed('s2')];
     },
     async readTitleSnapshots() {
       return titles([['s1', 'Ponytail 优化', 1_700_000_200_000], ['s2', '别的会话', 1_700_000_000_000]]);
     },
   });
   const tool = createSessionRecallTool(engine);
-  const value = await tool.execute({ query: 'ponytail' }, {});
+  const value = await tool.execute({ query: 'ponytail' }, callerExec());
 
   assert.deepEqual(value, {
     results: [{ sessionId: 's1', title: 'Ponytail 优化', snippet: 'Ponytail 优化', updatedAt: 1_700_000_200_000 }],
@@ -200,20 +284,39 @@ test('a disabled index degrades to the title scan and names the fix', async () =
   assert.equal(engine.calls.some(call => call[0] === 'listSessions'), true);
 });
 
+test('the title scan applies the same workspace boundary as the index', async () => {
+  const engine = fakeEngine({
+    async searchSessions() { throw INDEX_DISABLED; },
+    async listSessions() {
+      return [listed('other-workspace', '/work/other'), listed('caller-session'), listed('same-workspace')];
+    },
+    async readTitleSnapshots(ids) {
+      // The caller's own session and the foreign workspace never even get read.
+      assert.deepEqual(ids, ['same-workspace']);
+      return titles([['same-workspace', 'Ponytail 本项目', 1_700_000_400_000]]);
+    },
+  });
+  const value = await createSessionRecallTool(engine).execute({ query: 'ponytail' }, callerExec());
+
+  assert.deepEqual(value.results.map(row => row.sessionId), ['same-workspace']);
+  assert.equal(value.truncated, false);
+  assert.match(value.note, /会话全文索引未打开/);
+});
+
 test('an engine without search methods scans titles and says the backend is absent', async () => {
   const engine = fakeEngine({
     async listSessions() {
-      return [{ header: { id: 's1', createdAt: 20, isSeeded: false, version: 3 }, live: false, persisted: true }];
+      return [listed('s1')];
     },
   });
-  const value = await createSessionRecallTool(engine).execute({ query: 'fairy', limit: 3 }, {});
+  const value = await createSessionRecallTool(engine).execute({ query: 'fairy', limit: 3 }, callerExec());
   assert.deepEqual(value.results, []);
   assert.match(value.note, /本部署未组合会话检索后端/);
   assert.match(value.note, /标题里也没有匹配的词/);
 });
 
 test('an engine with no corpus reader at all still answers', async () => {
-  const value = await createSessionRecallTool(fakeEngine()).execute({ query: 'fairy' }, {});
+  const value = await createSessionRecallTool(fakeEngine()).execute({ query: 'fairy' }, callerExec());
   assert.deepEqual(value, {
     results: [],
     truncated: false,
@@ -236,15 +339,15 @@ test('a blank query is an ordinary tool failure and limit is bounded', async () 
     async searchSessions(request) { return { items: [hit('a', 1, 'x')], limit: request.limit }; },
   });
   const tool = createSessionRecallTool(engine);
-  await assert.rejects(tool.execute({ query: '   ' }, {}), /需要一个非空的 query/);
+  await assert.rejects(tool.execute({ query: '   ' }, callerExec()), /需要一个非空的 query/);
   // Missing limit defaults; oversized limit clamps instead of failing the call.
-  await tool.execute({ query: 'x' }, {});
+  await tool.execute({ query: 'x' }, callerExec());
   assert.equal(engine.calls.at(-1)[1].limit, 5);
-  await tool.execute({ query: 'x', limit: 99 }, {});
+  await tool.execute({ query: 'x', limit: 99 }, callerExec());
   assert.equal(engine.calls.at(-1)[1].limit, 10);
-  await tool.execute({ query: 'x', limit: 0 }, {});
+  await tool.execute({ query: 'x', limit: 0 }, callerExec());
   assert.equal(engine.calls.at(-1)[1].limit, 1);
-  await tool.execute({ query: 'x', limit: 2.7 }, {});
+  await tool.execute({ query: 'x', limit: 2.7 }, callerExec());
   assert.equal(engine.calls.at(-1)[1].limit, 2);
 });
 
@@ -262,11 +365,7 @@ test('malformed arguments fail before the engine is touched', async () => {
 });
 
 test('a title-only scan reports the newest-first slice and its bound', async () => {
-  const records = Array.from({ length: 4 }, (_unused, index) => ({
-    header: { id: `s${index}`, createdAt: 100 - index, isSeeded: false, version: 3 },
-    live: false,
-    persisted: true,
-  }));
+  const records = Array.from({ length: 4 }, (_unused, index) => listed(`s${index}`, CALLER_CWD, 100 - index));
   const engine = fakeEngine({
     async listSessions() { return records; },
     async readTitleSnapshots(ids) {
@@ -278,7 +377,7 @@ test('a title-only scan reports the newest-first slice and its bound', async () 
     },
   });
   const tool = createSessionRecallTool(engine);
-  const value = await tool.execute({ query: 'fairy 会话', limit: 2 }, {});
+  const value = await tool.execute({ query: 'fairy 会话', limit: 2 }, callerExec());
   assert.deepEqual(value.results.map(row => row.sessionId), ['s0', 's1']);
   assert.equal(value.truncated, true);
   assertDispatchable(tool, value);
@@ -289,6 +388,6 @@ test('a title-only scan reports the newest-first slice and its bound', async () 
       return [{ sessionId: ids[0], status: 'rejected', error: new Error('gone') }];
     },
   });
-  const empty = await createSessionRecallTool(partial).execute({ query: 'fairy' }, {});
+  const empty = await createSessionRecallTool(partial).execute({ query: 'fairy' }, callerExec());
   assert.deepEqual(empty.results, []);
 });

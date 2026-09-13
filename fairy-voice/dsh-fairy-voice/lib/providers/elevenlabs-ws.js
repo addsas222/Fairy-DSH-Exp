@@ -138,16 +138,41 @@ export function createElevenLabsWsProvider({ WebSocketImpl = globalThis.WebSocke
         clearTimeout(openTimer);
       };
 
+      /* Every failure path must settle both the stream and `opened`: these
+       * handlers used to be reassigned below, which left a refused connection
+       * awaiting a promise nothing could reject - the request never returned
+       * and its controller stayed registered. */
+      let openSettled = false;
+      let rejectOpen = () => {};
+      const failOpen = (error) => {
+        if (openSettled) return;
+        openSettled = true;
+        rejectOpen(error);
+      };
       const opened = new Promise((resolve, reject) => {
-        socket.onopen = () => resolve();
-        socket.onclose = () => reject(providerError(PROVIDER_FAILED, '语音服务连接提前关闭。'));
-        socket.onerror = () => reject(providerError(PROVIDER_UNAVAILABLE, '语音服务连接失败。'));
+        rejectOpen = reject;
+        socket.onopen = () => { openSettled = true; resolve(); };
+        socket.onclose = () => {
+          detach();
+          const error = providerError(PROVIDER_FAILED, '语音服务连接提前关闭。');
+          failOpen(error);
+          if (!stream.settled) stream.fail(error);
+        };
+        socket.onerror = () => {
+          detach();
+          const error = providerError(PROVIDER_UNAVAILABLE, '语音服务连接失败。');
+          failOpen(error);
+          stream.fail(error);
+        };
       });
       const openTimer = setTimeout(() => {
-        stream.fail(providerError(PROVIDER_FAILED, '语音服务连接超时。'));
+        const error = providerError(PROVIDER_FAILED, '语音服务连接超时。');
+        stream.fail(error);
+        failOpen(error);
         close('timeout');
       }, OPEN_TIMEOUT_MS);
       const onAbort = () => {
+        failOpen(providerError(signal?.reason || 'client-aborted', '语音服务请求已取消。'));
         stream.finish();
         close('aborted');
       };
@@ -172,17 +197,6 @@ export function createElevenLabsWsProvider({ WebSocketImpl = globalThis.WebSocke
           close('failed');
         }
       };
-      socket.onclose = () => {
-        detach();
-        // A close before isFinal means the vendor dropped the stream early;
-        // after it, closing is the documented end of the exchange.
-        if (!stream.settled) stream.fail(providerError(PROVIDER_FAILED, '语音服务连接提前关闭。'));
-      };
-      socket.onerror = () => {
-        detach();
-        stream.fail(providerError(PROVIDER_UNAVAILABLE, '语音服务连接失败。'));
-      };
-
       try {
         await opened;
       } catch (error) {
