@@ -21,11 +21,11 @@ const TOOL_TIMEOUT_MS = 10_000;
 
 /** 始终在场的流水线说明：每个阶段做什么、什么时候推进。 */
 export const PIPELINE_SECTION_TEXT = [
-  '模式流水线（会话调度）：默认停在「扮演」，出现需要真正动手的任务时按顺序推进，',
-  '每一步只做本阶段该做的事，不要在阶段之间来回跳。',
+  '模式流水线（会话调度）：默认是空闲（off，未进流水线）——用户只是在闲聊或调戏角色时，',
+  '先 enter stage="roleplay" 进入扮演；出现需要真正动手的任务时再按顺序推进，每一步只做本阶段该做的事，不要在阶段之间来回跳。',
   '1. 扮演 → 探查：调用 mode_pipeline advance。探查阶段只读不写：看代码、查记忆、',
   '   写出方案与风险，等用户确认；建议同时用 /plan 打开官方 plan 模式的审批闸门。',
-  '2. 探查 → 建造：方案确认后 advance。用 run_code 把实施编成脚本系列，一次调用完成多步。',
+  '2. 探查 → 建造：方案确认后 advance（若官方 plan 模式还开着，先 exit_plan_mode 提交审批，批准后回到这里 advance）。用 run_code 把实施编成脚本系列，一次调用完成多步。',
   '3. 建造 → 创造：做完 advance。先 session_recall 回忆本项目全部历史，再写或改 skill 与插件，',
   '   最后跑 node fairy-system/skill-audit.js 检查冗余，并按结论合并或删除冗余条目。',
   '4. 创造 → 扮演：收尾后 advance 回到扮演，把结论压成角色会说的话。',
@@ -39,7 +39,20 @@ export const PIPELINE_SECTION_TEXT = [
  * @param options.readPlan - 读官方 `plan` 投影；默认走会话投影注册表，未组合 plan-mode 时返回 null。
  * @returns 原始 `ToolDefinition`（`ctx.tools.register()` 直接可用）。
  */
-export function createModePipelineTool({ service, readPlan } = {}) {
+export function createModePipelineTool({ service, readPlan, resolvePlanMode } = {}) {
+  /**
+   * 官方 plan 控制器：由 agent-presets 按名解析（与桥面取 fairyMode 同一手法）。
+   * 取不到就退回“让用户 /plan”，流水线其余部分不受影响。
+   */
+  const planController = (agent) => {
+    if (typeof resolvePlanMode !== 'function') return undefined;
+    try {
+      const controller = resolvePlanMode(agent);
+      return typeof controller?.set === 'function' ? controller : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   const planState = (session) => {
     if (typeof readPlan === 'function') return readPlan(session);
     try {
@@ -59,14 +72,27 @@ export function createModePipelineTool({ service, readPlan } = {}) {
     const planActive = planState(agent.session)?.active === true;
     const notes = [];
     if (target.plan && !planActive) {
-      notes.push('探查阶段的审批闸门来自官方 plan 模式：让用户在输入框输入 /plan（或点会话头 chip 的「探查·极简」）即可打开。');
+      const controller = planController(agent);
+      if (controller !== undefined) {
+        try {
+          const planOutcome = controller.set(agent, true);
+          if (planOutcome !== 'committed') {
+            notes.push('官方 plan 模式已排队开启，从下一步开始生效（审批闸门随之可用）。');
+          }
+        } catch (error) {
+          notes.push(`自动开启官方 plan 模式失败（${String(error?.message ?? error)}）：让用户在输入框输入 /plan 手动打开。`);
+        }
+      } else {
+        notes.push('探查阶段的审批闸门来自官方 plan 模式，本次没能自动开启：让用户在输入框输入 /plan（或点会话头 chip 的「探查·极简」）即可打开。');
+      }
     }
     if (!target.plan && planActive) {
-      notes.push('plan 模式还开着：方案定稿后用官方 exit_plan_mode 提交审批，通过后即离开 plan 模式。');
+      // 离开探查一律走官方审批：不替用户关掉闸门。
+      notes.push('plan 模式还开着：方案定稿后用官方 exit_plan_mode 提交审批，批准后再 advance 进入下一阶段。');
     }
     return { outcome, notes };
   };
-  const describe = (agent, stage, action, extra = []) => {
+  const describe = (agent, stage, action, { notes = [], advanced = false } = {}) => {
     const session = agent.session;
     const mode = service.loggedMode(session);
     const planActive = planState(session)?.active === true;
@@ -74,7 +100,7 @@ export function createModePipelineTool({ service, readPlan } = {}) {
       `阶段：${PIPELINE_STAGE_LABELS[stage] ?? stage}（fairyMode=${mode}，plan=${planActive ? '开' : '关'}）。`,
       `下一步：${PIPELINE_STAGE_LABELS[nextPipelineStage(stage)] ?? nextPipelineStage(stage)}（用 mode_pipeline advance 推进）。`,
     ];
-    return { action, stage, mode, planActive, report: [...lines, ...extra].join('\n'), advanced: extra.length > 0 };
+    return { action, stage, mode, planActive, advanced, report: [...lines, ...notes].join('\n') };
   };
   return {
     name: 'mode_pipeline',
@@ -119,15 +145,14 @@ export function createModePipelineTool({ service, readPlan } = {}) {
       const stage = currentStage(agent.session);
       if (action === 'status') return describe(agent, stage, 'status');
       if (action === 'advance') {
-        // 按目标阶段回报：探查阶段要等用户打开官方 plan 模式才会在投影里生效，
-        // 此刻回读会得到上一阶段，读起来像是没推进。
+        // 按目标阶段回报：投影要到下一次 pre-step 才追上，此刻回读会得到上一阶段。
         const target = nextPipelineStage(stage);
-        const { notes } = applyStage(agent, target);
-        return describe(agent, target, 'advance', notes);
+        const { outcome, notes } = applyStage(agent, target);
+        return describe(agent, target, 'advance', { notes, advanced: outcome !== 'noop' });
       }
       if (action === 'finish') {
-        const { notes } = applyStage(agent, 'roleplay');
-        return describe(agent, 'roleplay', 'finish', notes);
+        const { outcome, notes } = applyStage(agent, 'roleplay');
+        return describe(agent, 'roleplay', 'finish', { notes, advanced: outcome !== 'noop' });
       }
       if (action === 'enter') {
         const wanted = typeof args?.stage === 'string' ? args.stage.trim().toLowerCase() : '';
@@ -136,8 +161,8 @@ export function createModePipelineTool({ service, readPlan } = {}) {
           error.code = 'INVALID_ARGS';
           throw error;
         }
-        const { notes } = applyStage(agent, wanted);
-        return describe(agent, wanted, 'enter', notes);
+        const { outcome, notes } = applyStage(agent, wanted);
+        return describe(agent, wanted, 'enter', { notes, advanced: outcome !== 'noop' });
       }
       const error = new Error("mode_pipeline action must be 'status', 'advance', 'enter' or 'finish'");
       error.code = 'INVALID_ARGS';

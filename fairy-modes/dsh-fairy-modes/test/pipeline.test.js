@@ -62,15 +62,15 @@ test('status reports the current stage and never writes', async () => {
 test('advance moves one station and reports the target, not the stale read', async () => {
   const { tool, exec, applied, state } = harness({ mode: 'roleplay' });
   const result = await tool.execute({ action: 'advance' }, exec);
-  assert.deepEqual(applied, ['off'], 'the explore station runs the default agent mode');
-  assert.equal(state.mode, 'off');
+  assert.deepEqual(applied, ['explore'], 'the explore station is its own read-only mode');
+  assert.equal(state.mode, 'explore');
   assert.equal(result.stage, 'explore', 'the report names the station it moved to');
   assert.match(result.report, /阶段：探查/);
   assert.match(result.report, /\/plan/, 'opening the official plan gate is spelled out');
 });
 
 test('leaving the explore station points at the official exit tool while plan is on', async () => {
-  const { tool, exec, applied } = harness({ mode: 'off', planActive: true });
+  const { tool, exec, applied } = harness({ mode: 'explore', planActive: true });
   const result = await tool.execute({ action: 'advance' }, exec);
   assert.deepEqual(applied, ['ptc']);
   assert.equal(result.stage, 'ptc');
@@ -109,4 +109,60 @@ test('the tool declares its shape for the registry', () => {
   assert.equal(typeof tool.output.render, 'function');
   assert.equal(tool.isConcurrencySafe(), false, 'switching a session mode is not concurrency safe');
   assert.deepEqual(tool.parameters.required, ['action']);
+});
+
+test('entering the explore station opens the official plan gate when it resolves', async () => {
+  const state = { mode: 'roleplay', planActive: false };
+  const gate = [];
+  const service = { loggedMode: () => state.mode, set: (_agent, value) => { state.mode = value; return 'committed'; }, ctx: {} };
+  const tool = createModePipelineTool({
+    service,
+    readPlan: () => ({ active: state.planActive }),
+    resolvePlanMode: () => ({ set: (_agent, active) => { gate.push(active); state.planActive = active; return 'committed'; } }),
+  });
+  const result = await tool.execute({ action: 'enter', stage: 'explore' }, { agent: { session: {} } });
+  assert.deepEqual(gate, [true], 'the gate is opened for the caller');
+  assert.equal(state.mode, 'explore', 'and the read-only station is recorded on the fairy side');
+  assert.equal(result.stage, 'explore');
+  assert.equal(result.advanced, true);
+});
+
+test('a queued plan entry and an unresolvable gate are both reported honestly', async () => {
+  const queued = harness({ mode: 'roleplay' });
+  const queuedTool = createModePipelineTool({
+    service: { loggedMode: () => 'roleplay', set: () => 'committed', ctx: {} },
+    readPlan: () => ({ active: false }),
+    resolvePlanMode: () => ({ set: () => 'queued' }),
+  });
+  const queuedResult = await queuedTool.execute({ action: 'enter', stage: 'explore' }, queued.exec);
+  assert.match(queuedResult.report, /排队|生效/, 'a queued entry is not reported as done');
+
+  const bare = harness({ mode: 'roleplay' });
+  const bareResult = await bare.tool.execute({ action: 'enter', stage: 'explore' }, bare.exec);
+  assert.match(bareResult.report, /\/plan/, 'without a controller the user is told how to open the gate');
+});
+
+test('leaving the explore station never closes the official gate for the user', async () => {
+  const state = { mode: 'explore', planActive: true };
+  const gate = [];
+  const tool = createModePipelineTool({
+    service: { loggedMode: () => state.mode, set: (_agent, value) => { state.mode = value; return 'committed'; }, ctx: {} },
+    readPlan: () => ({ active: state.planActive }),
+    resolvePlanMode: () => ({ set: (_agent, active) => { gate.push(active); return 'committed'; } }),
+  });
+  const result = await tool.execute({ action: 'advance' }, { agent: { session: {} } });
+  assert.deepEqual(gate, [], 'only exit_plan_mode closes the gate');
+  assert.equal(result.stage, 'ptc');
+  assert.match(result.report, /exit_plan_mode/);
+});
+
+test('advanced follows the real switch outcome, not the presence of notes', async () => {
+  const tool = createModePipelineTool({
+    service: { loggedMode: () => 'roleplay', set: () => 'noop', ctx: {} },
+    readPlan: () => ({ active: false }),
+  });
+  const noop = await tool.execute({ action: 'advance' }, { agent: { session: {} } });
+  assert.equal(noop.advanced, false, 'a noop switch is not an advance');
+  const status = await tool.execute({ action: 'status' }, { agent: { session: {} } });
+  assert.equal(status.advanced, false, 'status never reports an advance');
 });

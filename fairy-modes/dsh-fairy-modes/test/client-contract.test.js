@@ -176,7 +176,7 @@ test('the settings card explains the modes and persists the new-session default'
 
   const tree = render();
   const rendered = JSON.stringify(tree);
-  for (const term of ['极简', '官方 plan-mode', '/plan', '建造·PTC', 'run_code', '创造·回忆', 'session_recall', 'SKILL.md', 'scaffold-plugin.js']) {
+  for (const term of ['极简', '官方 plan-mode', '/plan', '探查·只读', '建造·PTC', 'run_code', '创造·回忆', 'session_recall', 'SKILL.md', 'scaffold-plugin.js']) {
     assert.ok(rendered.includes(term), `the card should explain ${term}`);
   }
 
@@ -184,7 +184,7 @@ test('the settings card explains the modes and persists the new-session default'
   assert.equal(select.props['data-dsh-fairy-modes-default'], 'true');
   assert.deepEqual(
     Array.from(select.props.children, option => option.props.value),
-    ['', 'ptc', 'roleplay', 'create', 'off'],
+    ['', 'explore', 'ptc', 'roleplay', 'create', 'off'],
     'the dropdown offers 不设置/建造/创造/关闭',
   );
   assert.deepEqual(Array.from(texts(select.props.children[0])), ['不设置（新会话保持 off）']);

@@ -70,9 +70,10 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
      * and this keeps a second chip instance (or a fallback-mode chip) correct
      * without polling. */
     const EVENT_CHANGED = 'fairy-modes-changed';
-    const CHIP_LABELS = { ptc: 'PTC', create: '创造', roleplay: '角色', off: '空闲' };
+    const CHIP_LABELS = { explore: '探查', ptc: 'PTC', create: '创造', roleplay: '角色', off: '空闲' };
     const MENU = [
-      { value: 'plan', label: '探查·极简' },
+      { value: 'plan', label: '探查·极简（官方）' },
+      { value: 'explore', label: '探查·只读（流水线）' },
       { value: 'ptc', label: '建造·PTC' },
       { value: 'roleplay', label: '角色扮演' },
       { value: 'create', label: '创造·回忆' },
@@ -84,9 +85,10 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const DEFAULT_KEY = 'dsh.fairyModes.default.v1';
     const APPLIED_PREFIX = 'dsh.fairyModes.applied.';
     /** The modes the bridge accepts; local because the browser half loads alone. */
-    const MODE_VALUES = ['off', 'ptc', 'create'];
+    const MODE_VALUES = ['off', 'explore', 'ptc', 'create'];
     const DEFAULT_MODE_OPTIONS = [
       { value: '', label: '不设置（新会话保持 off）' },
+      { value: 'explore', label: '探查·只读（流水线）' },
       { value: 'ptc', label: '建造·PTC' },
       { value: 'roleplay', label: '角色扮演' },
       { value: 'create', label: '创造·回忆' },

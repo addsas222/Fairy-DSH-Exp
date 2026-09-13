@@ -61,6 +61,11 @@ const MODE_SECTIONS = {
       + '一致性：不确定的设定不要编造；与角色设定冲突时以角色设定为准，并说明取舍。'
       + '自检：发出回复前用 roleplay_check 跑一遍去AI味检查（命中项要改完再发）；角色的语言习惯用 roleplay_style 读取或追加。',
   },
+  explore: {
+    name: 'fairy:mode-explore',
+    text: '探查模式（只读）：只读代码、配置与检索结果，不改任何文件、不跑有副作用的命令。'
+      + '产出是一份可审阅的方案：现状、要改什么、风险与回滚；方案定稿后调用 mode_pipeline advance 进入建造。',
+  },
   create: {
     name: 'fairy:mode-create',
     text: '创造模式：先调用 session_recall 回忆本项目全部历史作为再回答；'
@@ -70,7 +75,7 @@ const MODE_SECTIONS = {
 };
 
 /** Human-facing mode names for command results. */
-const MODE_LABELS = { off: '默认（关闭）模式', ptc: 'PTC 建造模式', create: '创造模式', roleplay: '角色扮演模式' };
+const MODE_LABELS = { off: '默认（关闭）模式', explore: '探查模式（只读）', ptc: 'PTC 建造模式', create: '创造模式', roleplay: '角色扮演模式' };
 
 /**
  * Fold `fairy/mode` into the `{ mode }` projection. `wire` is what the browser
@@ -125,8 +130,8 @@ export class FairyModeService {
       commandCtx.effect(() => commandCtx.commands.register({
         definitionId: 'dsh-fairy-modes',
         name: 'mode',
-        description: '切换会话模式：ptc（建造）| create（创造）| roleplay（角色扮演）| off（关闭）',
-        input: { hint: 'ptc|create|roleplay|off' },
+        description: '切换会话模式：explore（探查）| ptc（建造）| create（创造）| roleplay（角色扮演）| off（关闭）',
+        input: { hint: 'explore|ptc|create|roleplay|off' },
         handler: ({ agent, rawInput }) => this.command(agent, rawInput),
       }), 'dsh-fairy-modes: /mode command registration');
     });
@@ -184,8 +189,8 @@ export class FairyModeService {
       return {
         kind: 'error',
         text: requested === ''
-          ? '用法：/mode ptc|create|roleplay|off'
-          : `未知模式 "${requested}"；可用：ptc、create、roleplay、off。`,
+          ? '用法：/mode explore|ptc|create|roleplay|off'
+          : `未知模式 "${requested}"；可用：explore、ptc、create、roleplay、off。`,
       };
     }
     const outcome = this.set(agent, mode);
@@ -267,7 +272,10 @@ export function apply(ctx) {
       order: modeSectionOrder(ctx.systemPrompt) + 2,
       text: PIPELINE_SECTION_TEXT,
     });
-    ctx.tools.register(createModePipelineTool({ service }));
+    /* 官方 plan 控制器按名解析（与桥面取 fairyMode 同一手法）：解析得到就让
+     * 流水线真正开关审批闸门，解析不到就退回提示用户 /plan，其余照常。 */
+    const resolvePlanMode = (agent) => ctx.get('agentPresets')?.serviceFor?.(agent, 'planMode');
+    ctx.tools.register(createModePipelineTool({ service, resolvePlanMode }));
     /* Recall is registered in every mode, not just create: the request tool
      * catalog must not change when the mode does. The child waits for the
      * session-query engine, so a deployment composing none simply has no tool. */

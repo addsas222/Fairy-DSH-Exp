@@ -12,7 +12,7 @@ export const FAIRY_MODE_EVENT = 'fairy/mode';
 export const FAIRY_MODE_PROJECTION = 'fairyMode';
 
 /** Every selectable mode, in UI order. Plan mode (探索/极简) is official and orthogonal. */
-export const FAIRY_MODES = Object.freeze(['off', 'ptc', 'create', 'roleplay']);
+export const FAIRY_MODES = Object.freeze(['off', 'explore', 'ptc', 'create', 'roleplay']);
 
 /**
  * Normalize a requested mode, tolerating case and surrounding blanks.
@@ -65,6 +65,7 @@ export const FAIRY_PIPELINE_STAGES = Object.freeze(['roleplay', 'explore', 'ptc'
 /** 阶段的中文名，供工具回报与 chip 使用。 */
 export const PIPELINE_STAGE_LABELS = Object.freeze({
   off: '空闲（不在流水线内）',
+  explore: '探查（只读）',
   roleplay: '扮演',
   explore: '探查（极简）',
   ptc: '建造（PTC）',
@@ -81,7 +82,7 @@ export const PIPELINE_STAGE_LABELS = Object.freeze({
  */
 export const PIPELINE_STAGE_STATE = Object.freeze({
   roleplay: Object.freeze({ mode: 'roleplay', plan: false }),
-  explore: Object.freeze({ mode: 'off', plan: true }),
+  explore: Object.freeze({ mode: 'explore', plan: true }),
   ptc: Object.freeze({ mode: 'ptc', plan: false }),
   create: Object.freeze({ mode: 'create', plan: false }),
 });

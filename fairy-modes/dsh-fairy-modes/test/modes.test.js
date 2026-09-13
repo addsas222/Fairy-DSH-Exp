@@ -238,8 +238,8 @@ test('/mode parses ptc|create|off and reports usage otherwise', () => {
   assert.deepEqual(service.command(agent, 'ptc'), { kind: 'success', text: '已切换到PTC 建造模式。' });
   assert.deepEqual(service.command(agent, ' create '), { kind: 'success', text: '已切换到创造模式。' });
   assert.deepEqual(service.command(agent, 'off'), { kind: 'success', text: '已切换到默认（关闭）模式。' });
-  assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode ptc|create|roleplay|off' });
-  assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：ptc、create、roleplay、off。' });
+  assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode explore|ptc|create|roleplay|off' });
+  assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：explore、ptc、create、roleplay、off。' });
   assert.deepEqual(session.log.map(event => event.data.mode), ['ptc', 'create', 'off']);
 
   // The handler the registry holds is the same body, and says so when the
