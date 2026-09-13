@@ -67,8 +67,8 @@ fairy-voice/dsh-fairy-voice
 fairy-persona/dsh-fairy-persona
 fairy-modes/dsh-fairy-modes
 fairy-search/dsh-fairy-search
-fairy-memory/dsh-fairy-memory"
-$0"
+fairy-memory/dsh-fairy-memory
+fairy-roleplay/dsh-fairy-roleplay"
 PACKAGE_COUNT=10
 # 非包但必须落位的受控目录：契约、验证工具、人格包、两个 preset、web profile。
 EXTRA_PATHS="fairy-contracts fairy-system persona-packs .agent-presets/ponytail .agent-presets/fairy profiles/web"
