@@ -155,8 +155,11 @@ fairy    user BROKEN: …      ← 见下
 - **不要**把 preset 目录以链接形式放进 `$DSH_HOME/.agent-presets/`（见上）。
 - 行尾：仓库根 `.gitattributes` 已固定 `eol=lf`，`profiles/web/patches/*.patch`
   另标 `-text`（其哈希是被 pin 的字节）。CRLF 检出不再制造"源码文本断言"型
-  失败；若本地仍见此类失败，先 `git checkout -- .` 让工作区回到属性声明的
-  行尾，再重跑。
+  失败；若本地仍见此类失败，按索引字节把命中文件落盘再重跑（`git checkout`
+  与 `checkout-index` 都会跳过 stat 未变的文件、且前者会静默丢弃未提交改动）：
+
+      git cat-file -p :profiles/web/patches/dsh-message-edit@0.2.3.patch > \
+        profiles/web/patches/dsh-message-edit@0.2.3.patch
 - `fairy-system/test/*` 里比较"当前 live 布局"的用例需要真实安装前提：
   `DSH_HOME`（隔离 home）+ `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME`
   指向已安装的 0.1.1-rc.2。缺这两个旋钮时它们无法比较对象（不是断言放宽）：
