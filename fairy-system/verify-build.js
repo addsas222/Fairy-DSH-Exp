@@ -109,11 +109,15 @@ function verifyPackage(contract) {
   const outputs = [...new Set([...targets.values()].map((target) => path.resolve(packageDir, target)))];
   const outputMtime = Math.min(...outputs.map((output) => fs.statSync(output).mtimeMs));
   const manifestMtime = fs.statSync(manifestPath).mtimeMs;
-  // A package with no `sourceRoot` has no build step: its lib files are the
-  // sources, so "output newer than manifest" could only ever hold by the order
-  // files happened to be written. The check keeps its meaning for the packages
-  // that really do generate lib/* from src/*.
-  if (contract.sourceRoot !== null && manifestMtime > outputMtime + 1) {
+  // Only a package that generates its outputs can have stale ones. Seven of the
+  // nine are hand-written: their lib files ARE the sources, so "output newer
+  // than manifest" could only ever hold by the order files happened to be
+  // written - a manifest edit would fail the gate for nothing. The criterion is
+  // the build script rather than `sourceRoot` because that is the actual reason
+  // (today the two coincide: only browser-dock and fairy-visual both declare a
+  // src root and generate lib/* from it).
+  const buildScript = manifest.scripts?.bundle || manifest.scripts?.build;
+  if (typeof buildScript === 'string' && buildScript.length > 0 && manifestMtime > outputMtime + 1) {
     fail(`${manifest.name} manifest is newer than its generated outputs; rebuild and re-verify`);
   }
 

@@ -25,9 +25,15 @@ export const EVOMAP_PROTOCOL_VERSION = '1.0.0';
 const DEFAULT_AGENT_NAME = 'Fairy DSH Agent';
 const TIMEOUT_MS = 20_000;
 
-/** `~/.evomap` is the documented canonical location on every platform. */
+/**
+ * `~/.evomap` is the documented canonical location on every platform.
+ * `EVOMAP_HOME` overrides it so a test (or a sandboxed run) can never write
+ * real credentials into the user's home - the whole module resolves the
+ * directory through here, and nothing else touches `homedir()`.
+ */
 export function evomapHome() {
-  return join(homedir(), '.evomap');
+  const override = String(process.env.EVOMAP_HOME || '').trim();
+  return override ? override : join(homedir(), '.evomap');
 }
 
 function credentialsFromEnv() {
@@ -120,7 +126,7 @@ async function hello({ fetchImpl, nodeId, secret, payload, signal }) {
   const value = unwrap(data);
   if (response.status === 403) return { kind: 'invalid-secret', detail: value?.error || value?.code || 'node_secret_invalid' };
   if (!response.ok) return { kind: 'unreachable', detail: `HTTP ${response.status}` };
-  if (value?.claimed === true) return { kind: 'claimed', nodeId: value.owner_user_id ? undefined : undefined, owner: value.owner_user_id ?? null, value };
+  if (value?.claimed === true) return { kind: 'claimed', owner: value.owner_user_id ?? null, value };
   if (value?.claim_url) return { kind: value.claimed === false ? 'unbound' : 'registered', value };
   return { kind: 'unknown', value };
 }
