@@ -16,32 +16,42 @@
 #   --home DIR        目标 DSH_HOME（默认 $DSH_HOME，再默认 ~/.dsh）
 #   --from-worktree   用当前工作树部署（含未提交改动），而不是 git HEAD——
 #                     开发回路里最常用；发布的干净形态请省略它
+#   --evomap          显式同意执行第 4 步的 EvoMap 注册（见下方默认规则）
 #   --skip-evomap     跳过第 4 步（EvoMap 接入）。CI/无人值守请一律带上：
 #                     该步骤会向外网注册节点并产生本机凭据
+#
+# 第 4 步的默认规则（防止"沙箱自测顺手注册了一个真节点"）：
+#   --home 指向默认 $DSH_HOME（即真部署）→ 执行，失败不阻断；
+#   --home 指向别处（探针/沙箱）        → 自动跳过并提示，需要真跑时加 --evomap。
+#   --dry-run 永远只打印命令，不执行。
 #   --skip-install    只落文件，不跑 pnpm（离线排障用）
 #   --no-verify       不跑 verify-build 契约检查
 #   --dry-run         只打印将要执行的命令
 #
 # 退出码：0 成功；1 前置条件或某一步失败（EvoMap 步骤失败不算，见第 4 步）。
-set -euo pipefail
+set -eu
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # 用 $0 而非 BASH_SOURCE：dash 下后者为空
+# （按 sh 执行；source 本脚本不受支持）
 DSH_HOME_TARGET="${DSH_HOME:-$HOME/.dsh}"
 FROM_WORKTREE=0
 SKIP_EVOMAP=0
+FORCE_EVOMAP=0
+HOME_EXPLICIT=0
 SKIP_INSTALL=0
 RUN_VERIFY=1
 DRY_RUN=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --home) DSH_HOME_TARGET="$2"; shift 2 ;;
+    --home) DSH_HOME_TARGET="$2"; HOME_EXPLICIT=1; shift 2 ;;
+    --evomap) FORCE_EVOMAP=1; shift ;;
     --from-worktree) FROM_WORKTREE=1; shift ;;
     --skip-evomap) SKIP_EVOMAP=1; shift ;;
     --skip-install) SKIP_INSTALL=1; shift ;;
     --no-verify) RUN_VERIFY=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -137,6 +147,11 @@ fi
 EVOMAP_CLI="$DSH_HOME_TARGET/fairy-memory/dsh-fairy-memory/lib/memory-cli.js"
 if [ "$SKIP_EVOMAP" = 1 ]; then
   warn "step 4/5: skipped (--skip-evomap)"
+elif [ "$HOME_EXPLICIT" = 1 ] && [ "$FORCE_EVOMAP" != 1 ]; then
+  # A non-default home means someone is probing the deploy (or building a
+  # sandbox); registering a real node from there is never what they meant.
+  warn "step 4/5: skipped (--home 指向非默认目录；EvoMap 注册只针对真实部署)"
+  warn "  确实要在这里注册就加 --evomap；只想看命令形态用 --dry-run。"
 elif [ ! -f "$EVOMAP_CLI" ]; then
   warn "step 4/5: skipped (memory package not staged)"
 elif [ "$DRY_RUN" = 1 ]; then
@@ -162,6 +177,6 @@ else
 fi
 
 log "done. 启动："
-printf '\n  export DSH_HOME=%q\n  export DSH_FAIRY_REPO_ROOT=%q\n  dsh --profile web --no-open\n\n' \
+printf '\n  export DSH_HOME="%s"\n  export DSH_FAIRY_REPO_ROOT="%s"\n  dsh --profile web --no-open\n\n' \
   "$DSH_HOME_TARGET" "$DSH_HOME_TARGET"
 log "验证链（可选）：node $DSH_HOME_TARGET/fairy-system/verify.js；（macOS live 部署再用 check.sh）"
