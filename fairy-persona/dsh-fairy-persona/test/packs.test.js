@@ -87,7 +87,9 @@ test('defaultScanRoots prefers the environment and falls back to this repository
   }
 
   const roots = defaultScanRoots();
-  assert.equal(roots[0], join(homedir(), '.dsh', 'personas'));
+  // The first root follows DSH_HOME when the caller set it (the documented
+  // isolated-home flow does), and the home default otherwise.
+  assert.equal(roots[0], join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'personas'));
   // Without the environment the fallback must land on the repository root,
   // which is the directory holding the sibling plugin packages.
   assert.equal(basename(roots[1]), 'persona-packs');
