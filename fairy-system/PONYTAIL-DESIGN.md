@@ -86,8 +86,10 @@ interface TtsProvider {
 ```ts
 interface SttProvider {
   id: string         // browser | whisper-web | openai | deepgram | azure | custom-http
-  available(config): Promise<boolean>
-  transcribe(audio: Uint8Array, contentType, lang, config, signal): Promise<string>
+  available(config): { available: boolean, reason: string | null }   // 同步；无网络探测，只按配置判定
+  transcribe({ audio, contentType, language, config, signal }): Promise<{ text: string }>
+  // language = 请求头 `x-fairy-language`（客户端按所选 provider 的字段取值），
+  // 为空时回落到该 provider 自己的字段
 }
 ```
 

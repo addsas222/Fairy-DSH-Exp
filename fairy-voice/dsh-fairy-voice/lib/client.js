@@ -410,10 +410,15 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return typeof config?.provider === 'string' && config.provider ? config.provider : 'browser';
     }
 
+    /** Every provider names its own language field; the header must match the
+     * card, or the host would override the setting with a browser default. */
     function sttLanguage(config) {
       const provider = sttProviderId(config);
       const providers = config?.providers || {};
-      const raw = provider === 'openai' ? providers.openai?.language : providers.browser?.lang;
+      const raw = provider === 'openai' ? providers.openai?.language
+        : provider === 'deepgram' ? providers.deepgram?.language
+          : provider === 'azure' ? providers.azure?.locale
+            : providers.browser?.lang;
       return typeof raw === 'string' && raw.trim() ? raw.trim() : 'zh-CN';
     }
 

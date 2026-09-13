@@ -568,7 +568,11 @@ test('azure stt posts the fast-transcription multipart body and joins phrases pe
   // fetch must derive the multipart boundary itself.
   assert.equal(captured.options.headers['Content-Type'], undefined);
   assert.equal(captured.options.body instanceof FormData, true);
-  assert.equal(captured.options.body.get('definition'), '{"locales":["zh-CN"]}');
+  // The definition part carries its own JSON media type: a bare string part
+  // serializes as text/plain, which some deployments reject.
+  const definition = captured.options.body.get('definition');
+  assert.equal(definition.type, 'application/json');
+  assert.equal(await definition.text(), '{"locales":["zh-CN"]}');
   const blob = captured.options.body.get('audio');
   assert.equal(blob.type, 'audio/webm');
   assert.deepEqual([...new Uint8Array(await blob.arrayBuffer())], [...audio]);

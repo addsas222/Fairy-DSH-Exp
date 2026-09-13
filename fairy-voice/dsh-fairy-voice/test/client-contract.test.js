@@ -445,8 +445,26 @@ test('speech input offers online and local routes', () => {
   assert.match(source, /pipeline\('automatic-speech-recognition', config\.modelId/);
   assert.match(source, /withResourceMirror\(config\.resourceBase, \(\) => withSingleThreadHint\(/);
   assert.match(source, /WHISPER_LANGUAGES\[value\] \|\| value/);
+  // The language header follows the selected provider's own field.
+  assert.match(source, /provider === 'deepgram' \? providers\.deepgram\?\.language/);
+  assert.match(source, /provider === 'azure' \? providers\.azure\?\.locale/);
   // First local run downloads the model; the mic tooltip says so.
   assert.match(source, /speech\.provider === 'whisper-web' \? '本地识别中（首次会下载模型）…' : '正在转写…'/);
+});
+
+test('the speech language header resolves the selected provider\'s own field', () => {
+  // Execute the shipped source instead of a copy: the header must carry what
+  // the card shows, or the host would override it with the browser default.
+  const definitions = [source.match(/    function sttProviderId\(config\) \{[\s\S]*?\n    \}/)[0], source.match(/    function sttLanguage\(config\) \{[\s\S]*?\n    \}/)[0]]
+  const sttLanguage = new Function(`${definitions.join('\n')}\nreturn sttLanguage;`)();
+  const settings = (provider, fields) => ({ provider, providers: fields });
+  assert.equal(sttLanguage(settings('deepgram', { deepgram: { language: 'ja' }, browser: { lang: 'zh-CN' } })), 'ja');
+  assert.equal(sttLanguage(settings('azure', { azure: { locale: 'en-US' }, browser: { lang: 'zh-CN' } })), 'en-US');
+  assert.equal(sttLanguage(settings('openai', { openai: { language: 'ko' }, browser: { lang: 'zh-CN' } })), 'ko');
+  assert.equal(sttLanguage(settings('browser', { browser: { lang: 'de' } })), 'de');
+  // An untouched field still yields a usable default instead of an empty header.
+  assert.equal(sttLanguage(settings('deepgram', { deepgram: { language: '  ' } })), 'zh-CN');
+  assert.equal(sttLanguage(undefined), 'zh-CN');
 });
 
 test('the 语音输入 settings card owns provider, fields, and availability', () => {

@@ -72,7 +72,9 @@ export function createAzureSttProvider({ fetchImpl = fetch } = {}) {
       const locale = String(language || value.locale || '').trim();
       const form = new FormData();
       form.append('audio', new Blob([audio], { type: contentType }));
-      form.append('definition', JSON.stringify({ locales: locale ? [locale] : [] }));
+      // Microsoft's own samples mark this part as JSON; a plain string part
+      // serializes as text/plain and some deployments reject that.
+      form.append('definition', new Blob([JSON.stringify({ locales: locale ? [locale] : [] })], { type: 'application/json' }));
       // The fetch-derived boundary must survive: setting Content-Type here
       // would strip it and make the multipart body unparsable.
       const response = await requestAudioBytes(fetchImpl, url, {
