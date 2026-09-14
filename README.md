@@ -136,16 +136,22 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 `fairy-system/test/` 里比较「当前 live 布局」的用例需要 `DSH_HOME` + `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已安装的官方 runtime；缺这两个旋钮时它们没有比较对象（不是断言放宽）。纯 Windows 机器上 `verify.js` / `check.sh` 依赖 macOS live 布局，不适合作为本地验证入口。
 
-2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **66 例，52 通过 / 13 失败**。
-13 例全部来自 `upgrade.test.js`，根因是前置条件缺失——`~/.dsh/profiles/web/node_modules/`
-下没有 `dsh-fairy-persona` 等包，夹具在 `realpathSync` 上直接 ENOENT（**不是断言放宽**，
-与 `repo-update` / `host-align` 的改动无关：stash 掉这两个改动后同样是 52/13）。
-新加的两组测试单独跑是 13/13 绿，且不依赖任何外部服务。
+2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **67 例，53 通过 / 13 失败 / 1 跳过**。
+13 例的归属（逐个对号入座，不是估的）：**`upgrade.test.js` 7 例**（`fails closed on an unapproved
+runtime hash`、`refuses to validate the active profile…`、`validates an isolated candidate profile…` 等）
++ **`preflight.test.js` 6 例**（`accepts complete bundles and profile links`、`fails before launch
+when a client bundle is missing`、`fails when a profile link targets the wrong package` 等）。
+两组都是**环境前提不满足**的固定失败集——`scripts/test-isolated.sh` 的注释即写明：缺
+`DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 时就是这 13 条（原话 "instead of reporting
+13 unexplained failures"）。本机无法补齐：它们 pin 的是
+`~/.local/lib/node_modules/@deepseek-ai/dsh@0.1.1-rc.2` + `dsh-client-runtime`，而本机装的是
+0.1.5-rc.2，且 `dsh-client-runtime` 已随 0.1.2 移除。**不要为了让它们变绿而改断言**（AGENTS §4）；
+按"gate 无可比对象"如实报告。新加的两组测试与此无关：stash 掉本次改动后这 13 条红色原样不变。
 
 | 测试文件 | 守的是什么 |
 | --- | --- |
 | `host-align.test.js` | 混版判定与退出码：独立版本线不误报、dry-run 不改动、"用法错"与"混版"分开（2 vs 1） |
-| `repo-update.test.js` | 远端落后/不可达/分支不存在三态分明（0/1/2）、脏工作树与缺部署脚本拒执行、`--dry-run` 不动 HEAD |
+| `repo-update.test.js` | 方向判定（远端领先 / **本地领先** / 分叉 / 方向未知）、不可达与"已最新"不同码、脏工作树与缺部署脚本拒执行、`--dry-run` 不动 HEAD |
 
 两组都用**本地 bare 仓夹具**（`git init --bare` + `commit-tree`），**零外网**，符合 AGENTS §5.6。
 
@@ -197,13 +203,24 @@ node fairy-system/repo-update.mjs apply --yes     # pull --ff-only + 复用 depl
 
 | 码 | 含义 |
 | --- | --- |
-| 0 | 已最新（镜像也一致） |
-| 1 | 远端有更新 / 镜像落后于提交 |
+| 0 | 已最新（本地 HEAD 与远端一致，镜像也一致） |
+| 1 | 远端有新提交 / **本地领先远端**（提交后未推送，本仓常态）/ 镜像落后于提交 |
 | 2 | 网络或远端不可达——**不代表"已最新"** |
-| 3 | 用法或前置条件错误（脏工作树、缺 `deploy-live.sh`） |
+| 3 | 用法或前置条件错误（脏工作树、缺 `deploy-live.sh`、本地与远端**分叉**） |
+
+**方向是靠祖先关系判出来的，不是"SHA 不同即落后"**：`merge-base --is-ancestor` 只读
+本地对象库，因此 `ls-remote` 的只读性不破。三种不一致分开报，因为动作完全不同——
+
+```
+远端是本地祖先 → 本地领先：要 push，不是 pull（apply 在 --ff-only 下是 Already up to date）
+本地是远端祖先 → 远端领先：apply 有意义
+两者都不是     → 分叉：--ff-only 必然失败，需人工合或 rebase（本工具不猜，exit 3）
+本地无该对象   → 方向未知：先 fetch 再判
+```
 
 `apply` 默认带 `--skip-evomap`（AGENTS §5.3 禁止在任何自动化里跑 `evomap join`）；
-脏工作树或找不到部署脚本时**拒绝执行**，不留下"拉了一半"的状态。
+脏工作树或找不到部署脚本时**拒绝执行**，不留下"拉了一半"的状态。确实要走 EvoMap 接入时
+显式加 `--with-evomap`（那时才会去掉 `--skip-evomap`）——这是唯一的破例入口。
 
 镜像判定默认按 `image-manifest.js policy --lines` 的口径（与 `deploy-live.sh` 同一来源）
 忽略本机适配，也可用 `--preserve LIST` 覆盖。**`--home` 默认 `$DSH_HOME`、再默认 `~/.dsh`**：

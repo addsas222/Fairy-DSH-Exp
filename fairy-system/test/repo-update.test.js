@@ -51,6 +51,7 @@ function fixture() {
   const remote = path.join(root, 'remote.git');
   const seed = path.join(root, 'seed');
   const repo = path.join(root, 'repo');
+  const work = path.join(root, 'work');
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', remote], { stdio: 'ignore' });
   execFileSync('git', ['init', '-q', '-b', 'main', seed], { stdio: 'ignore' });
   git(seed, 'config', 'core.autocrlf', 'false');
@@ -63,10 +64,12 @@ function fixture() {
   git(seed, 'remote', 'add', 'origin', remote);
   git(seed, 'push', '-q', '-u', 'origin', 'main');
   execFileSync('git', ['clone', '-q', remote, repo], { stdio: 'ignore' });
+  // 工作副本从 bare 远端克隆（origin 指向远端），模拟"同事往远端推"的真实形态
+  execFileSync('git', ['clone', '-q', remote, work], { stdio: 'ignore' });
   git(repo, 'config', 'user.email', 'repo-update-test@example.invalid');
   git(repo, 'config', 'user.name', 'repo-update test');
   return {
-    root, remote, repo, seed,
+    root, remote, repo, seed, work,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
     /** 往远端推一个新提交（本地因此落后）。先移动 seed 的分支，再让 bare 仓取它
      *  （bare 仓不能 push 到 checked-out 分支，也不会经 update-ref 认外部对象）。 */
@@ -74,6 +77,21 @@ function fixture() {
       const sha = commit(seed, 'second');
       git(seed, 'update-ref', 'refs/heads/main', sha);
       git(remote, 'fetch', '-q', seed, 'main:refs/heads/main');
+      return sha;
+    },
+    /** 同事/别处往远端推一个提交——本地**对象库**会（像真实 fetch 那样）看到它，
+     *  但本地分支不动：这是"远端领先"的真实形态，本工具要能判出方向。 */
+    colleaguePushes() {
+      const sha = commit(work, 'colleague');
+      git(work, 'update-ref', 'refs/heads/main', sha);
+      git(work, 'push', '-q', 'origin', 'main');
+      git(repo, 'fetch', '-q', 'origin');
+      return sha;
+    },
+    /** 让**本地**多一个提交（远端不动）——本地领先，也是本仓"提交后未推送"的常态。 */
+    advanceLocal() {
+      const sha = commit(repo, 'local-only');
+      git(repo, 'update-ref', 'refs/heads/main', sha);
       return sha;
     },
     /** 只保留 git 目录之外的一个假家目录（用于镜像判定）。 */
@@ -105,7 +123,7 @@ test('本地与远端一致时 check 退出 0，且 JSON 报 current', () => {
 test('远端有新提交时 check 退出 1（而不是 0/2），apply --dry-run 不改动工作树', () => {
   const f = fixture();
   try {
-    const ahead = f.advanceRemote();
+    const ahead = f.colleaguePushes();
     const before = git(f.repo, 'rev-parse', 'HEAD');
     const r = runAllowFailure(['check', '--repo', f.repo, '--json']);
     assert.equal(r.code, 1, '远端有更新必须是独立退出码 1');
@@ -117,6 +135,30 @@ test('远端有新提交时 check 退出 1（而不是 0/2），apply --dry-run 
     assert.equal(dry.code, 1);
     assert.match(dry.stdout, /git -C .* pull --ff-only origin main/);
     assert.equal(git(f.repo, 'rev-parse', 'HEAD'), before, '--dry-run 不得移动 HEAD');
+  } finally { f.cleanup(); }
+});
+
+test('本地领先（提交后未推送）时报"本地领先"而不是"远端有更新"', () => {
+  const f = fixture();
+  try {
+    const localOnly = f.advanceLocal();
+    const before = git(f.repo, 'rev-parse', 'HEAD');
+    const r = runAllowFailure(['check', '--repo', f.repo, '--json']);
+    assert.equal(r.code, 1, '本地领先仍是"不一致"，但不是"已最新"');
+    const payload = JSON.parse(r.stdout);
+    assert.equal(payload.state, 'ahead', '方向必须判出来——报 behind 是假话');
+    assert.equal(payload.local, localOnly);
+    assert.notEqual(payload.remoteHead, payload.local);
+
+    // 人读的输出里不能说"远端有更新"
+    const human = runAllowFailure(['check', '--repo', f.repo]);
+    assert.match(human.stdout, /本地领先远端/);
+    assert.doesNotMatch(human.stdout, /远端有更新/);
+    // apply 不应把 ahead 当落后：--ff-only 下是 Already up to date，且不该动盘
+    const dry = runAllowFailure(['apply', '--repo', f.repo, '--dry-run', '--home', f.fakeHome()]);
+    assert.equal(dry.code, 1);
+    assert.match(dry.stdout, /本地领先远端/);
+    assert.equal(git(f.repo, 'rev-parse', 'HEAD'), before);
   } finally { f.cleanup(); }
 });
 
@@ -140,7 +182,7 @@ test('远端没有该分支时也退出 2（远端异常 ≠ 已最新）', () =
 test('脏工作树时 apply 拒绝执行（退出 3），不 pull 不留半成品', () => {
   const f = fixture();
   try {
-    f.advanceRemote();
+    f.colleaguePushes();
     const before = git(f.repo, 'rev-parse', 'HEAD');
     writeFileSync(path.join(f.repo, 'scripts', 'deploy-live.sh'), '#!/bin/sh\necho dirty\n');   // 已跟踪文件被改
     const r = runAllowFailure(['apply', '--repo', f.repo, '--yes', '--home', f.fakeHome()]);
@@ -153,7 +195,7 @@ test('脏工作树时 apply 拒绝执行（退出 3），不 pull 不留半成�
 test('未加 --yes 时 apply 只打印将执行的动作', () => {
   const f = fixture();
   try {
-    f.advanceRemote();
+    f.colleaguePushes();
     const before = git(f.repo, 'rev-parse', 'HEAD');
     const r = runAllowFailure(['apply', '--repo', f.repo, '--home', f.fakeHome()]);
     assert.equal(r.code, 1);
@@ -165,7 +207,7 @@ test('未加 --yes 时 apply 只打印将执行的动作', () => {
 test('缺 deploy-live.sh 时 apply 拦阻（退出 3），不 pull', () => {
   const f = fixture();
   try {
-    f.advanceRemote();
+    f.colleaguePushes();
     rmSync(path.join(f.repo, 'scripts', 'deploy-live.sh'));
     const before = git(f.repo, 'rev-parse', 'HEAD');
     const r = runAllowFailure(['apply', '--repo', f.repo, '--yes', '--home', f.fakeHome()]);

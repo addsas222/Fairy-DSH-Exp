@@ -8,8 +8,12 @@
  *   ESM 报的是 "does not provide an export named …"，看起来像代码 bug，
  *   实际是同一批 `@deepseek-ai/*` 装的不是同一个版本。
  *
- * 这类混版在"只把顶层 dsh 升级、依赖树没全量重装"之后很常见（本机就是这样：
- * 208 个包已是 0.1.5-rc.2，另有 20+ 个仍是 0.1.2-rc.1）。
+ * 这类混版在"只把顶层 dsh 升级、依赖树没全量重装"之后很常见（本机修复前就是：
+ * 208 个包已是 0.1.5-rc.2，另有 20+ 个仍是 0.1.2-rc.1；逐包清点确认后才对齐）。
+ * 修复后的实测形态（2026-09-14，供对照）：240 个包里 231 个是 0.1.5-rc.2，其余 9 个
+ * 全部落在独立版本线——cordis/cosmokit/schemastery 系，以及原生构建物
+ * `node-addon-system@0.1.2`（受 `dsh-sandbox-local` 的 `^0.1.2` 约束、平台包 pin 0.1.2，
+ * **不是混版**，故 check 报的 ✅ 是诚实的）。
  *
  * 用法：
  *   node fairy-system/host-align.js check [--home <DSH_HOME>] [--runtime <安装目录>]

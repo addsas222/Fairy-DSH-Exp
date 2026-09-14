@@ -193,9 +193,13 @@ node fairy-system/host-align.js check        # 官方安装的 @deepseek-ai/* �
 `repo-update.mjs` 只负责**这份仓库的代码**：远端比对用 `git ls-remote`（不下载、不写
 FETCH_HEAD），应用是 `pull --ff-only` + 复用 `scripts/deploy-live.sh`（对账与两道门禁都在
 那条链里）。**它不碰 DSH 版本** —— `@deepseek-ai/*` 的升级属 §4 的候选择预检流程。
-退出码把「离线」与「已最新」分开（0 最新 / 1 有更新 / 2 网络或远端不可达 / 3 用法）：
-这台机器 GitHub 通路时通时断，同码会让检查静默说谎。无人值守用 `apply --yes`
-（默认已带 `--skip-evomap`；§5.3 禁任何自动化里跑 `evomap join`）。
+方向（远端领先 / 本地领先 / 分叉 / 方向未知）用 `merge-base --is-ancestor` 判，只读本地
+对象库——**不能拿"SHA 不同"当落后**：本仓常态是"刚提交未推送"= 本地领先，那时说"远端有
+更新"是假话，而 apply 在 `--ff-only` 下其实是 `Already up to date`。分叉报 exit 3 并要求
+人工合，不猜。退出码把「离线」与「已最新」分开（0 最新 / 1 有更新或本地领先或镜像落后 /
+2 网络或远端不可达 / 3 用法、前置条件或分叉）：这台机器 GitHub 通路时通时断，同码会让
+检查静默说谎。无人值守用 `apply --yes`（默认已带 `--skip-evomap`；§5.3 禁任何自动化里跑
+`evomap join`，确需接入得显式 `--with-evomap`）。
 
 `host-align.js check` 只比**同一版本线**（0.1.x）内的 `dsh-*`，独立版本线
 （cordis/cosmokit/schemastery）与原生构建物（`node-addon-*`，需 `--include-addons`）不参与。
