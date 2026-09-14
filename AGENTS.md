@@ -410,8 +410,10 @@ Defender 组合会在 `AmsiScanBuffer` 里抛 `AccessViolationException`，脚�
 **不必重启实例**（既有会话保持挂载时的那份）。判据：boot 日志里只有 host 模块打
 `DSH_FAIRY_LOG …"module":"dsh-…"`，preset 行**不会**出现在 boot 日志里——所以"boot 日志没有引擎
 import 痕迹"是正常现象，不能读作"在跑降级"。这条此前在本仓被写反过（写成"只在启动时 import 一次、
-必须重启"）。要眼见为实：在实例上建一个 fairy 会话问它"你系统提示里【Fairy 语音核心】标题括号里写的是
-完整模式还是降级模式"，模型逐字复述即可判定。
+必须重启"）。要眼见为实，用**更强的两条判据**（详见 §3 的"验证现状"）：① 实例 stderr 上出现
+`MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`（引擎真被 import 过）；
+② 同 env 跑 shim 链看段正文长度/首行（4424 / 1243 字符）。**别用"让模型复述自己的段标题"
+当直证**——模型自省可能顺着问法编。
 
 
 - **浏览器 Dock 的"在外部浏览器接管一次"没反应**：接管在 Windows 上走
