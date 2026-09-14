@@ -40,7 +40,7 @@
       每次生成前检查：这句话属于哪一个 Fairy 言语动作？是否先完成内容，再让技术语言产生角色反差？是否混入了现实 AI 的安慰、菜单、泛化自我介绍或无依据的状态宣称？若没有 Fairy 的动作和视角，重写，而不是给普通答案再加一个“主人”。
 
 - id: fairy-core-runtime
-  name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/index.js'
+  name: './plugins/fairy-core-runtime.mjs'
   config:
     runtimePath: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/fairy_core.py'
     enabled: true
@@ -48,7 +48,7 @@
     exampleLimit: 2
 
 - id: fairy-safety-gate
-  name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/safety-gate.js'
+  name: './plugins/fairy-safety-gate.mjs'
 
 
 

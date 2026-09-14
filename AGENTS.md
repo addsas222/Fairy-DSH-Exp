@@ -248,22 +248,29 @@ curl -s -X POST -H 'content-type: application/json' \
 ```
 
 期望：`standard/code/minimal/cordis` 为 `system`，`ponytail` 为 `user`，
-`fairy` 为 `user BROKEN: …`。
+`fairy` 为 `user ok`（私有 runtime 缺失时走降级模式，见下）。
 
-`fairy` 的 BROKEN 有**两个独立成因**（2026-09 实测）：
+`fairy` preset 的两处历史缺陷**已修复**（2026-09）：
 
-1. **行名不合规**：`agent.cordis.yml` 第 2/3 行（`fairy-core-runtime`、`fairy-safety-gate`）
-   的 `name` 用了 `!!js` 表达式，而发现器的 `entryListProblem` 要求 `name` 必须是
-   **字符串**（`names no plugin (a "name" string is required)`）——这是当前报出来的那条错。
-   合规写法见本目录 ponytail preset 的行名约定（字面量，或指向预设内相对路径的 shim）。
-2. **私有资产缺失**：即便把行名改成字面量，`runtime/index.js`、`runtime/safety-gate.js`、
-   `runtime/fairy_core.py` 依然不存在——它们**从未进过任何公开仓库**（本仓与
-   `Chengzhibense/Fairy-DSH` 的全历史、工作树、`~/.dsh`、隔离 home 都没有）。
-   上游只在 `ASSET-BOUNDARIES.json` 声明其消费关系、在 `fairy-system/check.sh` 里对它做
-   语法检查，即「资产在部署机上、不在仓库里」。
+1. **行名不合规**（已修）：`agent.cordis.yml` 第 2/3 行原用
+   `name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/index.js'`，
+   而发现器的 `entryListProblem` 要求 `name` 必须是**字符串**——这会让整个 preset 判 BROKEN。
+   现改为 preset 内相对路径 shim（`./plugins/fairy-core-runtime.mjs`、
+   `./plugins/fairy-safety-gate.mjs`），与 ponytail preset 的行名约定一致。
+2. **私有 runtime 缺失**（已降级处理）：`runtime/index.js`、`runtime/safety-gate.js`、
+   `runtime/fairy_core.py`、`runtime/compiler.js` 等**从未进过任何公开仓库**
+   （本仓与 `Chengzhibense/Fairy-DSH` 全历史、工作树、两个 home 皆无）。两个 shim 因此
+   先尝试 `import` 私有真身，**缺失时走降级路径**：把随 preset 分发的语料
+   （`behavior/fairy_behavior_rules.json` 334 KB 规则、`personality/*` 55 KB traits、
+   `canon/*` 12 KB、`style/*` 9 KB）编译成一段注入系统提示的速查表，
+   并提供保守的风险闸门（高风险动作先"警告。"并要求确认）。
+   降级路径**不含**原 runtime 的统计式语音选择，其余人格与规则照常生效。
 
-因此，任何**公开** clone 上 `fairy` preset 都必然 BROKEN，它只对持有私有 runtime 的
-部署机有意义；`ponytail` 与其余 4 个 system preset 不受影响。
+实测（隔离实例，`agentPreset.list`）：修复前 `fairy user BROKEN: …`；修复后
+`fairy user ok`，且 10 个插件全部 `apply: outcome=success`。
+
+因此公开 clone 上 `fairy` 现在**可用**（降级模式）；把私有 `runtime/` 放到
+`$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy/runtime/` 即自动切换为完整模式，无需改配置。
 
 完整链（需 live macOS 部署：`launchers/`、LaunchAgents、语音服务）：
 `./fairy-system/check.sh`。基线只读对比：`node fairy-system/accepted-baseline.js --diff`。
