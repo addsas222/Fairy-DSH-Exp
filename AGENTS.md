@@ -258,13 +258,23 @@ done
 `verify-build.js` 与 `image-manifest.js` 才是跨平台的那两道。）
 
 具体一点：**没有官方安装时 `preflight.test.js` 与 `upgrade.test.js` 会整组失败**
-（13 例 = preflight 6 + upgrade 7，症状是 `DSH_PREFLIGHT_ERROR scope="dsh_version" …
-actual="ENOENT"`——预检按 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json`
-找官方包，Windows 默认根本没有这个路径）。这是环境前提，不是代码回归：这两组用例只在
-存在官方 0.1.1-rc.2 安装的机器上才有意义。其余 **60 例**（含 10 例
-`image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装，任何平台都该全绿；
-其中 `repo-update`（本地 bare 仓当远端）与 `host-align`（临时目录造假安装树，不碰 git）
-两组连网络都不用。
+（13 例 = preflight 6 + upgrade 7）。两组的**外部前提不同**，别混：
+
+- `preflight.test.js`（6）：要 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json`
+  存在（`preflight-build.js:13-14` 的默认路径，Windows 上根本没有），版本还得是官方
+  **0.1.1-rc.2**（hash + lock 清单都 pin 死）。它把 `DSH_HOME` 指向临时夹具
+  （`preflight.test.js:76`），所以**读不到主环境**——补 `~/.dsh` 对它没用。
+- `upgrade.test.js`（7）：`createIsolatedFixture` 要从 `$DSH_HOME`（缺省 `~/.dsh`）的
+  profile 里链接十个插件包 + 官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份
+  runtime（默认同为 `~/.local/…`）。缺任一环就在 `realpathSync` 上 ENOENT。
+
+即：**"补 `~/.dsh`"只对 upgrade 那 7 例有意义**。这是环境前提，不是代码回归；而且它们守的是
+0.1.1-rc.2 的升级契约，本机跑 0.1.5-rc.2——补绿等于在这台机器上并存一份旧官方安装。
+其余 **62 例**（= 75 − 13；含 10 例
+`image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装，任何平台都该
+**61 通过 + 1 跳过**（跳过的那例是 `world-core tool definition passes the host schema engine`，
+本机解析不到 `@deepseek-ai/dsh-tools` 时它才 skip）；其中 `repo-update`（本地 bare 仓当远端）
+与 `host-align`（临时目录造假安装树，不碰 git）两组连网络都不用。
 
 **预设健康检查**（发现器的真实判定，避免"能启动但选不中"；服务运行中执行，
 端口取启动日志 `dsh web: http://127.0.0.1:<port>`）：
