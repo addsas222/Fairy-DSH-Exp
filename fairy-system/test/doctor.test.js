@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, killCommandFor, exitFor, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, killCommandFor, strayActionText, exitFor, EXIT } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -190,12 +190,21 @@ test('命中时的命令按平台分岔（非 Windows 不能给 taskkill）', ()
   assert.doesNotMatch(linux, /taskkill/);
 });
 
-test('检测到 install 进程时不建议盲目杀（本仓日常就在跑 pnpm）', () => {
-  // 只测签名与措辞取向：真机扫描依赖环境，但"命中≠该杀"这条是必须钉住的口径——
-  // 旧文案直接给 `taskkill ... /T /F`，会把用户正在跑的部署杀掉。
-  assert.equal(isInstallLikeCommand('pnpm install --frozen-lockfile'), true);
-  const cmd = killCommandFor(4321, process.platform);
-  assert.ok(cmd.includes('4321'), '命令要带具体 PID');
+test('命中时的动作**措辞**：先让等、再说"确认残留才动手"（防文案回退成命令式）', () => {
+  // 这条守的是真正危险的那段：命中很可能就是"正在进行的正常部署"，命令式文案会诱导
+  // 杀掉用户刚起的活儿。只测签名与 PID 拼接是不够的（前一版就是这样）。
+  const t = strayActionText([{ pid: 4321, cl: 'pnpm install' }], 'win32');
+  assert.match(t, /等它跑完/, '要先给出"等它结束"这个默认动作');
+  assert.match(t, /只有/, '临时命令必须带前提条件');
+  assert.match(t, /确认是失控残留/, '必须要求先确认');
+  assert.match(t, /taskkill \/PID 4321 \/T \/F/, 'Win 侧给 taskkill');
+  assert.doesNotMatch(t, /^taskkill/, '不能以命令开头——那读起来就是"去杀它"');
+  // 非 Windows 分支不能出现 taskkill
+  const posix = strayActionText([{ pid: 7, cl: 'pnpm install' }], 'linux');
+  assert.doesNotMatch(posix, /taskkill/);
+  assert.match(posix, /kill -9 7/);
+  // 没有命中对象时给占位符而不是炸掉
+  assert.match(strayActionText([], 'win32'), /<pid>/);
 });
 
 test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {

@@ -197,6 +197,16 @@ export function killCommandFor(pid, platform = process.platform) {
   return platform === 'win32' ? `taskkill /PID ${pid} /T /F` : `kill -9 ${pid}（子进程可用 pkill -P ${pid}）`;
 }
 
+/**
+ * 命中时的**动作文案**。抽成纯函数是为了把"命中≠该杀"这条口径钉死：
+ * 本仓日常就靠 pnpm（deploy-live.sh 第 3/4 步、test-isolated.sh 都跑 `pnpm install`），
+ * 正在进行**正常部署**时本条必然命中——命令式的 `taskkill` 会把用户刚起的活儿杀掉。
+ */
+export function strayActionText(hits, platform = process.platform) {
+  const sample = hits.length ? killCommandFor(Number(hits[0].pid), platform) : killCommandFor('<pid>', platform);
+  return `若确认是自己起的部署/测试，等它跑完即可；**只有**在确认是失控残留时才 ${sample}`;
+}
+
 /** ⑤ 残留安装进程：被取消/超时的安装可能仍在跑，且随时写树。按**命令行签名**认，不按进程名。 */
 export function checkStrayInstalls() {
   const hits = [];
@@ -243,8 +253,7 @@ export function checkStrayInstalls() {
       + '    命中很可能是**正在进行的正常部署**，不是残留：\n    '
       + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    ')
       + '\n    → 本次体检的树状态是快照；等它结束后再复跑，别在写树过程中下结论',
-    fix: '若确认是自己起的部署/测试，等它跑完即可；**只有**在确认是失控残留时才 '
-      + killCommandFor(Number(hits[0].pid)),
+    fix: strayActionText(hits),
   };
 }
 
