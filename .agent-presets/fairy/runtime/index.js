@@ -19,7 +19,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SECTION_NAME = 'fairy-voice-core';
 const SECTION_ORDER = 47;
@@ -136,7 +136,10 @@ export async function apply(ctx, config = {}) {
 export const inject = ['systemPrompt'];
 
 // 自检：`node index.js` 直接打印段落，人眼可核（也是本模块唯一的"测试"）。
-if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+// 判据必须是"**本文件**是入口"——不能用 `argv[1].endsWith('index.js')`：那样任何
+// `import()` 到本文件的进程都会命中（`node -e 'import(...)'` 的 argv[1] 就是本文件），
+// 自检正文会污染调用方的 stdout。
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const text = buildSectionText({ fidelity: 'strict', exampleLimit: 2 }) ?? '(语料不可用)';
   process.stdout.write(`${text}\n`);
   const checks = [

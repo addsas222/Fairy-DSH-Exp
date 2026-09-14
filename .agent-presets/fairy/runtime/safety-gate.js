@@ -14,7 +14,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SECTION_NAME = 'fairy-safety-gate';
 const SECTION_ORDER = 49;
@@ -108,7 +108,8 @@ export async function apply(ctx, config = {}) {
 
 export const inject = ['systemPrompt'];
 
-if (process.argv[1] && process.argv[1].endsWith('safety-gate.js')) {
+// 同 index.js：必须判"本文件是入口"，否则 import 本文件的进程会被自检输出污染 stdout。
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const text = buildSectionText({ fidelity: 'strict' });
   process.stdout.write(`${text}\n`);
   const checks = [

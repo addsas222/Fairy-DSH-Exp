@@ -21,6 +21,7 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -413,16 +414,20 @@ export function checkFairyRuntime(home) {
   ];
   const states = targets.map(({ file, label }) => {
     if (!existsSync(file)) return { label, state: 'missing' };
-    let src = '';
-    try { src = readFileSync(file, 'utf8'); } catch { return { label, state: 'unreadable' }; }
-    // shim 的判据是 `typeof mod.apply === 'function'`；default 导出或改名都会静默降级。
-    const hasNamedApply = /export\s+(async\s+)?function\s+apply\b/.test(src);
-    return { label, state: hasNamedApply ? 'full' : 'bad-signature' };
+    // 按**真实行为**判，不用正则：shim 的判据是 `typeof mod.apply === 'function'`，
+    // 而正则两向都会偏——`export const apply = …` / `export { apply }` 明明能加载却会误报，
+    // 注释里出现同样文字则会把"其实在降级"误报成完整模式（恰是这条检查要防的坑）。
+    // 注意要把路径转成 file:// URL——`import()` 不认 Windows 裸路径。
+    const probed = run(process.execPath, ['--input-type=module', '-e',
+      'const m = await import(process.argv[1]); process.stdout.write(typeof m.apply);',
+      pathToFileURL(file).href], { timeout: 60_000 });
+    if (!probed.ok) return { label, state: 'unloadable', why: (probed.stderr || '').split('\n')[0].slice(0, 90) };
+    return { label, state: probed.out.trim() === 'function' ? 'full' : 'bad-signature' };
   });
   const full = states.filter((s) => s.state === 'full');
-  const broken = states.filter((s) => s.state === 'bad-signature' || s.state === 'unreadable');
+  const broken = states.filter((s) => s.state === 'bad-signature' || s.state === 'unloadable');
   const absent = states.filter((s) => s.state === 'missing');
-  const summary = states.map((s) => `${s.label}=${s.state}`).join(' ');
+  const summary = states.map((s) => `${s.label}=${s.state}${s.why ? `(${s.why})` : ''}`).join(' ');
 
   if (full.length === states.length) return { status: 'ok', name: '语音核心模式', detail: `完整模式（${summary}）`, fix: '' };
   if (broken.length) {
