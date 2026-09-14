@@ -16,7 +16,7 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 - `fairy-system/`：离线检查与验收工具（含 `skill-audit.js` 冗余审计、`scaffold-plugin.js` 插件脚手架）
 - `persona-packs/`：内置人格包（fairy、standard）
 - `profiles/web/`：独立 Web profile 模板
-- `.agent-presets/ponytail/`：精简模式 preset（无仓库外私有资产依赖，自带 ponytail 规则技能组）
+- `.agent-presets/ponytail/`：精简模式 preset（无仓库外私有资产依赖；ponytail 规则技能按上游 MIT 装在**本机技能根**，不入库、不随部署落位）
 
 设计与决策记录见 `fairy-system/PONYTAIL-DESIGN.md`。
 
@@ -83,7 +83,7 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 **概念与结构参考**：[Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot)（GPL-3.0）——仅参考 `fairy-roleplay` 的流水线结构（规划器 → 回复器 → 去AI味 → 记忆印象），提示词与词表全部自撰，故本仓库不继承其 GPL 义务；三模式与 `mode_pipeline` 的设计动机来自社区 agent 实践，实现为本仓库原创。
 
-**同源分发**：[addsas222/Fairy-DSH-Exp](https://github.com/addsas222/Fairy-DSH-Exp)（`ponytail` 分支，本机部署源）、[Chengzhibense/Fairy-DSH](https://github.com/Chengzhibense/Fairy-DSH)、[Guzhou2002/Fairy-DSH-Optimized](https://github.com/Guzhou2002/Fairy-DSH-Optimized)。三者的 fork 谱系与同步关系**尚未逐条核实**，此处仅记录其存在。
+**同源分发**：[addsas222/Fairy-DSH-Exp](https://github.com/addsas222/Fairy-DSH-Exp)（`main`，本机部署源）、[Chengzhibense/Fairy-DSH](https://github.com/Chengzhibense/Fairy-DSH)、[Guzhou2002/Fairy-DSH-Optimized](https://github.com/Guzhou2002/Fairy-DSH-Optimized)。三者的 fork 谱系与同步关系**尚未逐条核实**，此处仅记录其存在。
 
 感谢以上作者与社区。若某处署名或归属有误，请开 issue 指正。
 
