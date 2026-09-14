@@ -153,7 +153,9 @@ when a client bundle is missing`、`fails when a profile link targets the wrong 
 | `host-align.test.js` | 混版判定与退出码：独立版本线不误报、dry-run 不改动、"用法错"与"混版"分开（2 vs 1） |
 | `repo-update.test.js` | 方向判定（远端领先 / **本地领先** / 分叉 / 方向未知）、不可达与"已最新"不同码、脏工作树与缺部署脚本拒执行、`--dry-run` 不动 HEAD |
 
-两组都用**本地 bare 仓夹具**（`git init --bare` + `commit-tree`），**零外网**，符合 AGENTS §5.6。
+两组的夹具形态不同，**都零外网**：`host-align.test.js` 用临时目录造**假安装树**（`mkdtempSync`
++ 每个包一个 `{name, version}` 的 `package.json`，全程不碰 git）；`repo-update.test.js` 用
+**本地 bare 仓**（`git init --bare` + `commit-tree` 造提交）当远端。符合 AGENTS §5.6。
 
 ---
 

@@ -263,7 +263,8 @@ actual="ENOENT"`——预检按 `~/.local/lib/node_modules/@deepseek-ai/dsh/pack
 找官方包，Windows 默认根本没有这个路径）。这是环境前提，不是代码回归：这两组用例只在
 存在官方 0.1.1-rc.2 安装的机器上才有意义。其余 **60 例**（含 10 例
 `image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装，任何平台都该全绿；
-其中 `repo-update` / `host-align` 两组连网络都不用（本地 bare 仓夹具）。
+其中 `repo-update`（本地 bare 仓当远端）与 `host-align`（临时目录造假安装树，不碰 git）
+两组连网络都不用。
 
 **预设健康检查**（发现器的真实判定，避免"能启动但选不中"；服务运行中执行，
 端口取启动日志 `dsh web: http://127.0.0.1:<port>`）：
