@@ -13,7 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, exitFor, EXIT } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -127,16 +127,27 @@ test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {
   assert.deepEqual(EXIT, { OK: 0, FAIL: 1, WARN: 2, USAGE: 3 });
 });
 
-test('「未知」必须影响退出码，且显式成行（不能静默通过）', async () => {
-  // 造一个 runtime 目录都不存在的场景：混版检测会返回 unknown（树读不到）。
+test('退出码映射：unknown→2、warn→2、fail 优先→1、全绿→0（合成数组直断）', () => {
+  // 直接喂合成数组：批跑夹具里常同时有 fail，`status != 0` 会被 fail 满足，
+  // 那时 unknown→非零 这条映射写坏也照样过——所以必须单独钉。
+  const c = (status) => ({ status, name: status, detail: '', fix: '' });
+  assert.equal(exitFor([c('ok')]), EXIT.OK);
+  assert.equal(exitFor([c('skipped'), c('ok')]), EXIT.OK);
+  assert.equal(exitFor([c('warn')]), EXIT.WARN);
+  assert.equal(exitFor([c('unknown')]), EXIT.WARN, '未知必须非零——"查不清"不等于通过');
+  assert.equal(exitFor([c('fail')]), EXIT.FAIL);
+  assert.equal(exitFor([c('unknown'), c('warn')]), EXIT.WARN);
+  assert.equal(exitFor([c('fail'), c('unknown'), c('warn')]), EXIT.FAIL, 'fail 优先');
+  assert.equal(exitFor([]), EXIT.OK);
+});
+
+test('未知项在输出里显式成行（spawn 守渲染；退出码由上面的映射直断守着）', async () => {
   const { spawnSync } = await import('node:child_process');
   const empty = mkdtempSync(path.join(tmpdir(), 'doctor-unknown-'));
   try {
     const script = path.join(import.meta.dirname, '..', 'doctor.mjs');
     const r = spawnSync(process.execPath, [script, '--runtime', path.join(empty, 'node_modules'), '--repo', empty, '--home', empty], { encoding: 'utf8', timeout: 300_000 });
-    assert.notEqual(r.status, 0, '有未知项时不得返回 0');
     assert.match(r.stdout, /未知/, '摘要里必须显式列出未知项数');
-    // 输出里那句是 markdown 强调形式（`**无法判定**`），断言照字面来，别凭印象写。
-    assert.match(r.stdout, /\*\*无法判定\*\*/, '必须点明"未知≠正常"');
+    assert.match(r.stdout, /无法判定（不等于正常）/, '必须点明"未知≠正常"');
   } finally { rmSync(empty, { recursive: true, force: true }); }
 });

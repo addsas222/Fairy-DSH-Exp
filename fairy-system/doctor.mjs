@@ -261,6 +261,17 @@ export function diagnose(options) {
 
 const ICON = { ok: '✅', warn: '⚠️ ', fail: '❌', unknown: '❓', skipped: '· ' };
 
+/**
+ * 检查结果 → 退出码。抽成纯函数是为了**能被直接钉住**：批跑夹具里常同时有 fail，
+ * 那时 `status != 0` 被 fail 满足，unknown→非零 这条映射就算写坏也照样过（假绿）。
+ * fail 优先于 warn/unknown；`unknown` 与 `warn` 同码——"查不清"不该被当成通过。
+ */
+export function exitFor(checks) {
+  if (checks.some((c) => c.status === 'fail')) return EXIT.FAIL;
+  if (checks.some((c) => c.status === 'warn' || c.status === 'unknown')) return EXIT.WARN;
+  return EXIT.OK;
+}
+
 function render(checks, context) {
   const lines = [`DSH 部署体检  home=${context.home}  runtime=${context.runtimeDir}`, ''];
   for (const c of checks) lines.push(`${ICON[c.status] ?? '· '} ${c.name}：${c.detail}`);
@@ -273,7 +284,8 @@ function render(checks, context) {
     + ` / ${unknowns.length} 未知 / ${skipped.length} 跳过`);
   // 「未知」必须显式成行、且影响退出码：体检工具把"查不清"静默算作通过，是最要命的失效形态
   // （本会话就发生过——报告说全绿，实际两次检查之间有别的进程改了树）。
-  if (unknowns.length) lines.push(`⚠️  有 ${unknowns.length} 项**无法判定**（不等于正常）：${unknowns.map((c) => c.name).join('、')}`);
+  // 这里不用 markdown 强调符：终端里 `**` 只是字面星号，留着只会让断言多两个字符的噪声。
+  if (unknowns.length) lines.push(`⚠️  有 ${unknowns.length} 项无法判定（不等于正常）：${unknowns.map((c) => c.name).join('、')}`);
   const fixes = [...fails, ...warns].map((c) => c.fix).filter(Boolean);
   if (fixes.length) { lines.push('', '下一步（doctor 只报不做，执行与否由你定）：'); for (const f of [...new Set(fixes)]) lines.push(`  ${f}`); }
   return lines.join('\n');
@@ -303,10 +315,7 @@ async function main() {
     process.stdout.write(`报告已写入 ${options.report}\n`);
   }
   if (options.json) process.stdout.write(`${JSON.stringify({ home: options.home, runtimeDir, checks }, null, 2)}\n`);
-  if (checks.some((c) => c.status === 'fail')) return EXIT.FAIL;
-  // `unknown` 与 `warn` 同码：体检工具把"查不清"当成通过是最要命的失效形态。
-  if (checks.some((c) => c.status === 'warn' || c.status === 'unknown')) return EXIT.WARN;
-  return EXIT.OK;
+  return exitFor(checks);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
