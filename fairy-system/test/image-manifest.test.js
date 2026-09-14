@@ -245,8 +245,10 @@ test('deploy-live.sh reconciles before staging and gates the result', () => {
   // 对账与落位必须取同一个源，否则 --from-worktree 会把未提交的改动当成多余文件删掉。
   assert.match(script, /SOURCE_MODE=git\nif \[ "\$FROM_WORKTREE" = 1 \]; then SOURCE_MODE=worktree; fi/);
   assert.match(script, /check --repo "\$REPO_ROOT" --source "\$SOURCE_MODE" --home "\$DSH_HOME_TARGET"/);
-  // 本机适配默认值来自 manifest 模块（唯一副本），不是脚本里再抄一份。
-  assert.match(script, /node "\$MANIFEST_TOOL" policy --json/);
+  // 本机适配默认值来自 manifest 模块（唯一副本），不是脚本里再抄一份；并且走
+  // `policy --lines` 的平文输出，不在 shell 侧解析 JSON。
+  assert.match(script, /node "\$MANIFEST_TOOL" policy --lines/);
+  assert.doesNotMatch(script, /JSON\.parse/, 'preserve defaults must not be parsed in shell');
 });
 
 test('a converge-shaped deploy leaves the image byte-identical to the source', () => {

@@ -85,15 +85,13 @@ fail() { printf '\033[31m[deploy]\033[0m %s\n' "$*" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  would run: %s\n' "$*"; else "$@"; fi; }
 
 # 本机适配清单：默认取模块自己的 LOCAL_ADAPTATIONS（唯一副本在 image-manifest.js），
-# `--preserve` 可覆盖。这里用 `policy --json` 一次调用把它摊成行——过去是两次 node
-# 进程加一段 shell 侧 JSON 解析，只为拿到模块已经知道的东西。
+# `--preserve` 可覆盖。`policy --lines` 一次调用直接给出路径清单——不解析 JSON、
+# 不起第二个进程。
 MANIFEST_TOOL="$REPO_ROOT/fairy-system/image-manifest.js"
 PRESERVE_LIST=""
 if [ "$PRESERVE_OVERRIDE" = '__default__' ]; then
   if [ -f "$MANIFEST_TOOL" ]; then
-    PRESERVE_LIST="$(node "$MANIFEST_TOOL" policy --json 2>/dev/null \
-      | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(Object.keys(JSON.parse(s).localAdaptations||{}).join('\n'))}catch{}})" \
-      || true)"
+    PRESERVE_LIST="$(node "$MANIFEST_TOOL" policy --lines 2>/dev/null || true)"
   fi
   if [ -z "$PRESERVE_LIST" ]; then
     warn "cannot read LOCAL_ADAPTATIONS from image-manifest.js; 本机适配将不会被保留"

@@ -32,6 +32,7 @@
 //                     scripts/test-isolated.sh 的 `--no-frozen-lockfile` 回路用）
 //   --dry-run         prune 只报告不落盘
 //   --json            以 JSON 输出
+//   --lines           policy 只印本机适配路径（一行一条，供脚本取默认值）
 //   -h, --help
 //
 // 退出码：0 = 无差异（prune 成功）；1 = 有差异；2 = 参数或前置条件错误。
@@ -162,6 +163,7 @@ function parseArgs(argv, { verbs }) {
     freshLock: false,
     dryRun: false,
     json: false,
+    lines: false,
     quiet: false,
     selfTest: false,
     allowExtra: [],
@@ -182,6 +184,7 @@ function parseArgs(argv, { verbs }) {
       case '--dry-run': options.dryRun = true; break;
       case '--json': options.json = true; break;
       case '--quiet': options.quiet = true; break;
+      case '--lines': options.lines = true; break;
       case '--self-test': options.selfTest = true; break;
       default:
         if (arg.startsWith('--')) throw usageError(`unknown option: ${arg}`);
@@ -791,7 +794,18 @@ function main() {
       process.stdout.write(`${JSON.stringify({ skip: SKIP_POLICY, localAdaptations: LOCAL_ADAPTATIONS }, null, 2)}\n`);
       return 0;
     }
-    for (const entry of SKIP_POLICY) process.stdout.write(`skip  ${entry.prefix}\t${entry.reason}\n`);
+    if (options.lines) {
+      // 只印本机适配的路径，一行一条：调用方（deploy-live.sh 的 --preserve 默认值）
+      // 要的就是这份清单，不必再起第二个进程解析 JSON。
+      for (const key of Object.keys(LOCAL_ADAPTATIONS)) process.stdout.write(`${key}\n`);
+      return 0;
+    }
+    for (const entry of SKIP_POLICY) {
+      // 策略有三种形状（segment / prefix / file），只印 prefix 会打出 `skip undefined`。
+      const key = entry.segment ?? entry.prefix ?? entry.file ?? '(unset)';
+      const shape = entry.segment ? 'segment' : entry.prefix ? 'prefix' : 'file';
+      process.stdout.write(`skip  ${shape.padEnd(7)} ${key}\t${entry.reason}\n`);
+    }
     for (const [key, reason] of Object.entries(LOCAL_ADAPTATIONS)) process.stdout.write(`allow ${key}\t${reason}\n`);
     return 0;
   }
