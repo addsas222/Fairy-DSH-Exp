@@ -65,9 +65,20 @@ sh scripts/deploy-live.sh --home "$HOME/.dsh"          # 或 --home /path/to/DSH
 
 结论：
 
-- **宿主侧（工具、段落、预设发现、world-core 检索）跨代可用**——本仓库新增的部分都属于这一层。
-- **客户端侧（设置卡、会话头 chip、侧栏）在 0.1.5 上尚未移植**：10 个插件的 `dsh.client.inject` 仍列旧面孔。**好消息**是 slot API 同名（`slots.inject` / `slots.register` 在新 `dsh-client-ui-renderer` 里同样存在），所以这是**改包名级别**的迁移，不是重写；但仍需真机 DOM 验收。
-- 跨代升级到 ≥0.1.5 **必须**走 `fairy-system/upgrade-candidate-preflight.sh` + accepted baseline 验收，不要靠改断言让检查变绿。
+- **宿主侧（工具、段落、预设发现、world-core 检索）按特征探测跨代可用**——本仓库新增的部分都属于这一层。
+- **客户端面孔**（设置卡、会话头 chip、侧栏）：10 个插件的 `dsh.client.inject` 仍列旧面孔 `dsh-client-runtime` / `dsh-client-ui-slots` / `dsh-client-ui-primitives`，这三者在 0.1.2+ 已移除。**API 同名**（`slots.inject` / `slots.register` 在新 `dsh-client-ui-renderer` 里同样存在），所以这是**改包名级别**的迁移；但**本文写就时尚未实测通过**（原因见下），迁移前不要把它当成已兼容。
+- **插件装载方式**：插件不列在 `dsh.profile.bundles`，而是 profile patch 的 `insert` 行 + `inject: [clientModules]`；列进 bundles 会要求该包声明 `dsh.bundle`，本仓库的包没有这个声明（两代 cohort 均报 `declares no dsh.bundle`）。
+
+**实测阻断（本机 0.1.5 环境）**：目标宿主自身的安装是**混版**的——顶层 `@deepseek-ai/dsh-session-query` 仍是 `0.1.2-rc.1`，而 `dsh-session-query-sqlite` 已是 `0.1.5-rc.2`，前者缺少后者 import 的导出名：
+
+```
+SyntaxError: The requested module '@deepseek-ai/dsh-session-query'
+  does not provide an export named 'SESSION_QUERY_DEFAULT_PREPARED_SESSION_CACHE_SIZE'
+```
+
+即该 runtime **自身起不来**，与我们的插件无关。要完成客户端面孔迁移的实测，必须先修复宿主安装（把 `@deepseek-ai/*` 对齐全量重装到同一版本），再在**隔离 home**（新目录 + 该 runtime）起实例验证槽位注册。
+
+跨代升级到 ≥0.1.5 **必须**走 `fairy-system/upgrade-candidate-preflight.sh` + accepted baseline 验收；该脚本内部钉着 0.1.1 的期望值（`VISUAL_SETTINGS_VERSION`、reasoning/message-edit 的 patch hash、capability matrix），升级时要与验收一起更新——**不要**改断言或 `--accept` 变绿。
 
 ---
 
@@ -103,7 +114,7 @@ dsh --profile web --no-open
 `.agent-presets/fairy/` 自带语料（`behavior` 规则 334 KB、`personality` 55 KB、`canon`、`style`）与三个插件行：
 
 - `fairy-core-runtime` / `fairy-safety-gate`：优先加载**私有 runtime**（`runtime/index.js` 等，不在公开仓库）；缺失时走**降级模式**——用自带语料编译一段系统提示速查 + 保守风险闸门。
-- `fairy-world-core`：注册 `fairy_world_lookup` 工具，按需检索本机 `world-core/` 行式索引（从《绝区零》官方 TextMap 提取，游戏 3.2.0，3 万+ 条，每条带原始文本键作证据）。
+- `fairy-world-core`：注册 `fairy_world_lookup` 工具，按需检索本机 `world-core/` 行式索引（从《绝区零》官方 TextMap 的**简体源** `TextMapTemplateTb.json` 提取——同一 dump 的简繁两版都在，取简体版而非机器转换；游戏 3.2.0，3.5 万+ 条，每条带原始文本键作证据）。
 
 `world-core/` 由 `.gitignore` 挡住并在跳过策略内：**不进仓库、不随部署分发**（版权归 miHoYo/HoYoverse），部署时从本机 clone 同步。
 

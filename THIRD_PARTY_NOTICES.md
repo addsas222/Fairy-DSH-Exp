@@ -39,7 +39,7 @@
 
 | 内容 | 用途 | 来源 | 许可/版权 |
 | --- | --- | --- | --- |
-| 《绝区零》官方文本 TextMap（CHT，游戏 3.2.0，约 43.9 MB 原始 → 本机索引 3.4 万条 / 5.6 MB） | fairy preset 的 world-core 世界知识（经 `fairy_world_lookup` 按需检索） | [dimbreath/ZenlessData](https://git.mero.moe/dimbreath/ZenlessData)（git.mero.moe 镜像）的 `TextMap/TextMap_CHT*TemplateTb.json` | **游戏文本版权归 miHoYo / HoYoverse**，本仓库不主张任何权利、也不再分发 |
+| 《绝区零》官方文本 TextMap（CHT，游戏 3.2.0，约 43.9 MB 原始 → 本机索引 3.4 万条 / 5.6 MB） | fairy preset 的 world-core 世界知识（经 `fairy_world_lookup` 按需检索） | [dimbreath/ZenlessData](https://git.mero.moe/dimbreath/ZenlessData)（git.mero.moe 镜像）的 `TextMap/TextMapTemplateTb.json`（**简体源**；同 dump 另有 `TextMap_CHT*` 繁体版，未使用） | **游戏文本版权归 miHoYo / HoYoverse**，本仓库不主张任何权利、也不再分发 |
 
 处理方式：`C:/tmp/zzz-extract2.mjs` 把 TextMap 抽成 `world-core/<entity>.jsonl`（每行 `{key, text}`，`key` 即游戏原始文本键，可作证据引用）。
 该目录由 `.gitignore` 挡住、并在 `image-manifest.js` 的跳过策略内，**不进仓库、不随部署分发到别处**；部署时由 `deploy-live.sh` 从本机 clone 同步进目标 home。
