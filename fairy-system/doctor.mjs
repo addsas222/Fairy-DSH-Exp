@@ -1,0 +1,307 @@
+#!/usr/bin/env node
+/**
+ * `doctor.mjs` —— 自主排障：一次跑完本机部署的**只读**诊断，按严重度汇总，并给出可执行的下一步。
+ *
+ * 为什么需要它：这套部署的故障几乎都以"别处的症状"出现（混版报的是 ESM 导出名、
+ * 半成品镜像全绿通过、npm 的工程根跑偏会把宿主拧回旧版）。查一次要跨 5 个工具，
+ * 且**手工查的顺序会漏项**——本会话就漏报过一次"宿主未受影响"（两次检查之间有别的
+ * 进程改了树）。所以把判定固化下来，人只负责执行它给出的命令。
+ *
+ * **铁律：doctor 绝不写任何东西。** 它不装包、不落位、不删文件、不改真实 home。
+ * 唯一允许写的是 `--report <file>` 指定的那份报告（默认不写，只打印）。
+ * 修复动作全部以命令形式给出，由人决定是否执行。
+ *
+ * 用法：
+ *   node fairy-system/doctor.mjs [--home <DSH_HOME>] [--repo <仓库根>] [--runtime <安装目录>]
+ *                                [--json] [--report FILE] [--offline]
+ *
+ * 退出码：0 全绿 ｜ 1 有 fail ｜ 2 有 warn（无 fail）｜ 3 用法/前置错误
+ */
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO_DEFAULT = path.resolve(HERE, '..');
+const require_ = createRequire(import.meta.url);
+
+export const EXIT = { OK: 0, FAIL: 1, WARN: 2, USAGE: 3 };
+
+function run(cmd, args, options = {}) {
+  try {
+    return {
+      ok: true,
+      out: execFileSync(cmd, args, {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: options.timeout ?? 120_000,
+        env: { ...process.env, ...(options.env ?? {}) }, cwd: options.cwd,
+      }).trim(),
+    };
+  } catch (error) {
+    // 非零退出码**也是数据**：子工具用退出码表达状态（repo-update：0 最新/1 有更新/2 离线/3 用法）。
+    // 只 `catch { out: '' }` 会把"镜像落后"这类正常结论误报成"无输出"——同一类缺陷在本会话
+    // 的 repo-update 里也犯过一次。所以这里保留 stdout，由调用方结合 status 判断。
+    return {
+      ok: false,
+      status: error.status,
+      out: String(error.stdout ?? '').trim(),
+      stderr: String(error.stderr ?? error.message).trim(),
+    };
+  }
+}
+
+export function parseArgs(argv) {
+  const options = {
+    home: process.env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+    repo: REPO_DEFAULT, runtimeDir: '', json: false, report: '', offline: false, help: false,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--home') options.home = argv[++i];
+    else if (a === '--repo') options.repo = argv[++i];
+    else if (a === '--runtime') options.runtimeDir = argv[++i];
+    else if (a === '--report') options.report = argv[++i];
+    else if (a === '--json') options.json = true;
+    else if (a === '--offline') options.offline = true;
+    else if (a === '-h' || a === '--help') options.help = true;
+    else { const e = new Error(`unknown argument: ${a}`); e.usage = true; throw e; }
+  }
+  return options;
+}
+
+/** 读一份安装树：返回 name → version 的 Map（读不到就返回 null）。 */
+function readTree(nodeModules) {
+  const scope = path.join(nodeModules, '@deepseek-ai');
+  if (!existsSync(scope)) return null;
+  const out = new Map();
+  for (const dir of readdirSync(scope)) {
+    const pj = path.join(scope, dir, 'package.json');
+    if (!existsSync(pj)) continue;
+    try { const j = JSON.parse(readFileSync(pj, 'utf8')); out.set(j.name ?? dir, j.version); } catch { /* 半写的 manifest */ }
+  }
+  return out;
+}
+
+/** 版本线：`0.1.5-rc.2` → `0.1`（判"同线内不一致"用）。 */
+const train = (v) => String(v).split('-')[0].split('.').slice(0, 2).join('.');
+
+/**
+ * ① 混版：同一版本线（如 `dsh-*` 家族的 0.1.x）内出现多个版本，就是混版。
+ * 独立版本线（cordis/cosmokit/schemastery）与原生构建物（node-addon-*）不参与——
+ * 它们本就跟着别的线走，误报会把人引向错误的修复。
+ */
+export function checkVersions(runtimeDir) {
+  const tree = readTree(runtimeDir);
+  if (!tree) return { status: 'unknown', name: '混版检测', detail: `${path.join(runtimeDir, '@deepseek-ai')} 不存在`, fix: '' };
+  const dsh = tree.get('@deepseek-ai/dsh');
+  if (!dsh) return { status: 'fail', name: '混版检测', detail: '安装树里没有 @deepseek-ai/dsh（宿主本体缺失）', fix: '重装官方 @deepseek-ai/dsh' };
+  const line = train(dsh);
+  const stale = [...tree.entries()]
+    .filter(([n, v]) => n.startsWith('@deepseek-ai/dsh-') && train(v) === line && v !== dsh)
+    .sort();
+  if (!stale.length) return { status: 'ok', name: '混版检测', detail: `${tree.size} 个包，同线内全部 ${dsh}`, fix: '' };
+  return {
+    status: 'fail',
+    name: '混版检测',
+    detail: `${stale.length} 个包落在同一版本线但版本不同（宿主 ${dsh}）：\n    ` + stale.map(([n, v]) => `${n}@${v}`).join('\n    '),
+    // 修复入口指向既有的对齐工具，doctor 自己不动手
+    fix: `node fairy-system/host-align.js fix --target ${dsh} --runtime ${runtimeDir}`,
+  };
+}
+
+/** ② 新进程实测：在跑的宿主是内存态，盘上坏没坏它测不出来。必须起新进程跑真二进制。 */
+export function checkBinary(runtimeDir) {
+  const bin = path.join(runtimeDir, '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+  if (!existsSync(bin)) return { status: 'fail', name: '宿主可运行性（新进程）', detail: `找不到 ${bin}`, fix: '重装官方 @deepseek-ai/dsh' };
+  const r = run(process.execPath, [bin, '--version'], { timeout: 60_000 });
+  const ver = r.out.split('\n').filter(Boolean).pop() ?? '';
+  if (r.ok && /^\d+\.\d+/.test(ver)) return { status: 'ok', name: '宿主可运行性（新进程）', detail: `新进程启动正常，报告 ${ver}`, fix: '' };
+  return { status: 'fail', name: '宿主可运行性（新进程）', detail: `新进程启动失败：${(r.stderr || r.out).split('\n').slice(0, 3).join(' / ')}`, fix: '看上面报错；混版通常报 ESM "does not provide an export named …"' };
+}
+
+/** ③ 模块解析：点名几个跨包引用最密的，逐个真 import（混版会在这里现形）。 */
+const IMPORTS = ['@deepseek-ai/dsh-settings', '@deepseek-ai/dsh-fs', '@deepseek-ai/dsh-sandbox', '@deepseek-ai/dsh-jobs', '@deepseek-ai/dsh-workflow'];
+export function checkImports(runtimeDir) {
+  const broken = [];
+  for (const name of IMPORTS) {
+    const r = run(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(name)})`], { cwd: runtimeDir, timeout: 60_000 });
+    if (!r.ok) broken.push(`${name}: ${(r.stderr || r.out).split('\n')[0].slice(0, 90)}`);
+  }
+  if (!broken.length) return { status: 'ok', name: '关键包解析', detail: `${IMPORTS.length} 个包都能被新进程 import`, fix: '' };
+  return { status: 'fail', name: '关键包解析', detail: broken.join('\n    '), fix: '多为混版症状；先跑混版检测' };
+}
+
+/**
+ * ④ npm 工程根跑偏：`npm install` 会向上找最近的 package.json 当工程根。
+ * 若那份 lock 与实际树不一致，一次 install 就可能把整棵树按 lock 收敛（版本回退）。这里只读比对。
+ */
+export function checkNpmProjectRoot(nodeModules) {
+  const root = path.dirname(nodeModules);
+  const lock = path.join(root, 'package-lock.json');
+  if (!existsSync(lock)) return { status: 'skipped', name: 'npm 工程根', detail: '该层没有 package-lock.json', fix: '' };
+  let lockPkgs;
+  try { lockPkgs = JSON.parse(readFileSync(lock, 'utf8')).packages ?? {}; } catch { return { status: 'warn', name: 'npm 工程根', detail: 'package-lock.json 读不动（半写？）', fix: `检查 ${lock}` }; }
+  const installed = new Map();
+  for (const [p, meta] of Object.entries(lockPkgs)) {
+    const m = /^node_modules\/(@?[^/]+(?:\/[^/]+)?)$/.exec(p);
+    if (m && meta.version) installed.set(m[1], meta.version);
+  }
+  const drift = [];
+  for (const [name, version] of installed) {
+    if (!name.startsWith('@deepseek-ai/')) continue;
+    const pj = path.join(nodeModules, name, 'package.json');
+    if (!existsSync(pj)) continue;
+    try {
+      const actual = JSON.parse(readFileSync(pj, 'utf8')).version;
+      if (actual !== version) drift.push(`${name}: lock ${version} vs 盘上 ${actual}`);
+    } catch { /* 忽略 */ }
+  }
+  const n = [...installed.keys()].filter((k) => k.startsWith('@deepseek-ai/')).length;
+  if (!drift.length) return { status: 'ok', name: 'npm 工程根', detail: `${root} 下 lock 与盘上一致（抽查 ${n} 个 @deepseek-ai 包）`, fix: '' };
+  return {
+    status: 'warn',
+    name: 'npm 工程根',
+    detail: `lock 与盘上不一致（${drift.length} 个）：\n    ` + drift.slice(0, 6).join('\n    '),
+    fix: `在 ${root} 跑 npm install 会按 **lock** 收敛；先确认要不要，再决定跑不跑`,
+  };
+}
+
+/** ⑤ 残留安装进程：被取消的 install 可能仍在跑，且随时写树。按命令行签名认，不按进程名。 */
+export function checkStrayInstalls() {
+  if (process.platform !== 'win32') return { status: 'skipped', name: '残留安装进程', detail: '非 Windows：用 ps 自行核对', fix: '' };
+  const r = run('cmd', ['/c', 'tasklist', '/FO', 'CSV', '/NH'], { timeout: 30_000 });
+  if (!r.ok) return { status: 'unknown', name: '残留安装进程', detail: 'tasklist 不可用', fix: '' };
+  const lines = r.out.split('\n').filter((l) => /^"node\.exe"/i.test(l));
+  const pids = lines.map((l) => l.split('","')[1]).filter(Boolean);
+  const hits = [];
+  for (const pid of pids) {
+    const q = run('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], { timeout: 20_000 });
+    const cl = q.out || '';
+    if (/npm-cli\.js/i.test(cl) && /\binstall\b/.test(cl) && Number(pid) !== process.pid) {
+      hits.push({ pid, cl: cl.replace(/\s+/g, ' ').slice(0, 110) });
+    }
+  }
+  if (!hits.length) return { status: 'ok', name: '残留安装进程', detail: `无（扫了 ${pids.length} 个 node 进程）`, fix: '' };
+  return {
+    status: 'fail',
+    name: '残留安装进程',
+    detail: `有 install 进程仍在跑，随时会写树：\n    ` + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    '),
+    // 实测教训：hub/job 的"取消"不等于进程终止；必须按 PID 杀进程树
+    fix: hits.map((h) => `taskkill /PID ${h.pid} /T /F`).join('  &&  '),
+  };
+}
+
+/** ⑥ 仓库与部署：远端是否有更新、镜像是否落后（复用 repo-update 的只读判定，不另起一套）。 */
+export function checkRepo(repo, home, offline) {
+  const tool = path.join(repo, 'fairy-system', 'repo-update.mjs');
+  if (!existsSync(tool)) return { status: 'skipped', name: '仓库与部署', detail: '没有 repo-update.mjs', fix: '' };
+  const args = ['check', '--repo', repo, '--home', home, '--json'];
+  if (offline) args.push('--remote', '__offline__');
+  const r = run(process.execPath, [tool, ...args], { timeout: 180_000 });
+  let payload = null;
+  try { payload = JSON.parse(r.out); } catch { /* 非 JSON */ }
+  if (!payload) return { status: 'unknown', name: '仓库与部署', detail: (r.stderr || r.out).split('\n').slice(0, 2).join(' / ') || '无输出', fix: '' };
+  const parts = [`仓库 ${payload.state}`, `镜像 ${payload.mirror?.state ?? '?'}`];
+  if (payload.state === 'offline' || payload.state === 'missing') return { status: 'warn', name: '仓库与部署', detail: `远端不可达，无法判断是否有更新（${parts.join('，')}）`, fix: '网络恢复后重跑；离线≠已最新' };
+  const problems = [];
+  if (payload.state !== 'current') problems.push(`仓库处于 ${payload.state}`);
+  if (payload.mirror?.state && payload.mirror.state !== 'current' && payload.mirror.state !== 'skipped') problems.push(`镜像 ${payload.mirror.state}`);
+  if (!problems.length) return { status: 'ok', name: '仓库与部署', detail: `仓库与远端一致，镜像与提交一致（home=${payload.home}）`, fix: '' };
+  return {
+    status: 'warn',
+    name: '仓库与部署',
+    detail: problems.join('；'),
+    fix: payload.state === 'behind' ? 'node fairy-system/repo-update.mjs apply --yes' : `node scripts/deploy-live.sh --home ${home} --skip-evomap`,
+  };
+}
+
+/** ⑦ 测试门的前提：没比较对象时那两组整组红，而这是**环境**问题不是代码回归。 */
+export function checkTestPrereqs(repo, home) {
+  const missing = [];
+  const official = process.env.DSH_OFFICIAL_PACKAGE || path.join(os.homedir(), '.local/lib/node_modules/@deepseek-ai/dsh/package.json');
+  const runtime = process.env.DSH_OFFICIAL_RUNTIME || path.join(os.homedir(), '.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js');
+  if (!existsSync(official)) missing.push(`DSH_OFFICIAL_PACKAGE（默认 ${official}）`);
+  if (!existsSync(runtime)) missing.push(`DSH_OFFICIAL_RUNTIME（默认 ${runtime}）`);
+  const profile = path.join(home, 'profiles', 'web');
+  const planted = ['dsh-fairy-persona', 'dsh-reasoning-effort', 'dsh-message-edit'];
+  const absent = planted.filter((n) => !existsSync(path.join(profile, 'node_modules', n)));
+  if (missing.length || absent.length) {
+    const lines = [];
+    if (missing.length) lines.push('缺比较对象：' + missing.join('；'));
+    if (absent.length) lines.push(`${profile} 里没有 ${absent.join('/')}`);
+    return {
+      status: 'warn',
+      name: '测试门前提',
+      detail: lines.join('\n    ') + '\n    → preflight/upgrade 两组会整组红，属环境前提（不是代码回归）',
+      fix: `指旋钮跑：DSH_OFFICIAL_PACKAGE=… DSH_OFFICIAL_RUNTIME=… DSH_HOME=<装齐的部署> node --test ${path.join(repo, 'fairy-system/test/*.test.js')}`,
+    };
+  }
+  return { status: 'ok', name: '测试门前提', detail: '比较对象与 profile 都就位', fix: '' };
+}
+
+/** 跑全部检查。任何单个检查抛错都降级成 fail，不影响其余检查。 */
+export function diagnose(options) {
+  const runtimeDir = options.runtimeDir;
+  const checks = [];
+  const add = (fn, ...args) => {
+    try { checks.push(fn(...args)); }
+    catch (error) { checks.push({ status: 'fail', name: fn.name || '检查', detail: `检查本身出错：${error.message}`, fix: '' }); }
+  };
+  add(checkVersions, runtimeDir);
+  add(checkStrayInstalls);
+  add(checkBinary, runtimeDir);
+  add(checkImports, runtimeDir);
+  add(checkNpmProjectRoot, runtimeDir);
+  add(checkRepo, options.repo, options.home, options.offline);
+  add(checkTestPrereqs, options.repo, options.home);
+  return checks;
+}
+
+const ICON = { ok: '✅', warn: '⚠️ ', fail: '❌', unknown: '❓', skipped: '· ' };
+
+function render(checks, options) {
+  const lines = [`DSH 部署体检  home=${options.home}  runtime=${options.runtimeDir}`, ''];
+  for (const c of checks) lines.push(`${ICON[c.status] ?? '· '} ${c.name}：${c.detail}`);
+  const fails = checks.filter((c) => c.status === 'fail');
+  const warns = checks.filter((c) => c.status === 'warn');
+  lines.push('', `合计 ${checks.length} 项：${checks.filter((c) => c.status === 'ok').length} 正常 / ${warns.length} 警告 / ${fails.length} 失败`);
+  const fixes = [...fails, ...warns].map((c) => c.fix).filter(Boolean);
+  if (fixes.length) { lines.push('', '下一步（doctor 只报不做，执行与否由你定）：'); for (const f of [...new Set(fixes)]) lines.push(`  ${f}`); }
+  return lines.join('\n');
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    process.stdout.write('usage: doctor.mjs [--home DIR] [--repo DIR] [--runtime DIR] [--json] [--report FILE] [--offline]\n'
+      + '  只读体检：混版 / 残留安装进程 / 宿主可运行性（新进程）/ 关键包解析 / npm 工程根 / 仓库与部署 / 测试门前提\n'
+      + '  退出码：0 全绿 ｜ 1 有 fail ｜ 2 有 warn ｜ 3 用法错误\n');
+    return EXIT.OK;
+  }
+  // 与 host-align 同一条解析链（$DSH_OFFICIAL_PACKAGE → $DSH_HOME/../node_modules → ./node_modules）
+  const { resolveRuntimeDir } = require_(path.join(HERE, 'host-align.js'));
+  let runtimeDir = options.runtimeDir;
+  if (!runtimeDir) {
+    try { runtimeDir = resolveRuntimeDir({ runtimeDir: '', home: options.home }); }
+    catch { runtimeDir = path.join(path.dirname(options.home), 'node_modules'); }
+  }
+  const checks = diagnose({ ...options, runtimeDir });
+  const text = render(checks, { ...options, runtimeDir });
+  process.stdout.write(`${text}\n`);
+  if (options.report) {
+    mkdirSync(path.dirname(options.report), { recursive: true });
+    writeFileSync(options.report, `${text}\n`, 'utf8');
+    process.stdout.write(`报告已写入 ${options.report}\n`);
+  }
+  if (options.json) process.stdout.write(`${JSON.stringify({ home: options.home, runtimeDir, checks }, null, 2)}\n`);
+  if (checks.some((c) => c.status === 'fail')) return EXIT.FAIL;
+  if (checks.some((c) => c.status === 'warn')) return EXIT.WARN;
+  return EXIT.OK;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().then((code) => { process.exitCode = code; })
+    .catch((error) => { process.stderr.write(`doctor: ${error.message}\n`); process.exitCode = error.usage ? EXIT.USAGE : EXIT.FAIL; });
+}
