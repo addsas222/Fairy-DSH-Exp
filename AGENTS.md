@@ -68,11 +68,11 @@ git clone https://github.com/addsas222/Fairy-DSH-Exp.git fairy-dsh && cd fairy-d
 ```
 
 **来源（改这里之前先读）**：本机实际部署与隔离实例都取
-`addsas222/Fairy-DSH-Exp` 的 `ponytail` 分支；另有两个同源分支在别处被用到，别混：
+`addsas222/Fairy-DSH-Exp` 的 `main` 分支（2026-09 起仓库只保留这一条）；另有两个同源分支在别处被用到，别混：
 
 | 位置 | 来源 | 与本仓的关系 |
 | --- | --- | --- |
-| `C:\Users\Administrator\fairy-dsh`（本部署源） | `addsas222/Fairy-DSH-Exp` @ `ponytail` | **canonical**：镜像与隔离实例都从它落位 |
+| `C:\Users\Administrator\fairy-dsh`（本部署源） | `addsas222/Fairy-DSH-Exp` @ `main` | **canonical**：镜像与隔离实例都从它落位 |
 | `F:\世界观\Fairy-DSH` | `Chengzhibense/Fairy-DSH` | 停在更早提交（`d639887`）且带未提交改动；被 `~/.dsh` 主 profile 以 `link:` 引用 |
 | `Guzhou2002/Fairy-DSH-Optimized` | 安装包下载说明里的地址 | 第三方再分发，未在本机使用 |
 
