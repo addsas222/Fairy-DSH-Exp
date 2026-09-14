@@ -44,4 +44,5 @@ export async function apply(ctx, config = {}) {
   return () => { for (const dispose of disposers.splice(0)) { try { dispose(); } catch {} } };
 }
 
-export const inject = [];
+// 加载门控：systemPrompt 不可用时本行不加载（而不是加载后静默不挂段落）。
+export const inject = ['systemPrompt'];

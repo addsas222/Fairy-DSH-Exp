@@ -13,6 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
+const HOME_DIR = process.env.USERPROFILE || process.env.HOME || '';
 const PRESET_DIR = path.resolve(import.meta.dirname, '..', '..', '.agent-presets', 'fairy');
 const CORE = path.join(PRESET_DIR, 'plugins', 'fairy-core-runtime.mjs');
 const GATE = path.join(PRESET_DIR, 'plugins', 'fairy-safety-gate.mjs');
@@ -163,19 +164,42 @@ test('world-core shim registers a lookup tool and a prompt section', { skip: !ha
     const host = toolHost();
     const dispose = await mod.apply(host.ctx, {});
 
-  assert.ok(host.tools.has('fairy_world_lookup'), '应注册 fairy_world_lookup');
-  assert.ok(host.sections.has('fairy-world-core'), '应挂一个世界知识段落');
-  assert.equal(typeof dispose, 'function');
+    // 加载门控：service 不可用时本行不该加载（而不是加载后静默不挂段落）
+    assert.deepEqual(mod.inject, ['systemPrompt'], 'inject 必须声明所需服务');
 
-  const tool = host.tools.get('fairy_world_lookup');
-  const result = await tool.execute({ query: '空洞', limit: 3 });
-  const text = result.content?.[0]?.text ?? '';
-  assert.match(text, /命中 \d+ 条/, '真实检索应返回命中');
-  assert.match(text, /证据键: /, '每条结果应带原始文本键');
-  assert.ok(text.length < 4000, '返回应受 limit 约束，不会把索引倒进上下文');
+    assert.ok(host.tools.has('fairy_world_lookup'), '应注册 fairy_world_lookup');
+    assert.ok(host.sections.has('fairy-world-core'), '应挂一个世界知识段落');
+    assert.equal(typeof dispose, 'function');
+
+    const tool = host.tools.get('fairy_world_lookup');
+    // 形状对齐本仓既有工具：parameters/output.schema 是手写 JSON Schema，另有 timeoutMs 与并发声明
+    assert.equal(tool.parameters.type, 'object');
+    assert.deepEqual(tool.parameters.required, ['query']);
+    assert.ok(tool.output?.schema, '必须声明 output.schema');
+    assert.equal(typeof tool.output.render, 'function', '必须有 render（产出 content block）');
+    assert.equal(typeof tool.timeoutMs, 'number');
+    assert.equal(typeof tool.isConcurrencySafe, 'function');
+
+    // execute 返回**裸值**（照 output.schema），文本由 render 产出
+    const value = await tool.execute({ query: '空洞', limit: 3 });
+    assert.ok(Array.isArray(value.hits) && value.hits.length > 0, '真实检索应返回命中');
+    assert.equal(typeof value.report, 'string');
+    for (const hit of value.hits) {
+      assert.equal(typeof hit.entity, 'string');
+      assert.equal(typeof hit.key, 'string', '每条结果应带原始文本键');
+      assert.equal(typeof hit.text, 'string');
+    }
+    const blocks = tool.output.render({}, value);
+    assert.ok(Array.isArray(blocks) && blocks[0].type === 'text', 'render 应产出 content block');
+    assert.match(blocks[0].text, /证据键: /);
+    assert.ok(blocks[0].text.length < 4000, '返回应受 limit 约束，不会把索引倒进上下文');
+
+    // 空 query 是调用方错误：应与既有工具一致抛 INVALID_ARGS，而不是静默返回空
+    await assert.rejects(() => tool.execute({ query: '   ' }), /non-empty query/);
 
     const empty = await tool.execute({ query: 'zzz-绝不存在的片段-zzz', limit: 3 });
-    assert.match(empty.content[0].text, /未找到匹配|不要据此编造/, '无命中时应明确说明而不是编造');
+    assert.equal(empty.hits.length, 0);
+    assert.match(empty.report, /未找到匹配|不要据此编造/, '无命中时应明确说明而不是编造');
 
     dispose();
     assert.equal(host.tools.size, 0, 'dispose 后工具应注销');
@@ -184,4 +208,51 @@ test('world-core shim registers a lookup tool and a prompt section', { skip: !ha
     if (prevRoot === undefined) delete process.env.DSH_FAIRY_REPO_ROOT;
     else process.env.DSH_FAIRY_REPO_ROOT = prevRoot;
   }
+});
+
+/**
+ * 用**宿主自己的 schema 引擎**验证工具定义（不是 fakeHost 的假设）。
+ *
+ * 为什么单独一条：`section` 形状错误与 `{content:[…]}` 返回都属"fakeHost 测不出"的假绿——
+ * 前者靠既有实现的调用形状发现，后者靠这条：把注册的 definition 直接送进运行时的
+ * `assertObjectJsonSchema` / `assertSupportedJsonSchema` / `validateJsonSchemaValue`。
+ * 解析不到宿主包时跳过（其它机器上未必有官方安装）。
+ */
+test('world-core tool definition passes the host schema engine', { skip: !hasWorldCore && 'world-core 索引不在本机' }, async (t) => {
+  const candidates = [
+    process.env.DSH_OFFICIAL_PACKAGE && path.join(process.env.DSH_OFFICIAL_PACKAGE, '..', '..'),
+    process.env.DSH_HOME && path.join(process.env.DSH_HOME, 'profiles', 'web', 'node_modules'),
+    path.join(HOME_DIR, '.dsh-fairy', 'profiles', 'web', 'node_modules'),
+    HOME_DIR.replace(/\\/g, '/') + '/../tmp/dsh-011/node_modules',
+  ].filter(Boolean);
+
+  let engine = null;
+  for (const base of candidates) {
+    try {
+      const entry = createRequire(`${base}/`).resolve('@deepseek-ai/dsh-tools');
+      engine = await import(pathToFileURL(entry).href);
+      break;
+    } catch { /* 换下一个候选 */ }
+  }
+  if (!engine) {
+    // 显式跳过（而不是静默 return）——静默 return 会让"没验"看起来像"验过了"
+    t.skip('本机解析不到 @deepseek-ai/dsh-tools（无官方安装）；这条只在该引擎在位时才有意义');
+    return;
+  }
+
+  const repoRoot = path.resolve(PRESET_DIR, '..', '..');
+  process.env.DSH_FAIRY_REPO_ROOT = repoRoot;
+  const mod = await loadWith(repoRoot, WORLD_CORE);
+  let definition = null;
+  await mod.apply({ tools: { register: (d) => { definition = d; return () => {}; } }, systemPrompt: { section: () => () => {} } }, {});
+
+  engine.assertObjectJsonSchema(definition.parameters);          // 参数 schema 合法（含 object-root 约束）
+  engine.assertSupportedJsonSchema(definition.output.schema);    // 输出 schema 在宿主支持面内
+
+  const value = await definition.execute({ query: '空洞', limit: 2 });
+  const violations = engine.validateJsonSchemaValue(definition.output.schema, value, 'value');
+  assert.deepEqual(violations, [], 'execute 的裸返回值必须符合 output.schema');
+
+  const blocks = definition.output.render({}, value);
+  assert.ok(Array.isArray(blocks) && blocks[0]?.type === 'text', 'render 必须产出 content block');
 });
