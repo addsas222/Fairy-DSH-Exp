@@ -138,7 +138,30 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 ---
 
-## 6. 两道门禁
+## 6. 官方安装检查与对齐
+
+```sh
+node fairy-system/host-align.js check            # 只读：报告 @deepseek-ai/* 的版本分布与混版清单
+node fairy-system/host-align.js fix --dry-run    # 看计划（不做网络预检、不改动）
+node fairy-system/host-align.js fix              # 把过期包对齐到与 @deepseek-ai/dsh 同版本
+```
+
+**为什么需要**：官方安装混版会让 DSH **直接起不来**，而报错完全指向别处——
+
+```
+Error: ... does not provide an export named 'SESSION_QUERY_DEFAULT_PREPARED_SESSION_CACHE_SIZE'
+```
+
+看起来像代码 bug，实际是 `dsh-session-query@0.1.2-rc.1` 配 `dsh-session-query-sqlite@0.1.5-rc.2`。
+本机实测形态：208 个包是 0.1.5-rc.2，另有 23 个仍停在 0.1.2-rc.1（"只升级顶层 dsh、
+依赖树没全量重装"之后很常见）。
+
+判据：只比对**同一版本线**（如 0.1.x）的包；`cordis`/`cosmokit`/`schemastery` 等独立版本线
+不参与。默认也只动 `dsh-*` 家族（`node-addon-*` 是原生构建物，需显式 `--include-addons`）。
+这个脚本修改的是 **DSH 官方安装**（AGENTS §5.1 的只读边界）：只在宿主已混版且明确要对齐时用，
+**不要**放进 CI 或自动部署链。
+
+## 7. 两道门禁
 
 ```sh
 DSH_HOME=/path/to/home node fairy-system/verify-build.js                  # 构建契约：10 包，exit 0
@@ -153,7 +176,7 @@ node fairy-system/image-manifest.js check --repo . --home /path/to/home    # 镜
 
 ---
 
-## 7. 排障
+## 8. 排障
 
 - **实机看到旧行为**：`$DSH_HOME` 下是各包的**一份副本**，改完包必须重新落位再起服务。客户端 bundle 按请求 + rev 现场读取，文件一换即生效，无需重启。
 - **镜像与提交不一致（半成品镜像）**：`image-manifest.js check` 定位 → 重跑 `deploy-live.sh`（第 ② 步对账会先删多余文件）。
@@ -166,7 +189,7 @@ node fairy-system/image-manifest.js check --repo . --home /path/to/home    # 镜
 
 ---
 
-## 8. 第三方依赖与致谢
+## 9. 第三方依赖与致谢
 
 第三方包只通过 manifest/lockfile 引用，**不复制其源码**；版本、来源与许可证统一在 `THIRD_PARTY_NOTICES.md` 维护（本机安装的 ponytail 规则技能、借用的《绝区零》官方文本也在其中登记）。
 
@@ -182,7 +205,7 @@ node fairy-system/image-manifest.js check --repo . --home /path/to/home    # 镜
 
 ---
 
-## 9. 许可边界
+## 10. 许可边界
 
 除文件另有说明外，本仓库中 Fairy-DSH 的原创代码、脚本、测试、配置和文档按 **Apache License 2.0** 发布（见 `LICENSE` 与 `NOTICE`）。第三方插件、依赖及其生成物不在本许可范围内，继续适用各自许可证。
 
