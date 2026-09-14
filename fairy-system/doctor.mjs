@@ -396,6 +396,53 @@ export function discoverArtifacts() {
   return out;
 }
 
+/**
+ * ⑧ 语音核心的运行模式：preset 的 core/gate 两行有两种形态——
+ *   完整模式：`runtime/{index.js,safety-gate.js}` 存在且 signature 对（会被 shim 转发）
+ *   降级模式：文件缺失或签名不对（shim 静默改用仓库语料编译的速查段）
+ * 后者的输出与前者长得像，只看日志很容易以为"在跑完整版"。这条把事实与差异讲清，
+ * 并给出一键改模式的办法，省掉每次手工 grep 那些 shim 内部细节。
+ */
+export function checkFairyRuntime(home) {
+  const preset = path.join(home, '.agent-presets', 'fairy');
+  if (!existsSync(preset)) return { status: 'skipped', name: '语音核心模式', detail: '该 home 没有 fairy preset', fix: '' };
+  const runtimeDir = path.join(preset, 'runtime');
+  const targets = [
+    { file: path.join(runtimeDir, 'index.js'), label: 'core' },
+    { file: path.join(runtimeDir, 'safety-gate.js'), label: 'gate' },
+  ];
+  const states = targets.map(({ file, label }) => {
+    if (!existsSync(file)) return { label, state: 'missing' };
+    let src = '';
+    try { src = readFileSync(file, 'utf8'); } catch { return { label, state: 'unreadable' }; }
+    // shim 的判据是 `typeof mod.apply === 'function'`；default 导出或改名都会静默降级。
+    const hasNamedApply = /export\s+(async\s+)?function\s+apply\b/.test(src);
+    return { label, state: hasNamedApply ? 'full' : 'bad-signature' };
+  });
+  const full = states.filter((s) => s.state === 'full');
+  const broken = states.filter((s) => s.state === 'bad-signature' || s.state === 'unreadable');
+  const absent = states.filter((s) => s.state === 'missing');
+  const summary = states.map((s) => `${s.label}=${s.state}`).join(' ');
+
+  if (full.length === states.length) return { status: 'ok', name: '语音核心模式', detail: `完整模式（${summary}）`, fix: '' };
+  if (broken.length) {
+    return {
+      status: 'fail',
+      name: '语音核心模式',
+      detail: `文件在但签名不对，shim 会**静默降级**（${summary}）\n`
+        + '    → 须具名导出：`export async function apply(ctx, config) → dispose`（default 导出或改名都不被识别）',
+      fix: `改 ${broken.map((b) => b.label).join('、')} 的导出为具名 apply`,
+    };
+  }
+  return {
+    status: 'warn',
+    name: '语音核心模式',
+    detail: `降级模式（${summary}，缺 ${absent.map((a) => a.label).join('、')}）\n`
+      + '    → 降级段首行会自报「降级模式：未加载私有 runtime」；放上引擎并**重启实例**才切完整模式',
+    fix: `仓库自带引擎可直接复制：cp <repo>/.agent-presets/fairy/runtime/*.js ${runtimeDir}/ 然后重启实例`,
+  };
+}
+
 /** 跑全部检查。任何单个检查抛错都降级成 fail，不影响其余检查。 */
 export function diagnose(options) {
   const runtimeDir = options.runtimeDir;
@@ -410,6 +457,7 @@ export function diagnose(options) {
   add(checkNpmProjectRoot, runtimeDir);
   add(checkRepo, options.repo, options.home, options.offline);
   add(checkTestPrereqs, options.repo, options.home);
+  add(checkFairyRuntime, options.home);
   return checks;
 }
 
