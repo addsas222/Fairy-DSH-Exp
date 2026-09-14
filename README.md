@@ -16,7 +16,7 @@ Fairy 的 DSH 插件套件（开源发布候选目录）。本目录与任何生
 - `fairy-system/`：离线检查与验收工具（含 `skill-audit.js` 冗余审计、`scaffold-plugin.js` 插件脚手架）
 - `persona-packs/`：内置人格包（fairy、standard）
 - `profiles/web/`：独立 Web profile 模板
-- `.agent-presets/ponytail/`：精简模式 preset（无仓库外私有资产依赖；ponytail 规则技能按上游 MIT 装在**本机技能根**，不入库、不随部署落位）
+- `.agent-presets/ponytail/`：精简模式 preset（无仓库外私有资产依赖；ponytail 规则技能按上游 MIT 装在**本机技能根**，不入库——部署时由 `scripts/deploy-live.sh` 同步进 preset 的 `skills/` 槽位）
 
 设计与决策记录见 `fairy-system/PONYTAIL-DESIGN.md`。
 

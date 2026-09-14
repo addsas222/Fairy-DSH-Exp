@@ -140,6 +140,30 @@ log "source    : $([ "$FROM_WORKTREE" = 1 ] && echo 'working tree (含未提交�
 SOURCE_MODE=git
 if [ "$FROM_WORKTREE" = 1 ]; then SOURCE_MODE=worktree; fi
 
+# 1pre) ponytail 规则技能：不随仓库分发（第三方 MIT 文本），部署时从**本机**安装源同步进
+# preset 的 skills/ 槽位（该槽位在 image-manifest 的跳过策略里，不参与对账/prune）。
+# 安装源优先级：$DSH_FAIRY_SKILLS_DIR > ~/.omp/agent/skills/_ponytail-vendor > ~/.omp/agent/skills。
+# 找不到就跳过（preset 仍可用，只是没有这套技能）——无网络依赖、可重复执行。
+SKILLS_DEST="$DSH_HOME_TARGET/.agent-presets/ponytail/skills"
+if [ "$DRY_RUN" = 1 ]; then
+  printf '  would sync ponytail skills → %s\n' "$SKILLS_DEST"
+else
+  SKILLS_SRC="${DSH_FAIRY_SKILLS_DIR:-}"
+  if [ -z "$SKILLS_SRC" ]; then
+    for cand in "$HOME/.omp/agent/skills/_ponytail-vendor" "$HOME/.omp/agent/skills"; do
+      if [ -d "$cand/ponytail-audit" ] || [ -d "$cand/ponytail/SKILL.md" ]; then SKILLS_SRC="$cand"; break; fi
+    done
+  fi
+  if [ -n "$SKILLS_SRC" ] && [ -d "$SKILLS_SRC" ]; then
+    mkdir -p "$SKILLS_DEST"
+    cp -R "$SKILLS_SRC/." "$SKILLS_DEST/" 2>/dev/null \
+      && log "  synced ponytail skills from $SKILLS_SRC" \
+      || warn "ponytail 技能同步失败（不影响部署）：$SKILLS_SRC"
+  else
+    warn "ponytail 技能未找到安装源（本机技能根为空）；preset 仍可用，只是没有这套技能"
+  fi
+fi
+
 # ── 1) 与源对账（收敛语义：先删多余，再落位） ─────────────────────────────
 # 落位只会新增/覆盖，从不删除；上游删过的文件因此会永远留在镜像里，镜像永远
 # 收敛不到提交。这一步按同一份清单（fairy-system/image-manifest.js，与落位用

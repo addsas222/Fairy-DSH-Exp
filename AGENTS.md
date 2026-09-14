@@ -37,7 +37,7 @@
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
 | `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim。ponytail 规则技能按上游 MIT 在**本机技能根**安装，不入库、不随部署落位） |
+| `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
 | `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
@@ -101,11 +101,19 @@ EvoMap 接入 → 跑两道门禁（构建契约 + 镜像对账）。常用开�
 ```sh
 REPO=$PWD; DSH_HOME=$HOME/.dsh
 
-# 1) 对账：删掉受控路径下「提交里已经没有」的文件（收敛语义的关键一步；
+# 1) ponytail 规则技能（第三方 MIT，不入库）：从本机技能根同步进 preset 的 skills/ 槽位。
+#    槽位在 image-manifest 的跳过策略里（既不删也不报），所以必须在**对账之前**同步。
+SKILLS_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills/_ponytail-vendor}"
+if [ -d "$SKILLS_SRC" ]; then
+  mkdir -p "$DSH_HOME/.agent-presets/ponytail/skills"
+  cp -R "$SKILLS_SRC/." "$DSH_HOME/.agent-presets/ponytail/skills/"
+fi
+
+# 2) 对账：删掉受控路径下「提交里已经没有」的文件（收敛语义的关键一步；
 #    落位只新增/覆盖，从不删除，少了这步上游删过的文件会永远留在镜像里）
 node "$REPO/fairy-system/image-manifest.js" prune --repo "$REPO" --home "$DSH_HOME"
 
-# 2) 落位受控文件（发布形态取 HEAD；开发形态从工作树 tar --exclude=node_modules,.git）
+# 3) 落位受控文件（发布形态取 HEAD；开发形态从工作树 tar --exclude=node_modules,.git）
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
@@ -117,7 +125,7 @@ done
 git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
     .agent-presets/ponytail .agent-presets/fairy profiles/web | tar -x -C "$DSH_HOME"
 
-# 3) 逐包安装依赖（每个包自带 lockfile；link: 依赖要各自 node_modules）
+# 4) 逐包安装依赖（每个包自带 lockfile；link: 依赖要各自 node_modules）
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
@@ -127,14 +135,14 @@ for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
   (cd "$DSH_HOME/$area" && pnpm install --ignore-scripts)
 done
 
-# 4) profile 安装（新增 link 依赖后需 --no-frozen-lockfile 重生成锁文件）
+# 5) profile 安装（新增 link 依赖后需 --no-frozen-lockfile 重生成锁文件）
 (cd "$DSH_HOME/profiles/web" && pnpm install --no-frozen-lockfile --ignore-scripts)
 
-# 5) EvoMap 接入（Layer 1，失败不阻断部署）
+# 6) EvoMap 接入（Layer 1，失败不阻断部署）
 node "$DSH_HOME/fairy-memory/dsh-fairy-memory/lib/memory-cli.js" evomap join --name "Fairy DSH" \
   || echo "evomap join 未完成（离线或 Hub 不可达）：部署继续，稍后重跑即可。"
 
-# 6) 启动
+# 7) 启动
 export DSH_FAIRY_REPO_ROOT="$DSH_HOME"   # ponytail 预设的 shim 与 persona 扫描根
 dsh --profile web --no-open
 ```
@@ -146,14 +154,14 @@ dsh --profile web --no-open
 被忽略但登记在 `fairy-system/image-manifest.js` 的 `SKIP_POLICY` 里的路径（例如
 `.agent-presets/fairy/runtime`），以及 `--preserve` 声明的本机适配。
 
-**EvoMap 第 5 步的语义**：按该服务自身的分层设计只做 Layer 1——恢复或注册节点，
+**EvoMap 第 6 步的语义**：按该服务自身的分层设计只做 Layer 1——恢复或注册节点，
 打印 `claim_url` 由操作者打开完成绑定；`node_secret` 以 0600 落在 `~/.evomap`
 （沙箱用 `EVOMAP_HOME` 换目录），永不打印、不入日志/仓库；**幂等**（已有凭据只
 做探测，不重复注册）；**失败不阻断**（离线只提示）。心跳（stay online）与任务
 操作需各自的明确授权，不在部署内。
 
 **默认规则（防止在沙箱里顺手注册真节点）**：`--home` 指向**默认** `$DSH_HOME` 时
-执行第 5 步，失败不阻断；`--home` 指向**别处**（探针/沙箱）时**自动跳过**并提示——确实要
+执行第 6 步，失败不阻断；`--home` 指向**别处**（探针/沙箱）时**自动跳过**并提示——确实要
 在那里注册就加 `--evomap`，只想看命令形态用 `--dry-run`。
 
 ### 2.3 本地快速回路（原地用仓库，不落 live 布局）
@@ -240,7 +248,22 @@ curl -s -X POST -H 'content-type: application/json' \
 ```
 
 期望：`standard/code/minimal/cordis` 为 `system`，`ponytail` 为 `user`，
-`fairy` 为 `user BROKEN: …`（它依赖私有 runtime，详见 1.2）。
+`fairy` 为 `user BROKEN: …`。
+
+`fairy` 的 BROKEN 有**两个独立成因**（2026-09 实测）：
+
+1. **行名不合规**：`agent.cordis.yml` 第 2/3 行（`fairy-core-runtime`、`fairy-safety-gate`）
+   的 `name` 用了 `!!js` 表达式，而发现器的 `entryListProblem` 要求 `name` 必须是
+   **字符串**（`names no plugin (a "name" string is required)`）——这是当前报出来的那条错。
+   合规写法见本目录 ponytail preset 的行名约定（字面量，或指向预设内相对路径的 shim）。
+2. **私有资产缺失**：即便把行名改成字面量，`runtime/index.js`、`runtime/safety-gate.js`、
+   `runtime/fairy_core.py` 依然不存在——它们**从未进过任何公开仓库**（本仓与
+   `Chengzhibense/Fairy-DSH` 的全历史、工作树、`~/.dsh`、隔离 home 都没有）。
+   上游只在 `ASSET-BOUNDARIES.json` 声明其消费关系、在 `fairy-system/check.sh` 里对它做
+   语法检查，即「资产在部署机上、不在仓库里」。
+
+因此，任何**公开** clone 上 `fairy` preset 都必然 BROKEN，它只对持有私有 runtime 的
+部署机有意义；`ponytail` 与其余 4 个 system preset 不受影响。
 
 完整链（需 live macOS 部署：`launchers/`、LaunchAgents、语音服务）：
 `./fairy-system/check.sh`。基线只读对比：`node fairy-system/accepted-baseline.js --diff`。

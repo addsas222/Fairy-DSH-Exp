@@ -32,9 +32,10 @@
 .agent-presets/ponytail/            精简 preset(本优化的入口)
   agent.cordis.yml                  无悬空引用;persona 文本独立成文件引用
   preset.yml                        name: Ponytail
-  (skills/ 不再随仓库分发)          ponytail 规则技能按上游 MIT 在本机技能根安装；
-                                    preset 的 skill-filesystem 仍把 <preset>/skills/ 作为扫描根之一，
-                                    目录缺失或为空即视为无 preset 自带技能（不再拷入仓库副本）
+  (skills/ 是安装槽位，不入库)      ponytail 规则技能按上游 MIT 在本机技能根安装；部署时
+                                    deploy-live.sh 把它同步进 <preset>/skills/（跳过策略内，不参与 prune）；
+                                    preset 的 skill-filesystem 把 <preset>/skills/ 作为扫描根之一，
+                                    槽位为空时即无这套技能（preset 本身仍可用）
 persona-packs/fairy/                内置人格包(从 .agent-presets/fairy 提炼)
   persona.yml                       id/name/promptFile/tone/voice 绑定
   prompt.md                         人格文档(原 persona text)
