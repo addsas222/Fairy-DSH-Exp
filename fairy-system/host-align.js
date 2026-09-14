@@ -54,7 +54,17 @@ function parseArgs(argv) {
 function resolveRuntimeDir(options) {
   const candidates = [];
   if (options.runtimeDir) candidates.push(options.runtimeDir);
-  if (process.env.DSH_OFFICIAL_PACKAGE) candidates.push(path.join(process.env.DSH_OFFICIAL_PACKAGE, '..', '..'));
+  if (process.env.DSH_OFFICIAL_PACKAGE) {
+    // 仓库约定传的是**文件路径**（`…/@deepseek-ai/dsh/package.json`，见 test-isolated.sh:51
+    // 与 preflight-build.js:13），传目录也容忍。原来的 `path.join(pkg, '..', '..')` 只对
+    // 「传包目录」成立：对文件路径算出 `…/@deepseek-ai`，再拼 `@deepseek-ai/dsh` 永远不存在
+    // ——**这个旋钮一直是死的**，只是没被发现（宿主混版排查时走的是 --runtime）。
+    const pkgDir = path.dirname(process.env.DSH_OFFICIAL_PACKAGE);
+    for (const base of [pkgDir, process.env.DSH_OFFICIAL_PACKAGE]) {
+      candidates.push(path.join(base, '..'));              // …/node_modules
+      candidates.push(path.join(base, '..', '..'));        // 传目录形态下的老算法
+    }
+  }
   if (options.home) candidates.push(path.join(options.home, '..', 'node_modules'));
   candidates.push(path.join(process.cwd(), 'node_modules'));
   for (const c of candidates) {
