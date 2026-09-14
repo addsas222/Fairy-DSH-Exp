@@ -38,7 +38,7 @@
 | `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
 | `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
-| `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
+| `.agent-presets/fairy/` | Fairy 预设：人格文本 + 语料（`behavior`/`personality`/`canon`/`style`）+ 三个插件行。**公开仓库可正常挂载**——`runtime/{index.js,safety-gate.js}` 是随仓分发的公开语料引擎（2026-09 起），不再依赖未公开资产 |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
 | `fairy-system/PONYTAIL-DESIGN.md` | 三模式与人格/语音绑定的设计记录 + 0.1.1 运行时契约 |
@@ -323,33 +323,41 @@ curl -s -X POST -H 'content-type: application/json' \
 期望：`standard/code/minimal/cordis` 为 `system`，`ponytail` 为 `user`，
 `fairy` 为 `user ok`（私有 runtime 缺失时走降级模式，见下）。
 
-`fairy` preset 的两处历史缺陷**已修复**（2026-09）：
+`fairy` preset 的**三处**历史缺陷**已修复**（2026-09）：
 
-1. **行名不合规**（已修）：`agent.cordis.yml` 第 2/3 行原用
+1. **行名不合规**（已修）：`agent.cordis.yml` 原用
    `name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/index.js'`，
    而发现器的 `entryListProblem` 要求 `name` 必须是**字符串**——这会让整个 preset 判 BROKEN。
    现改为 preset 内相对路径 shim（`./plugins/fairy-core-runtime.mjs`、
    `./plugins/fairy-safety-gate.mjs`），与 ponytail preset 的行名约定一致。
-2. **私有 runtime 缺失**（已降级处理）：`runtime/index.js`、`runtime/safety-gate.js`、
-   `runtime/fairy_core.py`、`runtime/compiler.js` 等**从未进过任何公开仓库**
-   （本仓与 `Chengzhibense/Fairy-DSH` 全历史、工作树、两个 home 皆无）。两个 shim 因此
-   先尝试 `import` 私有真身，**缺失时走降级路径**：把随 preset 分发的语料
-   （`behavior/fairy_behavior_rules.json` 334 KB 规则、`personality/*` 55 KB traits、
-   `canon/*` 12 KB、`style/*` 9 KB）编译成一段注入系统提示的速查表，
-   并提供保守的风险闸门（高风险动作先"警告。"并要求确认）。
-   降级路径**不含**原 runtime 的统计式语音选择，其余人格与规则照常生效。
+2. **语音核心 / 安全闸门的实现**（2026-09 起随仓分发）：
+   `runtime/{index.js,safety-gate.js}` 是**公开语料编译出的引擎**，随仓库分发、随部署落位。
+   语义是三层，不是两层：
+     私有同名文件（从不公开）→ 用私有实现；
+     无私有文件但引擎在位 → **完整模式**（引擎组段落，实测 4424 / 1243 字符）；
+     两者皆无（如语料缺失）→ **降级模式**（shim 用自带语料编译一段速查 + 保守风险闸门）。
+   `runtime/fairy_core.py`、`runtime/compiler.js` 属**私有原版**，从未进过任何公开仓库，
+   且当前引擎并不消费 `.py`（预设里那条 `runtimePath` 是历史遗留，引擎只按它的**目录**找语料）。
+3. **`inject` 漏声明 `tools`**（已修，2026-09）：`plugins/fairy-world-core.mjs` 既挂段落又
+   `ctx.tools.register({name:'fairy_world_lookup'})`，但 `inject` 只有 `['systemPrompt']`——
+   cordis 门控在**属性访问**处就抛 `cannot get property "tools" without inject`，
+   **任何新建的 fairy 会话都挂载失败**（既有会话不受影响）。现为 `['systemPrompt','tools']`。
 
-证据口径（别夸大）：`fairy user ok` 只证明**发现层**——行名合法、`entryListProblem` 通过。
-日志里那 10 条 `apply: outcome=success` 是 **profile 行**（dsh-balance-meter…fairy-voice 等
-host 面插件）产生的，**不含** preset 里这两个 shim；shim 的 `apply()` 至今**没有在任何
-真实会话里执行过**（没有人开过选用 `fairy` 预设的会话）。
+**验证现状（2026-09-14 在真机取得，别再用旧说法）**：
+- `fairy user ok` 只证明**发现层**；日志里那 10 条 `apply: outcome=success` 是 **profile 行**
+  （dsh-balance-meter…fairy-voice）产生的，**不含** preset 那三个 shim——preset 行是**按会话挂载**的。
+- shim 的 `apply()` **已在真实会话里跑过**：新建 `agentPreset:"fairy"` 会话成功挂载；
+  该次挂载在实例 stderr 上追加了 `MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`
+  （引擎为 `.js` 且附近无 `type: module`）——**这条警告就是"运行进程真 import 过引擎"的最省事判据**。
+- 端到端判据建议用**更强的两条**，别用"让模型复述自己的段标题"（模型自省可能顺着问法编）：
+  ① 上面那条 stderr 警告；② 同 env 跑 shim 链看段正文长度/首行（4424 / 1243 字符）。
 
-shim 的应用层验证目前只有单测：`fairy-system/test/fairy-preset-shims.test.js`（fakeHost 形状
+shim 的应用层验证有两层：单测 `fairy-system/test/fairy-preset-shims.test.js`（fakeHost 形状
 对齐 fairy-modes/test/modes.test.js）断言段落形状合法、两段不重名、私有真身存在时转发；
-把调用改回错误形状跑它会失败，故能防假绿。**真实会话内 apply 待验**：开一次选 fairy 的会话，
-看系统提示里是否出现 `fairy-voice-core` / `fairy-safety-gate` 两段。
+**真机验证已完成**（2026-09-14）：新建 `agentPreset:"fairy"` 会话成功，实例 stderr 追加
+`MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`（证明引擎真被 import）。
 
-因此公开 clone 上 `fairy` 现在**可用**（降级模式）；把私有 `runtime/` 放到
+因此公开 clone 上 `fairy` 现在**可用且默认就是完整模式**（引擎随仓分发）；把私有实现放到
 `$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy/runtime/` 即自动切换为完整模式，无需改配置。
 
 完整链（需 live macOS 部署：`launchers/`、LaunchAgents、语音服务）：

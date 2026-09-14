@@ -116,7 +116,7 @@ dsh --profile web --no-open
 
 `.agent-presets/fairy/` 自带语料（`behavior` 规则 334 KB、`personality` 55 KB、`canon`、`style`）与三个插件行：
 
-- `fairy-core-runtime` / `fairy-safety-gate`：优先加载**私有 runtime**（`runtime/index.js` 等，不在公开仓库）；缺失时走**降级模式**——用自带语料编译一段系统提示速查 + 保守风险闸门。
+- `fairy-core-runtime` / `fairy-safety-gate`：优先加载**私有 runtime**（同名文件，私有原版从不公开）；缺失时用**随仓引擎**（`runtime/{index.js,safety-gate.js}`，公开语料编译）走**完整模式**，语料也不可用时才降级——用自带语料编译一段系统提示速查 + 保守风险闸门。
 - `fairy-world-core`：注册 `fairy_world_lookup` 工具，按需检索本机 `world-core/` 行式索引（由 `fairy-system/extract-world-core.mjs`（可重复：同参数重跑逐字节一致）从《绝区零》官方 TextMap 的**简体源** `TextMapTemplateTb.json` 提取——同一 dump 的简繁两版都在，取简体版而非机器转换；游戏 3.2.0，3.5 万+ 条，每条带原始文本键作证据）。
 
 `world-core/` 由 `.gitignore` 挡住并在跳过策略内：**不进仓库、不随部署分发**（版权归 miHoYo/HoYoverse），部署时从本机 clone 同步。
