@@ -257,6 +257,10 @@ test('ponytail skills stay an install slot: synced at deploy, exempt from prune'
   const script = fs.readFileSync(DEPLOY_SCRIPT, 'utf8');
   assert.match(script, /\.agent-presets\/ponytail\/skills/, 'deploy must install into the preset skill slot');
   assert.match(script, /DSH_FAIRY_SKILLS_DIR/, 'the install source must be overridable');
+  // 只取 ponytail*：技能根里还有十几个与本 preset 无关的私人技能，整目录 cp 会把它们
+  // 连 `_ponytail-vendor` 自身一起嵌套塞进 DSH 会话。
+  assert.match(script, /for dir in "\$SKILLS_SRC"\/ponytail\*; do/);
+  assert.doesNotMatch(script, /cp -R "\$SKILLS_SRC\/\."/, 'must not copy the whole skills root');
   const syncAt = script.indexOf('SKILLS_DEST=');
   const reconcileAt = script.indexOf('prune --repo');
   assert.ok(syncAt > 0 && reconcileAt > syncAt, 'skills must be synced before the reconcile step, or the first deploy reports them as extra');

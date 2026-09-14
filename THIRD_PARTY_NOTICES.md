@@ -25,9 +25,15 @@
 
 ## 本机安装的第三方技能（不随仓库分发）
 
+安装方式：**本机安装 + 部署时同步**，不使用网络下载（本机直连 GitHub 时通时断，代理也可能被禁用；
+把它做成部署期下载会变成新的漂移源）。`scripts/deploy-live.sh` 的第 1 步从本机技能根
+（`$DSH_FAIRY_SKILLS_DIR` > `~/.omp/agent/skills/_ponytail-vendor` > `~/.omp/agent/skills`）
+只取 `ponytail*` 目录，同步进 `$DSH_HOME/.agent-presets/ponytail/skills/`（该槽位在
+`image-manifest.js` 的跳过策略内，不参与对账/prune）；取不到就 warn 继续，preset 仍可用。
+
 | 内容 | 位置 | 许可证 | 版权 / 来源 |
 | --- | --- | --- | --- |
-| ponytail 技能组 | 本机技能根（如 `~/.omp/agent/skills/`），**不在本仓库内** | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
+| ponytail 技能组（6 项：ponytail 主技能 + audit/debt/gain/help/review） | 本机技能根（如 `~/.omp/agent/skills/`），**不在本仓库内** | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
 
 ## 运行期从 CDN 加载的第三方引擎（未随仓库分发）
 
