@@ -161,6 +161,10 @@ else
     done
   fi
   if [ -n "$SKILLS_SRC" ] && [ -d "$SKILLS_SRC" ]; then
+    # 收敛语义：先清空槽位再整套拷。只 cp 不删的话，源里改名/删除的技能会永远留在
+    # 槽位里（槽位被跳过策略豁免，prune 与门禁都不碰它）——与同脚本的对账语义不一致。
+    # 清空只发生在这个支路：找不到源时保持原样（见 else 的 warn），绝不误删已装好的技能。
+    rm -rf "$SKILLS_DEST"
     mkdir -p "$SKILLS_DEST"
     synced=0
     for dir in "$SKILLS_SRC"/ponytail*; do
