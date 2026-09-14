@@ -8,12 +8,17 @@ logs/
 sessions/
 runtime/
 # …但 .agent-presets/fairy/runtime/{index.js,safety-gate.js} 是**显式 -f 跟踪**的例外：
-# 它们是公开语料（style/*.json + behavior/*.json）的产物，随仓分发以便任何机器部署后即可跑
-# 完整模式。**若日后把私有真身放到这两个同名文件上，它就是"已跟踪文件的改动"**——
-# 一次 `git add -A` 就会把私有实现推上公开仓。替换前先脱钩：
+# 它们是公开语料（style/*.json + behavior/*.json）的产物，随仓分发以便任何机器部署后即可跑完整模式。
+#
+# 两条边界的**风险不在同一侧**：
+#   部署/对账侧：无害。 SKIP_POLICY 已把 `.agent-presets/fairy/runtime` 整目录排除
+#                （"私有部署资产，不进公开仓库"），放私有真身做 drop-in 不会被判 drift、
+#                也不会被部署覆盖——所以**不需要** --preserve，也**不要**在 LOCAL_ADAPTATIONS 里加条目。
+#   git 侧：有风险。    它们已是"已跟踪文件"——把私有真身写到同名文件上，一次 `git add -A`
+#                就会把私有实现推上公开仓。替换前先脱钩：
 #   git update-index --skip-worktree .agent-presets/fairy/runtime/index.js
 #   git update-index --skip-worktree .agent-presets/fairy/runtime/safety-gate.js
-# （并同步改掉本行上方的说明；仓库内引擎的替代路径是 plugins/ 下新增文件，而不是覆盖这两个。）
+# （仓库内引擎的替代路径也可以是 plugins/ 下新增文件，而不是覆盖这两个。）
 playwright-profile/
 world-core/
 browser-evidence/

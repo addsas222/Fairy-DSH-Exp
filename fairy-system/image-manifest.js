@@ -136,12 +136,9 @@ const SKIP_POLICY = [
 // 判断方式是精确路径相等，不做通配。
 const LOCAL_ADAPTATIONS = {
   'profiles/web/cordis.patch.yml': '本机适配（例如把 --browser chrome 换成已安装的通道）',
-  // 语音核心/安全闸门的**私有实现**是这俩路径的合法替换件，与 cordis.patch.yml 同类：
-  // 仓库分发的是公开语料编译出的引擎，私有真身放上去即覆盖它、且优先生效（shim 先试真身）。
-  // 声明在这里，是为了让这种替换**不算 drift**（check/policy 会自动把它列为 allowed，
-  // 部署也不会按提交内容覆盖它）——否则每次部署/对账都要手工 --preserve 才不会报红。
-  '.agent-presets/fairy/runtime/index.js': '本机适配（私有语音核心实现，覆盖随仓分发的公开引擎）',
-  '.agent-presets/fairy/runtime/safety-gate.js': '本机适配（私有安全闸门实现，覆盖随仓分发的公开引擎）',
+  // 注：`.agent-presets/fairy/runtime/` 下**不放**条目——那个前缀已在 SKIP_POLICY 里整目录排除
+  // （"私有部署资产，不进公开仓库"），对账本就不看它，所以私有真身 drop-in 天然不会判漂移。
+  // 一条路径不可能既 skip 又 allow；写在这里只会误导。
 };
 
 function isSkipped(relative) {
