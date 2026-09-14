@@ -47,6 +47,18 @@ const captureActions = new Set([
 ]);
 const humanPattern = /(?:captcha|验证码|人机验证|verify (?:that )?you are human|sign[ -]?in|log[ -]?in|登录|two[ -]?factor|2fa|authentication code)/i;
 
+/* A detached spawn emits its failures as an `error` event. With no listener that
+ * event is rethrown as an uncaught exception and takes the whole proxy (and the
+ * MCP session riding on it) down - a handoff that could not find a browser would
+ * kill the dock instead of reporting. Every detached spawn goes through here, so
+ * the failure stays a diagnostic. */
+function spawnDetached(event, command, args, options = {}) {
+  const child = spawn(command, args, { detached: true, stdio: 'ignore', ...options });
+  child.on('error', (error) => diagnostics.warn(event, { platform: process.platform }, error));
+  child.unref();
+  return child;
+}
+
 fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
 try { fs.chmodSync(runtimeDir, 0o700); } catch {}
 
@@ -278,15 +290,52 @@ async function closeBrowser(reason = 'closed') {
   publish(inactiveState({ status: reason, frameRevision }));
 }
 
+/* Windows has no `/usr/bin/open`, and a spawn failure used to be silent: the
+ * dock reported "handoff" while nothing opened. `start` is the platform's
+ * launcher, and the executable after it selects which browser takes over (empty
+ * = the system default). The browser is configurable because the takeover
+ * command is not always the browser MCP is driving: this host has no Chrome, so
+ * the instance selects `msedge` through DSH_FAIRY_HANDOFF_BROWSER.
+ *
+ * The user-data-dir is dropped on Windows on purpose: handing off to a browser
+ * already running with the same directory just focuses that window and ignores
+ * the URL, which reads as "takeover did nothing". No data is lost - the MCP
+ * session's own cookies live in the headless profile the user-data-dir points
+ * at, and the handoff exists to move the *page* to a visible window. */
+function handoffCommand(url) {
+  if (process.platform !== 'win32') {
+    return { command: '/usr/bin/open', args: ['-na', 'Google Chrome', '--args', `--user-data-dir=${userDataDir}`, '--new-window', url] };
+  }
+  /* Windows: `start` through a hand-built command line (`windowsVerbatimArguments`)
+   * because two mechanisms measured on this host break every simpler form:
+   *
+   *   1. A URL containing `&` (any query string) is split by cmd: `cmd /c start ""
+   *      <url>` answers `'b' is not recognized as an internal or external
+   *      command` and the browser only receives the part before the `&`. Node's
+   *      win32 quoting does not escape `&` for cmd, so the URL is quoted here.
+   *   2. An unquoted browser path containing a space (`C:\Program Files (x86)\
+   *      Microsoft\Edge\Application\msedge.exe`) is swallowed by `start`'s
+   *      window-title slot - it becomes the title and nothing launches. The
+   *      browser is therefore quoted too, and the empty title slot stays first.
+   *
+   * The user-data-dir is passed on both platforms: takeover exists to keep the
+   * session, and a measurement after closeBrowser() showed a visible browser
+   * reusing that profile (window stayed up, session data still present). */
+  const browser = process.env.DSH_FAIRY_HANDOFF_BROWSER || '';
+  return {
+    command: process.env.ComSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c', `start "" ${browser ? `"${browser}" ` : ''}"${url}" --new-window "--user-data-dir=${userDataDir}"`],
+    options: { windowsVerbatimArguments: true },
+  };
+}
+
 async function externalTakeover(command) {
   if (!state.active || !state.takeoverAvailable || state.takeoverConsumed || command.revision !== state.revision) return;
   const url = state.url || 'about:blank';
   publish({ loading: true, status: 'handoff', takeoverConsumed: true });
   await closeBrowser('handoff');
-  const browser = spawn('/usr/bin/open', [
-    '-na', 'Google Chrome', '--args', `--user-data-dir=${userDataDir}`, '--new-window', url,
-  ], { detached: true, stdio: 'ignore' });
-  browser.unref();
+  const handoff = handoffCommand(url);
+  spawnDetached('proxy.takeover.spawn', handoff.command, handoff.args, handoff.options);
 }
 
 async function handleCommand(command) {
@@ -334,14 +383,23 @@ function resolveLauncher(target) {
     // `.cmd`/`.bat` are scripts for the command interpreter, not executable
     // images, and Node refuses to spawn them without a shell.
     return /[.](?:cmd|bat)$/i.test(candidate)
-      ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', candidate] }
-      : { command: candidate, args: [] };
+      ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', candidate], candidates }
+      : { command: candidate, args: [], candidates };
   }
-  return { command: target, args: [] };
+  return { command: target, args: [], candidates };
 }
 
 const launcher = resolveLauncher(playwrightCommand);
 const child = spawn(launcher.command, [...launcher.args, ...process.argv.slice(2)], { stdio: ['pipe', 'pipe', 'pipe'] });
+/* A missing/unspawnable playwright shim emits `error`; with no listener Node
+ * rethrows it and the whole proxy dies with a bare stack - the dock then sits
+ * frozen with no state file to read and no diagnostic naming the launcher.
+ * Report which candidate was resolved, then shut down through the same path a
+ * dead child uses so the MCP session sees a clean end instead of a hangup. */
+child.on('error', (error) => {
+  diagnostics.warn('proxy.child.spawn', { command: launcher.command, candidates: launcher.candidates }, error);
+  shutdown('child-spawn', 'SIGTERM');
+});
 child.stderr.pipe(process.stderr);
 
 const clientInput = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -412,7 +470,10 @@ try {
 const commandTimer = setInterval(checkCommands, commandRescanMs);
 commandTimer.unref?.();
 
-function shutdown(signal) {
+/* `reason` is what the MCP calls see and what makes a shutdown diagnosable;
+ * `signal` must still be a real signal name because it is handed to
+ * `child.kill` (`child-spawn` as a signal throws ERR_UNKNOWN_SIGNAL). */
+function shutdown(reason, signal = reason) {
   if (closed) return;
   closed = true;
   clearInterval(commandTimer);
@@ -420,7 +481,7 @@ function shutdown(signal) {
   commandWatcher = null;
   for (const call of internalCalls.values()) {
     clearTimeout(call.timeout);
-    call.reject(Object.assign(new Error(`Browser Dock shutting down (${signal})`), { code: 'proxy-shutdown' }));
+    call.reject(Object.assign(new Error(`Browser Dock shutting down (${reason})`), { code: 'proxy-shutdown' }));
   }
   internalCalls.clear();
   clientCalls.clear();

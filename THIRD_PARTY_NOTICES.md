@@ -1,7 +1,7 @@
 # Third-party notices
 
-本仓库不复制第三方源码，唯一例外是 `.agent-presets/ponytail/skills/`：该目录
-再分发 ponytail 技能文本（MIT，见下表「再分发的第三方内容」）。其余第三方依赖
+本仓库不复制第三方源码，也不随仓库分发第三方技能文本：ponytail 规则技能组（MIT）
+在**本机**按上游条款安装使用，来源与许可见下表。其余第三方依赖
 由包管理器或 DSH 宿主安装；它们不在 Fairy-DSH 的 Apache-2.0 原创代码许可范围内，
 发布时必须继续保留各自的许可证、版权和 NOTICE 要求。
 
@@ -12,6 +12,10 @@
 | `dsh-message-edit` | `0.2.3` · [Moeblack/dsh-message-edit](https://github.com/Moeblack/dsh-message-edit) | MIT | Moeblack；随包附带声明 |
 | `dsh-reasoning-effort` | `0.6.2` · commit `83bc8c548749d7156a03d11d875d8117e9b5d994` · [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) | MIT | HanaAyane；随包附带声明 |
 | `hono` | `4.13.2` · [honojs/hono](https://github.com/honojs/hono) | MIT | Hono contributors；随包附带声明 |
+| `@deepseek-ai/schemastery` | `3.18.1` · [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | DeepSeek；随包附带声明 |
+| `mdast-util-from-markdown` | `2.0.3` · [syntax-tree/mdast-util-from-markdown](https://github.com/syntax-tree/mdast-util-from-markdown) | MIT | syntax-tree contributors；随包附带声明（`fairy-voice` 的 Markdown 解析） |
+| `mdast-util-gfm` | `3.1.0` · [syntax-tree/mdast-util-gfm](https://github.com/syntax-tree/mdast-util-gfm) | MIT | syntax-tree contributors；随包附带声明 |
+| `micromark-extension-gfm` | `3.0.0` · [micromark/micromark-extension-gfm](https://github.com/micromark/micromark-extension-gfm) | MIT | micromark contributors；随包附带声明 |
 
 ## 宿主提供的 DSH 包
 
@@ -19,12 +23,27 @@
 宿主提供，不随本仓库 vendoring，也不由本项目重新授权。使用者应按照 DSH
 发行包中的许可证和版权文件处理。
 
-## 再分发的第三方内容
+## 本机安装的第三方技能（不随仓库分发）
+
+安装方式：**本机安装 + 部署时同步**，不使用网络下载（本机直连 GitHub 时通时断，代理也可能被禁用；
+把它做成部署期下载会变成新的漂移源）。`scripts/deploy-live.sh` 的第 1 步从本机技能根
+（`$DSH_FAIRY_SKILLS_DIR` > `~/.omp/agent/skills/_ponytail-vendor` > `~/.omp/agent/skills`）
+只取 `ponytail*` 目录，同步进 `$DSH_HOME/.agent-presets/ponytail/skills/`（该槽位在
+`image-manifest.js` 的跳过策略内，不参与对账/prune）；取不到就 warn 继续，preset 仍可用。
 
 | 内容 | 位置 | 许可证 | 版权 / 来源 |
 | --- | --- | --- | --- |
-| ponytail 技能组 | `.agent-presets/ponytail/skills/ponytail*/SKILL.md` | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)；许可证全文见 `.agent-presets/ponytail/skills/ponytail.LICENSE` |
+| ponytail 技能组（6 项：ponytail 主技能 + audit/debt/gain/help/review） | 本机技能根（如 `~/.omp/agent/skills/`），**不在本仓库内** | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
 
+## 本机借用的第三方数据（不随仓库分发）
+
+| 内容 | 用途 | 来源 | 许可/版权 |
+| --- | --- | --- | --- |
+| 《绝区零》官方文本 TextMap（CHT，游戏 3.2.0，约 43.9 MB 原始 → 本机索引 3.4 万条 / 5.6 MB） | fairy preset 的 world-core 世界知识（经 `fairy_world_lookup` 按需检索） | [dimbreath/ZenlessData](https://git.mero.moe/dimbreath/ZenlessData)（git.mero.moe 镜像）的 `TextMap/TextMapTemplateTb.json`（**简体源**；同 dump 另有 `TextMap_CHT*` 繁体版，未使用） | **游戏文本版权归 miHoYo / HoYoverse**，本仓库不主张任何权利、也不再分发 |
+
+处理方式：`C:/tmp/zzz-extract2.mjs` 把 TextMap 抽成 `world-core/<entity>.jsonl`（每行 `{key, text}`，`key` 即游戏原始文本键，可作证据引用）。
+该目录由 `.gitignore` 挡住、并在 `image-manifest.js` 的跳过策略内，**不进仓库、不随部署分发到别处**；部署时由 `deploy-live.sh` 从本机 clone 同步进目标 home。
+下游使用时请自行确认与 miHoYo 的条款一致（本仓库只做本机个人用途的技术处理）。
 ## 运行期从 CDN 加载的第三方引擎（未随仓库分发）
 
 `fairy-voice` 的浏览器内引擎 provider 在**用户浏览器**里按配置的 `moduleUrl`

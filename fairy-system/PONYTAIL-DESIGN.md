@@ -1,6 +1,6 @@
 # Ponytail 优化设计（2026-09-13)
 
-标准：Ponytail 规则集（skills/ponytail,github.com/DietrichGebert/ponytail),
+标准：Ponytail 规则集（本机安装，上游 github.com/DietrichGebert/ponytail，MIT),
 强度 full:7 级懒解阶梯——能复用不新造，能 stdlib/平台不依赖，能一行不五十行。
 `ponytail:` 注释标记有意为之的上限与升级路径。
 
@@ -32,7 +32,10 @@
 .agent-presets/ponytail/            精简 preset(本优化的入口)
   agent.cordis.yml                  无悬空引用;persona 文本独立成文件引用
   preset.yml                        name: Ponytail
-  skills/                           随 preset 分发的 ponytail 规则技能(soft-copy 自外部规则集,标注来源与 MIT)
+  (skills/ 是安装槽位，不入库)      ponytail 规则技能按上游 MIT 在本机技能根安装；部署时
+                                    deploy-live.sh 把它同步进 <preset>/skills/（跳过策略内，不参与 prune）；
+                                    preset 的 skill-filesystem 把 <preset>/skills/ 作为扫描根之一，
+                                    槽位为空时即无这套技能（preset 本身仍可用）
 persona-packs/fairy/                内置人格包(从 .agent-presets/fairy 提炼)
   persona.yml                       id/name/promptFile/tone/voice 绑定
   prompt.md                         人格文档(原 persona text)
@@ -128,7 +131,7 @@ interface SttProvider {
 ### 冗余审计（create 模式消费）
 
 `fairy-system/skill-audit.js`:
-- 输入：技能根（preset skills/、`.dsh/skills/`、`$DSH_HOME/skills/`)+ profile/preset 插件行。
+- 输入：技能根（preset skills/、`.dsh/skills/`、`$DSH_HOME/skills/`、本机技能根）+ profile/preset 插件行。
 - 技能相似度：name+description 的 token Jaccard ≥ 0.6 报 merge 候选；frontmatter `name` 冲突报重复。
 - 插件冗余：同名 id 多行、同服务多 provider、disabled 行。
 - 输出：`<tag> <what>. <replacement>. [path]`(ponytail-audit 格式）,merge/delete 候选清单。

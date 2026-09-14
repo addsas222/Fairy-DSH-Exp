@@ -35,10 +35,10 @@
 | `browser-dock/` | 浏览器 Dock（宿主插件 + 独立 `proxy.cjs` 进程 + `fs.watch` 状态桥） |
 | `fairy-startup/` | 启动动作（恢复会话选择、按 workspace 就绪开新会话） |
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
-| `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
+| `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/ponytail/` | 模式预设（**公开入口**；自带 ponytail 规则技能、modes 与 memory 的 agent 面 shim） |
-| `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
+| `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
+| `.agent-presets/fairy/` | Fairy 预设：人格文本 + 语料（`behavior`/`personality`/`canon`/`style`）+ 三个插件行。**公开仓库可正常挂载**——`runtime/{index.js,safety-gate.js}` 是随仓分发的公开语料引擎（2026-09 起），不再依赖未公开资产 |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
 | `fairy-system/PONYTAIL-DESIGN.md` | 三模式与人格/语音绑定的设计记录 + 0.1.1 运行时契约 |
@@ -63,20 +63,35 @@
 ### 2.1 一键部署（推荐）
 
 ```sh
-git clone https://github.com/Chengzhibense/Fairy-DSH.git fairy-dsh && cd fairy-dsh
+git clone https://github.com/addsas222/Fairy-DSH-Exp.git fairy-dsh && cd fairy-dsh
 ./scripts/deploy-live.sh --home "$HOME/.dsh"          # 或 --home /path/to/DSH_HOME
 ```
 
-脚本按 AGENTS.md 原先的手工步骤做了四件事：落位受控文件 → 逐包安装依赖 →
-安装 `profiles/web` → EvoMap 接入 → 跑构建契约。常用开关：
+**来源（改这里之前先读）**：本机实际部署与隔离实例都取
+`addsas222/Fairy-DSH-Exp` 的 `main` 分支（2026-09 起仓库只保留这一条）；另有两个同源分支在别处被用到，别混：
+
+| 位置 | 来源 | 与本仓的关系 |
+| --- | --- | --- |
+| `C:\Users\Administrator\fairy-dsh`（本部署源） | `addsas222/Fairy-DSH-Exp` @ `main` | **canonical**：镜像与隔离实例都从它落位 |
+| `F:\世界观\Fairy-DSH` | `Chengzhibense/Fairy-DSH` | 停在更早提交（`d639887`）且带未提交改动；被 `~/.dsh` 主 profile 以 `link:` 引用 |
+| `Guzhou2002/Fairy-DSH-Optimized` | 安装包下载说明里的地址 | 第三方再分发，未在本机使用 |
+
+除 `browser-dock/proxy.cjs` 的浏览器接管外，`F:` 的其余未提交改动（per-package
+`cordis.patch.yml` 桩、`dsh.bundle.patch` 键）属于已被 profile 级 patch 取代的旧结构，
+**不要**照搬回本仓。
+
+脚本按 AGENTS.md 原先的手工步骤做了这样几件事：**与源对账**（删掉提交里已删、
+镜像里还留着的文件）→ 落位受控文件 → 逐包安装依赖 → 安装 `profiles/web` →
+EvoMap 接入 → 跑两道门禁（构建契约 + 镜像对账）。常用开关：
 
 | 开关 | 用途 |
 | --- | --- |
-| `--from-worktree` | 用当前工作树部署（含未提交改动）；开发回路常用 |
-| `--evomap` | 强制在非默认 `--home` 上执行第 4 步（默认只对真实部署执行，见下） |
+| `--from-worktree` | 用当前工作树部署（含未提交改动）；开发回路常用。对账也随之改成对工作树 |
+| `--preserve LIST` | 逗号分隔的仓库相对路径：**保留镜像里的现有内容**，既不清理也不按提交覆盖（本机适配用，见 §3） |
+| `--evomap` | 强制在非默认 `--home` 上执行第 5 步（默认只对真实部署执行，见下） |
 | `--skip-evomap` | 跳过 EvoMap 接入。**无人值守/CI 一律带上**（该步会向外网注册并产生本机凭据） |
-| `--skip-install` | 只落文件不装依赖（离线排障） |
-| `--no-verify` / `--dry-run` | 跳过契约检查 / 只打印将执行的命令 |
+| `--skip-install` | 只落文件不装依赖（离线排障）；两道门禁仍会跑 |
+| `--no-verify` / `--dry-run` | 跳过两道门禁 / 只打印将执行的命令 |
 
 > Windows：本机 `bash` 可能被 WSL 抢占（`/bin/bash` 不存在）。脚本已写成
 > **POSIX sh**，用 `sh scripts/deploy-live.sh …` 运行即可。
@@ -86,7 +101,19 @@ git clone https://github.com/Chengzhibense/Fairy-DSH.git fairy-dsh && cd fairy-d
 ```sh
 REPO=$PWD; DSH_HOME=$HOME/.dsh
 
-# 1) 落位受控文件（发布形态取 HEAD；开发形态从工作树 tar --exclude=node_modules,.git）
+# 1) ponytail 规则技能（第三方 MIT，不入库）：从本机技能根同步进 preset 的 skills/ 槽位。
+#    槽位在 image-manifest 的跳过策略里（既不删也不报），所以必须在**对账之前**同步。
+SKILLS_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills/_ponytail-vendor}"
+if [ -d "$SKILLS_SRC" ]; then
+  mkdir -p "$DSH_HOME/.agent-presets/ponytail/skills"
+  cp -R "$SKILLS_SRC/." "$DSH_HOME/.agent-presets/ponytail/skills/"
+fi
+
+# 2) 对账：删掉受控路径下「提交里已经没有」的文件（收敛语义的关键一步；
+#    落位只新增/覆盖，从不删除，少了这步上游删过的文件会永远留在镜像里）
+node "$REPO/fairy-system/image-manifest.js" prune --repo "$REPO" --home "$DSH_HOME"
+
+# 3) 落位受控文件（发布形态取 HEAD；开发形态从工作树 tar --exclude=node_modules,.git）
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
@@ -98,7 +125,7 @@ done
 git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
     .agent-presets/ponytail .agent-presets/fairy profiles/web | tar -x -C "$DSH_HOME"
 
-# 2) 逐包安装依赖（每个包自带 lockfile；link: 依赖要各自 node_modules）
+# 4) 逐包安装依赖（每个包自带 lockfile；link: 依赖要各自 node_modules）
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
             fairy-startup/dsh-fairy-startup fairy-visual/dsh-fairy-visual \
             fairy-voice/dsh-fairy-voice fairy-persona/dsh-fairy-persona \
@@ -108,26 +135,33 @@ for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
   (cd "$DSH_HOME/$area" && pnpm install --ignore-scripts)
 done
 
-# 3) profile 安装（新增 link 依赖后需 --no-frozen-lockfile 重生成锁文件）
+# 5) profile 安装（新增 link 依赖后需 --no-frozen-lockfile 重生成锁文件）
 (cd "$DSH_HOME/profiles/web" && pnpm install --no-frozen-lockfile --ignore-scripts)
 
-# 4) EvoMap 接入（Layer 1，失败不阻断部署）
+# 6) EvoMap 接入（Layer 1，失败不阻断部署）
 node "$DSH_HOME/fairy-memory/dsh-fairy-memory/lib/memory-cli.js" evomap join --name "Fairy DSH" \
   || echo "evomap join 未完成（离线或 Hub 不可达）：部署继续，稍后重跑即可。"
 
-# 5) 启动
+# 7) 启动
 export DSH_FAIRY_REPO_ROOT="$DSH_HOME"   # ponytail 预设的 shim 与 persona 扫描根
 dsh --profile web --no-open
 ```
 
-**EvoMap 第 4 步的语义**：按该服务自身的分层设计只做 Layer 1——恢复或注册节点，
+**手工等价与脚本的一处差异（开发形态）**：上面第 2 步的 `tar --exclude=node_modules,.git`
+只排除两个固定名字，而 `deploy-live.sh --from-worktree` 还会排除 **git 忽略的文件**（`.env`、
+`logs/` 之类）——清单用的是 `git ls-files --exclude-standard`，落位必须同口径，否则被忽略的
+文件会被门禁报成 extra、prune 删掉、下次落位又加回来（永不收敛）。两个例外照旧落位：
+被忽略但登记在 `fairy-system/image-manifest.js` 的 `SKIP_POLICY` 里的路径（例如
+`.agent-presets/fairy/runtime`），以及 `--preserve` 声明的本机适配。
+
+**EvoMap 第 6 步的语义**：按该服务自身的分层设计只做 Layer 1——恢复或注册节点，
 打印 `claim_url` 由操作者打开完成绑定；`node_secret` 以 0600 落在 `~/.evomap`
 （沙箱用 `EVOMAP_HOME` 换目录），永不打印、不入日志/仓库；**幂等**（已有凭据只
 做探测，不重复注册）；**失败不阻断**（离线只提示）。心跳（stay online）与任务
 操作需各自的明确授权，不在部署内。
 
 **默认规则（防止在沙箱里顺手注册真节点）**：`--home` 指向**默认** `$DSH_HOME` 时
-执行第 4 步，失败不阻断；`--home` 指向**别处**（探针/沙箱）时**自动跳过**并提示——确实要
+执行第 6 步，失败不阻断；`--home` 指向**别处**（探针/沙箱）时**自动跳过**并提示——确实要
 在那里注册就加 `--evomap`，只想看命令形态用 `--dry-run`。
 
 ### 2.3 本地快速回路（原地用仓库，不落 live 布局）
@@ -136,26 +170,145 @@ dsh --profile web --no-open
 DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 ```
 
-该脚本：暂存预设到隔离 home → 逐包测试 → profile 依赖安装 → 启动冒烟（要求
-`dsh` 在 PATH）。它不向系统写东西，`.dsh-test-home/` 已在 `.gitignore` 内。
-只想起服务时，手动等价见 §2.2（那条循环就是脚本逐步做的事）。
+该脚本：暂存预设到隔离 home → 逐包安装依赖（已装则跳过）→ 逐包测试 → profile 依赖
+安装 → 启动冒烟（要求 `dsh` 在 PATH）。它不向系统写东西，`.dsh-test-home/` 已在
+`.gitignore` 内。只想起服务时，手动等价见 §2.2（那条循环就是脚本逐步做的事）。
 
 ## 3. 部署后验证
 
 ```sh
 # 从仓库根执行；DSH_HOME 已按第 2 节导出
-node fairy-system/verify-build.js     # 构建契约：9 包，exit 0
+node fairy-system/verify-build.js     # 构建契约：10 包，exit 0
 node fairy-system/skill-audit.js      # 技能/插件冗余审计（--self-test 自检）
 
-# 全矩阵（10 个测试面）
-node --test --test-timeout=45000 fairy-system/test/*.test.js   # 35 例
+# 镜像 vs 源的对账（只读；部署第 6 步自动跑的就是它）
+node fairy-system/image-manifest.js check --repo . --home "$DSH_HOME"
+node fairy-system/image-manifest.js --self-test        # 清单/prune 自检
+
+# 更新与一致性（都只读；上游有更新时 repo-update 以 exit 1 判决）
+node fairy-system/repo-update.mjs check      # 远端是否有更新 + 镜像是否落后于提交
+node fairy-system/host-align.js check        # 官方安装的 @deepseek-ai/* 是否同版本线一致
+
+# 一键体检（只读；0 全绿 / 1 有 fail / 2 有 warn / 3 用法）
+node fairy-system/doctor.mjs --home "$DSH_HOME"   # 出问题时先跑它，再照它给的命令做
+```
+
+`repo-update.mjs` 只负责**这份仓库的代码**：远端比对用 `git ls-remote`（不下载、不写
+FETCH_HEAD），应用是 `pull --ff-only` + 复用 `scripts/deploy-live.sh`（对账与两道门禁都在
+那条链里）。**它不碰 DSH 版本** —— `@deepseek-ai/*` 的升级属 §4 的候选择预检流程。
+方向（远端领先 / 本地领先 / 分叉 / 方向未知）用 `merge-base --is-ancestor` 判，只读本地
+对象库——**不能拿"SHA 不同"当落后**：本仓常态是"刚提交未推送"= 本地领先，那时说"远端有
+更新"是假话，而 apply 在 `--ff-only` 下其实是 `Already up to date`。分叉报 exit 3 并要求
+人工合，不猜。退出码把「离线」与「已最新」分开（0 最新 / 1 有更新或本地领先或镜像落后 /
+2 网络或远端不可达 / 3 用法、前置条件或分叉）：这台机器 GitHub 通路时通时断，同码会让
+检查静默说谎。无人值守用 `apply --yes`（默认已带 `--skip-evomap`；§5.3 禁任何自动化里跑
+`evomap join`，确需接入得显式 `--with-evomap`）。
+
+`host-align.js check` 只比**同一版本线**（0.1.x）内的 `dsh-*`，独立版本线
+（cordis/cosmokit/schemastery）与原生构建物（`node-addon-*`，需 `--include-addons`）不参与。
+它的 `fix` 会修改官方安装（§5.1 只读边界），**只在宿主已混版且明确要求对齐时**用，不进 CI。
+注意 `fix` 的 npm 是整树 reify，不是只替换那几个目录（实测会连带 removed/changed 别的包）。
+
+`repo-update.mjs` 的镜像判定按 §3 的 `--preserve` 口径：默认取
+`image-manifest.js policy --lines`（与 `deploy-live.sh` 同一来源），也可用
+`--preserve LIST` 覆盖、或在 `check`/`apply` 上显式指定。不带它时本机适配会被报成漂移
+（实测：`profiles/web/cordis.patch.yml` 的 msedge 通道）。**`--home` 默认是 `$DSH_HOME`，
+再默认 `~/.dsh`**——隔离实例要显式传 `--home`，否则查的是主环境而产出误导结论。
+
+`image-manifest.js check` 报**三类**差异并以 exit 1 判决：`extra`（镜像里有、
+清单里没有 —— 上游删过的文件残留在这里）、`missing`（清单里有、镜像里没有）、
+`drifted`（两边都有、内容不同）。它是唯一会看「多出来的文件」的门禁：`verify-build.js`
+只查 manifest、产物新鲜度与禁用字符串，多出来的死产物不在它的射程内——这也正是
+20260828 半成品镜像全绿通过的原因。判定用 git blob 口径（两侧同式），
+`node_modules`、运行期产物与私有资产按跳过策略忽略（`image-manifest.js policy` 可看全表）。
+
+本机适配（例如未装 Chrome 时 `profiles/web/cordis.patch.yml` 改用 `msedge`）走
+`--preserve <仓库相对路径>`：该路径保留镜像现有内容，检查会把它列在 `allowed`
+而不计差异。**不要**靠改断言让门禁变绿；差异要么修，要么按 `--preserve` 显式声明。
+
+```sh
+# 全矩阵（10 个测试面）；下面的计数是 2026-09-14 在 Windows 开发机上的实测，
+# 加了用例就会变——对不上时以实跑为准，别为了对上数字去改断言。
+node --test --test-timeout=45000 fairy-system/test/*.test.js   # 75 例（61 通过 / 13 环境前提 / 1 跳过）
 (cd fairy-memory/dsh-fairy-memory && node --test test/*.test.js)  # 其余包同理
 (cd fairy-roleplay/dsh-fairy-roleplay && node --test test/*.test.js)
 ```
 
+**包测试的前提：依赖必须先逐包装好**。clone 里没有 `node_modules`，而各包的
+`link:` 依赖（`dsh-fairy-contracts`）不会自动就位；直接从仓库根跑包测试会得到
+`ERR_MODULE_NOT_FOUND: Cannot find package 'dsh-fairy-contracts'`。两条正确路径：
+
+```sh
+# a) 在部署镜像里跑（依赖已由 deploy-live.sh 第 3 步装好，推荐）
+(cd "$DSH_HOME/fairy-roleplay/dsh-fairy-roleplay" && node --test test/*.test.js)
+
+# b) 在 clone 里跑：先逐包安装（与 CI 的 install 步骤等价）
+for area in fairy-visual/dsh-fairy-visual fairy-voice/dsh-fairy-voice \
+            fairy-persona/dsh-fairy-persona fairy-modes/dsh-fairy-modes \
+            fairy-search/dsh-fairy-search fairy-memory/dsh-fairy-memory \
+            fairy-roleplay/dsh-fairy-roleplay; do
+  (cd "$area" && pnpm install --frozen-lockfile --ignore-scripts)
+done
+```
+
+`scripts/test-isolated.sh` 的第 1 步就做这件事（已装过的包自动跳过），所以那条
+回路是自足的。
+
 `fairy-system/test/*` 里比较"当前 live 布局"的用例需要真实安装前提：
 `DSH_HOME`（隔离 home）+ `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已
-安装的 0.1.1-rc.2；缺这两个旋钮时它们没有比较对象（不是断言放宽）。
+安装的 0.1.1-rc.2；缺这两个旋钮时它们没有比较对象（不是断言放宽）。（纯 Windows
+机器上 `verify.js`/`check.sh` 依赖 macOS live 布局，不适合作为本地验证入口；
+`verify-build.js` 与 `image-manifest.js` 才是跨平台的那两道。）
+
+具体一点：**没有官方安装时 `preflight.test.js` 与 `upgrade.test.js` 会整组失败**。
+本机 2026-09-14 的处置与现状：
+
+- `preflight.test.js`（6）——要一份官方 **0.1.1-rc.2** 制品，且其
+  `dsh-client-runtime/lib/client.js` 的 sha256 必须等于 `preflight-build.js` 里 pin 的
+  `13a5fe0e…f669`。**不必装到默认路径**：用 `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME`
+  指过去即可（`preflight-build.js:251-252`）。本机现成的制品在 `C:/tmp/dsh-011`。
+  顺带记下验证过的两个事实：① registry 上 `@deepseek-ai/dsh-client-runtime@0.1.1-rc.2`
+  的 `lib/client.js` 与 pin 值**逐字节一致**（`npm pack` 解包算过）；② `@deepseek-ai/dsh`
+  的 manifest 里**没有**声明 `dsh-client-runtime`，所以默认嵌套路径不会因装 `dsh` 而出现，
+  得靠旋钮或显式补放。**别用 `npm install` 装到 `~/.local/lib`**：那里没有自己的
+  `package.json`，npm 会向上找到 `~/package.json` 当工程根并 reify 宿主那棵树。
+- `upgrade.test.js`（7）——要 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 装齐十个插件包 +
+  官方 `dsh-client-ui-conversation` + `dsh-reasoning-effort` / `dsh-message-edit`
+  （`upgrade.test.js:40-43` 逐个 `realpathSync`，缺一即 ENOENT），并 `copyFileSync` 一份
+  runtime（默认同为 `~/.local/…`）。本机 `~/.dsh` 的 profile 是**另一条线**
+  （`@deepseek-ai/dsh-app-boot` + `dsh-web` + `@dsh-external/*`，只 link 了
+  balance-meter/browser-dock），**不含** fairy 插件包——所以别对它跑 `deploy-live.sh`，
+  那会用本仓 profile 覆盖它的 manifest（且与 §1.1"同一 profile 不能共跑 dsh-web"冲突）。
+  本仓在这台机器的部署是 **`~/.dsh-fairy`**，upgrade 组的对口 `DSH_HOME` 就是它。
+
+**按仓库自己的口子跑（`scripts/test-isolated.sh:44-57,92-95` 的既有契约）**：给
+`DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指一份 0.1.1-rc.2 制品（本机现成：
+`C:/tmp/dsh-011/node_modules/@deepseek-ai/dsh/…`，其 `lib/client.js` sha256 与 pin 的
+`13a5fe0…f669` 逐字节一致），再配 `DSH_HOME` 与 `DSH_CAPABILITY_MATRIX`：
+
+```sh
+D=C:/tmp/dsh-011/node_modules/@deepseek-ai/dsh
+DSH_OFFICIAL_PACKAGE="$D/package.json" \
+DSH_OFFICIAL_RUNTIME="$D/node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js" \
+DSH_CAPABILITY_MATRIX="$PWD/fairy-system/capability-matrix.json" \
+DSH_HOME=~/.dsh-fairy \
+  node --test fairy-system/test/*.test.js
+```
+
+两个旋钮**不齐就整组不跑**（`test-isolated.sh` 只提示，不报红）——那才是这套门的正常形态。
+**别往真实 `~/.dsh` 拷资产**（§5.6）：`DSH_CAPABILITY_MATRIX` 就是为替代这种拷贝而存在的，
+手拷的锚点会随仓库变旧，之后对着过期矩阵静默校验。
+
+修后实测（2026-09-14，两种跑法）：
+
+| 跑法 | 结果 |
+| --- | --- |
+| **仓库自己的口子**（两旋钮 + `DSH_CAPABILITY_MATRIX` + `DSH_HOME` 指向装齐的部署） | **75 例：74 通过 / 0 失败 / 1 跳过** |
+| 什么都不给（默认 `~/.local` + `~/.dsh`） | 75 例：61 通过 / 13 失败 / 1 跳过 |
+
+跳过的那例是 `fairy-preset-shims.test.js` 的 world-core schema 用例（解析不到官方
+`@deepseek-ai/dsh-tools` 时按 `:239` 走 `t.skip`）——**按设计跳过，不报红**，与
+「不齐就整组不跑」是同一种形态。
 
 **预设健康检查**（发现器的真实判定，避免"能启动但选不中"；服务运行中执行，
 端口取启动日志 `dsh web: http://127.0.0.1:<port>`）：
@@ -168,7 +321,44 @@ curl -s -X POST -H 'content-type: application/json' \
 ```
 
 期望：`standard/code/minimal/cordis` 为 `system`，`ponytail` 为 `user`，
-`fairy` 为 `user BROKEN: …`（它依赖私有 runtime，详见 1.2）。
+`fairy` 为 `user ok`（私有 runtime 缺失时走降级模式，见下）。
+
+`fairy` preset 的**三处**历史缺陷**已修复**（2026-09）：
+
+1. **行名不合规**（已修）：`agent.cordis.yml` 原用
+   `name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/index.js'`，
+   而发现器的 `entryListProblem` 要求 `name` 必须是**字符串**——这会让整个 preset 判 BROKEN。
+   现改为 preset 内相对路径 shim（`./plugins/fairy-core-runtime.mjs`、
+   `./plugins/fairy-safety-gate.mjs`），与 ponytail preset 的行名约定一致。
+2. **语音核心 / 安全闸门的实现**（2026-09 起随仓分发）：
+   `runtime/{index.js,safety-gate.js}` 是**公开语料编译出的引擎**，随仓库分发、随部署落位。
+   语义是三层，不是两层：
+     私有同名文件（从不公开）→ 用私有实现；
+     无私有文件但引擎在位 → **完整模式**（引擎组段落，实测 4424 / 1243 字符）；
+     两者皆无（如语料缺失）→ **降级模式**（shim 用自带语料编译一段速查 + 保守风险闸门）。
+   `runtime/fairy_core.py`、`runtime/compiler.js` 属**私有原版**，从未进过任何公开仓库，
+   且当前引擎并不消费 `.py`（预设里那条 `runtimePath` 是历史遗留，引擎只按它的**目录**找语料）。
+3. **`inject` 漏声明 `tools`**（已修，2026-09）：`plugins/fairy-world-core.mjs` 既挂段落又
+   `ctx.tools.register({name:'fairy_world_lookup'})`，但 `inject` 只有 `['systemPrompt']`——
+   cordis 门控在**属性访问**处就抛 `cannot get property "tools" without inject`，
+   **任何新建的 fairy 会话都挂载失败**（既有会话不受影响）。现为 `['systemPrompt','tools']`。
+
+**验证现状（2026-09-14 在真机取得，别再用旧说法）**：
+- `fairy user ok` 只证明**发现层**；日志里那 10 条 `apply: outcome=success` 是 **profile 行**
+  （dsh-balance-meter…fairy-voice）产生的，**不含** preset 那三个 shim——preset 行是**按会话挂载**的。
+- shim 的 `apply()` **已在真实会话里跑过**：新建 `agentPreset:"fairy"` 会话成功挂载；
+  该次挂载在实例 stderr 上追加了 `MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`
+  （引擎为 `.js` 且附近无 `type: module`）——**这条警告就是"运行进程真 import 过引擎"的最省事判据**。
+- 端到端判据建议用**更强的两条**，别用"让模型复述自己的段标题"（模型自省可能顺着问法编）：
+  ① 上面那条 stderr 警告；② 同 env 跑 shim 链看段正文长度/首行（4424 / 1243 字符）。
+
+shim 的应用层验证有两层：单测 `fairy-system/test/fairy-preset-shims.test.js`（fakeHost 形状
+对齐 fairy-modes/test/modes.test.js）断言段落形状合法、两段不重名、私有真身存在时转发；
+**真机验证已完成**（2026-09-14）：新建 `agentPreset:"fairy"` 会话成功，实例 stderr 追加
+`MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`（证明引擎真被 import）。
+
+因此公开 clone 上 `fairy` 现在**可用且默认就是完整模式**（引擎随仓分发）；把私有实现放到
+`$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy/runtime/` 即自动切换为完整模式，无需改配置。
 
 完整链（需 live macOS 部署：`launchers/`、LaunchAgents、语音服务）：
 `./fairy-system/check.sh`。基线只读对比：`node fairy-system/accepted-baseline.js --diff`。
@@ -199,6 +389,48 @@ curl -s -X POST -H 'content-type: application/json' \
 
 ## 6. 排障
 
+**启动器编码规则（同一台机器上两条相反的规矩，本会话踩过两次）**：Windows 上 `.ps1` 与 `.cmd`
+对编码的要求正好相反——
+
+| 文件 | 必须 | 否则会怎样 |
+| --- | --- | --- |
+| `*.ps1` | **UTF-8 + BOM** | PS 5.1 按 ANSI 读，中文注释里的多字节字节会"吞"掉后面的代码（实测吞掉过 `$Runtime = …` 这条赋值，表现为变量为空） |
+| `*.cmd` / `*.bat` | **纯 ASCII、无 BOM** | cmd 按控制台码页逐字节读，中文注释会把下一行行首"吞"掉、`rem` 失效后注释被当命令执行；BOM 会被当成第一条命令 |
+
+核法：`.ps1` 看前三字节是否 `efbbbf`；`.cmd` 看有无 `>127` 的字节（应为 0）。
+
+**启动器优先用 `.cmd`**：PS 5.1 会把 `.ps1` 内容交给 AMSI（Windows Defender）扫描，某些
+Defender 组合会在 `AmsiScanBuffer` 里抛 `AccessViolationException`，脚本在**编译阶段**就崩
+（报「尝试读取或写入受保护的内存」）。`-ExecutionPolicy Bypass` / `-EncodedCommand` /
+`Invoke-Expression` **都不解决**——AMSI 与执行策略无关，扫的是脚本内容。绕行只有"别让 PS
+解析这段脚本"：直接 `node <runtime> --profile web --no-open --port N` 配那四个环境变量，或用 `.cmd`。
+
+**改引擎 / preset 后要不要重启**：host 插件在 **boot 期** apply；而 preset（`agent.cordis.yml` 的行，
+含 `plugins/fairy-*.mjs` 与 `runtime/*.js`）是**按会话挂载**的——改完**新建一个会话**就用上了，
+**不必重启实例**（既有会话保持挂载时的那份）。判据：boot 日志里只有 host 模块打
+`DSH_FAIRY_LOG …"module":"dsh-…"`，preset 行**不会**出现在 boot 日志里——所以"boot 日志没有引擎
+import 痕迹"是正常现象，不能读作"在跑降级"。这条此前在本仓被写反过（写成"只在启动时 import 一次、
+必须重启"）。要眼见为实，用**更强的两条判据**（详见 §3 的"验证现状"）：① 实例 stderr 上出现
+`MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`（引擎真被 import 过）；
+② 同 env 跑 shim 链看段正文长度/首行（4424 / 1243 字符）。**别用"让模型复述自己的段标题"
+当直证**——模型自省可能顺着问法编。
+
+
+- **浏览器 Dock 的"在外部浏览器接管一次"没反应**：接管在 Windows 上走
+  `cmd /d /s /c start "" "…"`，浏览器由 `DSH_FAIRY_HANDOFF_BROWSER` 选（空=系统默认）。
+  本机没装 Chrome，隔离实例取 `msedge`；没设这个变量又盯着 Chrome 找，会以为功能坏了。
+  两个已实测的坑（改这一段前先复测，别再凭直觉）：
+  1. **URL 必须显式加引号**：含 `&` 的查询串会被 cmd 当命令分隔符拆开
+     （`cmd /c start "" http://x/p?a=1&b=2` → 浏览器只拿到 `?a=1`，并报
+     `'b' is not recognized …`）。Node 的 win32 转义不会替 `&` 加引号，所以走手拼
+     命令行 + `windowsVerbatimArguments`。
+  2. **浏览器路径含空格必须加引号**：本机默认浏览器是 `MSEdgeHTM`，其 exe 位于
+     `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`；不加引号时它会被
+     `start` 的窗口标题槽当成标题，**什么都不启动**。
+  `--user-data-dir` 两个平台都带：接管的意义就是延续会话，而 `closeBrowser()` 之后
+  profile 已释放（实测可见窗口起得来、会话数据仍在）；只有浏览器**还占着** profile
+  时第二个实例才会 exit 21。spawn 失败是诊断事件（`proxy.takeover.spawn`），
+  不再掀掉整个 proxy 进程。
 - **实机看到旧行为**：`$DSH_HOME` 下是各包的**一份副本**，改完包必须重新落位
   （`scripts/deploy-live.sh`，或至少同步该包目录）再起服务，否则验证到的是旧代码。
   客户端 bundle 按请求 + rev 现场读取，文件一换 rev 就变，无需重启服务。
@@ -211,8 +443,24 @@ curl -s -X POST -H 'content-type: application/json' \
 
 - **构建契约报"manifest 比产物新"**：该检查只对**有构建脚本**的包生效。命中时跑
   该包的 `pnpm bundle`（fairy-memory：`node scripts/bundle.mjs`）重建产物。
+- **镜像与提交不一致（半成品镜像）**：症状是某个包整个缺失、某个 `lib/*.js`
+  不存在、或镜像里留着提交已删的死文件（例如曾经的 `lib/index.iife.js`）。
+  只读定位：`node fairy-system/image-manifest.js check --repo . --home "$DSH_HOME"`
+  —— `extra` 是镜像多出来的（上游删过），`missing` 是没落位的，`drifted` 是内容
+  对不上的。修复：重跑 `scripts/deploy-live.sh`（第 1 步对账会先删多余文件）。
+  本机适配（`msedge` 之类）用 `--preserve profiles/web/cordis.patch.yml` 声明，
+  它会列在 `allowed` 而不计差异。
 - **预设选不中/凭空消失**：检查是否为链接形态（必须复制）、行名是否字面字符串、
   以及 `DSH_FAIRY_REPO_ROOT` 是否导出。
+- **隔离实例的启动器报 `Test-Path … 参数是空值` / `$Runtime` 为 null**：`.ps1` 必须是
+  **UTF-8 with BOM**。Windows PowerShell 5.1（本机 `powershell.exe` 就是它，没有
+  `pwsh`）对**没有 BOM** 的 `.ps1` 按 ANSI/GBK 解码；启动器里全是中文注释，误码后会
+  连 `$Runtime = 'C:\tmp\dsh-011\…\bin.js'` 这行赋值一起吃掉 —— 于是运行期
+  `$Runtime` 是 null，`Test-Path` 立刻失败，实例起不来。实测同一份内容：
+  带 BOM → `$Runtime` 正常、实例启动；不带 BOM → 必现上述报错。
+  改动/重写启动器后确认头三个字节是 `ef bb bf`：
+  `node -e "const b=require('fs').readFileSync('start-fairy.ps1');console.log(b.slice(0,3).toString('hex'))"`。
+  （`start-fairy.ps1` 不在仓库里——它是主机侧生成的启动器，别指望重新落位会带上 BOM。）
 - **Windows**：`bash` 可能被 WSL 抢占 → 用 `sh`；目录链接用 junction；测试里的
   权限位断言（`chmod 0o600`）在 Windows 不可表达，各包已按平台跳过。
 - **MCP 行**（playwright/context7）会拉起子进程；隔离 home 缺 `@playwright/mcp`
