@@ -182,10 +182,16 @@ async function main() {
   try {
     // --force + --legacy-peer-deps：就地补丁式对齐（邻居包可能仍是旧版），
     // 严格 peer 校验会因邻居未同步而拒绝；--no-save 避免在该目录生成 package.json 契约。
+    // 必须显式把**工程根**（含 @deepseek-ai 的那层 node_modules 的父目录）当项目根：
+    // 只给 `cwd: runtimeDir` 时 npm 会从 `<root>/node_modules` 向上找到 `<root>/package.json`，
+    // 于是按那份（可能陈旧的）lock 去 reify **整棵树**——实测宿主被这样从 0.1.5-rc.2 拧回
+    // 0.1.2-rc.1（21 个包），而 package.json 是 `--no-save` 保护不到的。
+    // `--prefix` 与 cwd 都指过去，避免依赖 npm 的上溯行为。
+    const projectRoot = path.dirname(runtimeDir);
     const output = execFileSync(process.execPath, [
       npmCli, 'install', '--no-save', '--ignore-scripts', '--no-audit', '--no-fund',
-      '--legacy-peer-deps', '--force', ...specs,
-    ], { cwd: runtimeDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 900_000 });
+      '--legacy-peer-deps', '--force', '--prefix', projectRoot, ...specs,
+    ], { cwd: projectRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 1_800_000 });
     const summary = String(output).split('\n').filter((l) => /added|changed|removed/i.test(l)).join(' ');
     if (summary) process.stdout.write(`  ${summary.trim()}\n`);
   } catch (error) {
