@@ -169,27 +169,66 @@ export function checkNpmProjectRoot(nodeModules) {
   };
 }
 
-/** ⑤ 残留安装进程：被取消的 install 可能仍在跑，且随时写树。按命令行签名认，不按进程名。 */
+/**
+ * 这条命令行像不像"正在写 node_modules 的包管理器"？
+ *
+ * **不只 npm**：`deploy-live.sh` 第 3/4 步跑的是 `pnpm install`（输出重定向进 /dev/null，
+ * 卡住时无回显），pnpm 既可能是 node 子进程、也可能是独立的 pnpm.exe。只认
+ * `node.exe` + `npm-cli.js` 会整类漏掉——这正是本机那次"以为取消了、其实还在写树"的形态。
+ * 抽成纯函数是为了能被直接钉住（进程扫描本身依赖真机，测不动）。
+ */
+export function isInstallLikeCommand(cmdLine) {
+  if (!cmdLine) return false;
+  const s = String(cmdLine);
+  if (/get-ciminstance|win32_process|tasklist/i.test(s)) return false;   // 扫描器自身
+  // 落位脚本本身就是"会写环境"的进程，与包管理器并列判——别让它被包管理器那道闸挡住
+  // （`sh scripts/deploy-live.sh …` 里没有包管理器名字）。
+  if (/\bdeploy-live\b/i.test(s)) return true;
+  const pm = /\b(npm(-cli\.js)?|pnpm|yarn|bun)\b/i.test(s);
+  if (!pm) return false;
+  return /\b(install|add|ci|link|rebuild)\b/i.test(s) || /npm-cli\.js/i.test(s);
+}
+
+/** ⑤ 残留安装进程：被取消/超时的安装可能仍在跑，且随时写树。按**命令行签名**认，不按进程名。 */
 export function checkStrayInstalls() {
-  if (process.platform !== 'win32') return { status: 'skipped', name: '残留安装进程', detail: '非 Windows：用 ps 自行核对', fix: '' };
-  const r = run('cmd', ['/c', 'tasklist', '/FO', 'CSV', '/NH'], { timeout: 30_000 });
-  if (!r.ok) return { status: 'unknown', name: '残留安装进程', detail: 'tasklist 不可用', fix: '' };
-  const lines = r.out.split('\n').filter((l) => /^"node\.exe"/i.test(l));
-  const pids = lines.map((l) => l.split('","')[1]).filter(Boolean);
   const hits = [];
-  for (const pid of pids) {
-    const q = run('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], { timeout: 20_000 });
-    const cl = q.out || '';
-    if (/npm-cli\.js/i.test(cl) && /\binstall\b/.test(cl) && Number(pid) !== process.pid) {
-      hits.push({ pid, cl: cl.replace(/\s+/g, ' ').slice(0, 110) });
+  let scanned = 0;
+  let note = '';
+  if (process.platform === 'win32') {
+    // 全进程扫描（含 pnpm.exe 这类非 node 进程），再逐条取命令行
+    const list = run('powershell', ['-NoProfile', '-Command',
+      'Get-CimInstance Win32_Process | Where-Object { $_.Name -match \'^(node|pnpm|yarn|bun|sh|bash|cmd)\\.exe$\' } | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }',
+    ], { timeout: 60_000 });
+    if (!list.ok) { note = '无法列进程'; }
+    else {
+      for (const line of list.out.split('\n')) {
+        const [pid, ...rest] = line.split('\t');
+        const cl = rest.join('\t');
+        if (!pid || !cl) continue;
+        scanned++;
+        if (Number(pid) !== process.pid && isInstallLikeCommand(cl)) hits.push({ pid, cl: cl.replace(/\s+/g, ' ').slice(0, 110) });
+      }
+    }
+  } else {
+    // Unix：ps 的 COMMAND 列本身就是命令行
+    const list = run('ps', ['-eo', 'pid=,args='], { timeout: 60_000 });
+    if (!list.ok) { note = '无法列进程（ps 不可用）'; }
+    else {
+      for (const line of list.out.split('\n')) {
+        const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+        if (!m) continue;
+        scanned++;
+        if (Number(m[1]) !== process.pid && isInstallLikeCommand(m[2])) hits.push({ pid: m[1], cl: m[2].slice(0, 110) });
+      }
     }
   }
-  if (!hits.length) return { status: 'ok', name: '残留安装进程', detail: `无（扫了 ${pids.length} 个 node 进程）`, fix: '' };
+  if (note) return { status: 'unknown', name: '残留安装进程', detail: note, fix: '' };
+  if (!hits.length) return { status: 'ok', name: '残留安装进程', detail: `无（扫了 ${scanned} 个候选进程）`, fix: '' };
   return {
     status: 'fail',
     name: '残留安装进程',
-    detail: `有 install 进程仍在跑，随时会写树：\n    ` + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    '),
-    // 实测教训：hub/job 的"取消"不等于进程终止；必须按 PID 杀进程树
+    detail: `有安装/落位进程仍在跑，随时会写树：\n    ` + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    '),
+    // 实测教训：job/会话里的"取消"不等于进程终止；必须按 PID 杀整个进程树
     fix: hits.map((h) => `taskkill /PID ${h.pid} /T /F`).join('  &&  '),
   };
 }

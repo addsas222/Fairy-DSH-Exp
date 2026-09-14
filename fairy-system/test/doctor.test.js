@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, exitFor, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, exitFor, EXIT } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -155,6 +155,29 @@ test('本仓部署的识别：三样标记齐了才算（缺一即 false）', ()
     mkdirSync(last, { recursive: true });
     assert.equal(looksLikeRepoDeployment(root), true, '三样齐了才算');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('安装进程签名：pnpm/yarn/bun 与非 node 进程都要认（不只 npm-cli）', () => {
+  // 真机那次"以为取消了、其实还在写树"的是 `pnpm install`（deploy 第 3/4 步），
+  // 而旧实现只认 `node.exe` + `npm-cli.js`，整类漏掉。
+  const yes = [
+    'node "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js" install --no-save --force',
+    'C:\\Program Files\\nodejs\\pnpm.exe install',
+    'node /usr/local/lib/node_modules/pnpm/bin/pnpm.cjs install --frozen-lockfile',
+    'sh scripts/deploy-live.sh --home C:/Users/Administrator/.dsh-fairy --skip-evomap',
+    '/bin/sh ./scripts/deploy-live.sh --from-worktree',
+    'pnpm add --save-dev typescript',
+    'npm ci',
+  ];
+  for (const cmd of yes) assert.equal(isInstallLikeCommand(cmd), true, `应认出：${cmd}`);
+  const no = [
+    'node C:\\Users\\Administrator\\.dsh-fairy\\browser-dock\\dsh-browser-dock\\proxy.cjs --browser msedge',
+    'node fairy-system/doctor.mjs --home C:/x',
+    'node --test fairy-system/test/doctor.test.js',
+    '"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command " $pat = \'pnpm|deploy-live\' ... Get-CimInstance ..."',
+    '',
+  ];
+  for (const cmd of no) assert.equal(isInstallLikeCommand(cmd), false, `不该误报：${cmd}`);
 });
 
 test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {
