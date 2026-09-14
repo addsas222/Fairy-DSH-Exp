@@ -64,7 +64,6 @@
 
 ```sh
 git clone https://github.com/addsas222/Fairy-DSH-Exp.git fairy-dsh && cd fairy-dsh
-git checkout ponytail                                 # 本机部署的即这条分支
 ./scripts/deploy-live.sh --home "$HOME/.dsh"          # 或 --home /path/to/DSH_HOME
 ```
 
