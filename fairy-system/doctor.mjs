@@ -261,12 +261,19 @@ export function diagnose(options) {
 
 const ICON = { ok: '✅', warn: '⚠️ ', fail: '❌', unknown: '❓', skipped: '· ' };
 
-function render(checks, options) {
-  const lines = [`DSH 部署体检  home=${options.home}  runtime=${options.runtimeDir}`, ''];
+function render(checks, context) {
+  const lines = [`DSH 部署体检  home=${context.home}  runtime=${context.runtimeDir}`, ''];
   for (const c of checks) lines.push(`${ICON[c.status] ?? '· '} ${c.name}：${c.detail}`);
   const fails = checks.filter((c) => c.status === 'fail');
   const warns = checks.filter((c) => c.status === 'warn');
-  lines.push('', `合计 ${checks.length} 项：${checks.filter((c) => c.status === 'ok').length} 正常 / ${warns.length} 警告 / ${fails.length} 失败`);
+  const unknowns = checks.filter((c) => c.status === 'unknown');
+  const oks = checks.filter((c) => c.status === 'ok');
+  const skipped = checks.filter((c) => c.status === 'skipped');
+  lines.push('', `合计 ${checks.length} 项：${oks.length} 正常 / ${warns.length} 警告 / ${fails.length} 失败`
+    + ` / ${unknowns.length} 未知 / ${skipped.length} 跳过`);
+  // 「未知」必须显式成行、且影响退出码：体检工具把"查不清"静默算作通过，是最要命的失效形态
+  // （本会话就发生过——报告说全绿，实际两次检查之间有别的进程改了树）。
+  if (unknowns.length) lines.push(`⚠️  有 ${unknowns.length} 项**无法判定**（不等于正常）：${unknowns.map((c) => c.name).join('、')}`);
   const fixes = [...fails, ...warns].map((c) => c.fix).filter(Boolean);
   if (fixes.length) { lines.push('', '下一步（doctor 只报不做，执行与否由你定）：'); for (const f of [...new Set(fixes)]) lines.push(`  ${f}`); }
   return lines.join('\n');
@@ -288,7 +295,7 @@ async function main() {
     catch { runtimeDir = path.join(path.dirname(options.home), 'node_modules'); }
   }
   const checks = diagnose({ ...options, runtimeDir });
-  const text = render(checks, { ...options, runtimeDir });
+  const text = render(checks, { home: options.home, runtimeDir });
   process.stdout.write(`${text}\n`);
   if (options.report) {
     mkdirSync(path.dirname(options.report), { recursive: true });
@@ -297,7 +304,8 @@ async function main() {
   }
   if (options.json) process.stdout.write(`${JSON.stringify({ home: options.home, runtimeDir, checks }, null, 2)}\n`);
   if (checks.some((c) => c.status === 'fail')) return EXIT.FAIL;
-  if (checks.some((c) => c.status === 'warn')) return EXIT.WARN;
+  // `unknown` 与 `warn` 同码：体检工具把"查不清"当成通过是最要命的失效形态。
+  if (checks.some((c) => c.status === 'warn' || c.status === 'unknown')) return EXIT.WARN;
   return EXIT.OK;
 }
 

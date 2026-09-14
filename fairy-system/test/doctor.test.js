@@ -106,9 +106,11 @@ test('测试门前提：缺比较对象或缺插件包都要报 warn（环境前
 
 test('仓库与部署：本仓此刻应能给出判定（不是"无输出"）', () => {
   const repo = path.resolve(path.join(import.meta.dirname, '..', '..'));
-  const r = checkRepo(repo, path.join(tmpdir(), 'doctor-no-such-home'), false);
+  // offline=true：这条守的是"子进程非零退出码时仍要拿到 stdout"这条回归路径，
+  // 不该为了它去碰真网络（代理一抽风就变慢/飘，也违反本套测试"零外网"的招牌）。
+  const r = checkRepo(repo, path.join(tmpdir(), 'doctor-no-such-home'), true);
   assert.ok(['ok', 'warn'].includes(r.status), `应力求给出判定，实际 ${r.status}：${r.detail}`);
-  // 措辞随分支而定：远端不可达时只报镜像侧结论（`镜像 unknown`），正常时两句话都报。
+  // 措辞随分支而定：远端不可达时只报镜像侧结论，正常时两句话都报。
   // 这条守的是"必须给出判定，而不是'无输出'"——正是本会话踩过的退出码/输出缺陷。
   assert.match(r.detail, /仓库|远端|镜像/, 'detail 不能是空话');
   assert.doesNotMatch(r.detail, /^无输出$/, '拿不到结论时要报 `unknown`，不能只写"无输出"');
@@ -123,4 +125,18 @@ test('仓库与部署：工具缺失时 skipped，不抛异常', () => {
 
 test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {
   assert.deepEqual(EXIT, { OK: 0, FAIL: 1, WARN: 2, USAGE: 3 });
+});
+
+test('「未知」必须影响退出码，且显式成行（不能静默通过）', async () => {
+  // 造一个 runtime 目录都不存在的场景：混版检测会返回 unknown（树读不到）。
+  const { spawnSync } = await import('node:child_process');
+  const empty = mkdtempSync(path.join(tmpdir(), 'doctor-unknown-'));
+  try {
+    const script = path.join(import.meta.dirname, '..', 'doctor.mjs');
+    const r = spawnSync(process.execPath, [script, '--runtime', path.join(empty, 'node_modules'), '--repo', empty, '--home', empty], { encoding: 'utf8', timeout: 300_000 });
+    assert.notEqual(r.status, 0, '有未知项时不得返回 0');
+    assert.match(r.stdout, /未知/, '摘要里必须显式列出未知项数');
+    // 输出里那句是 markdown 强调形式（`**无法判定**`），断言照字面来，别凭印象写。
+    assert.match(r.stdout, /\*\*无法判定\*\*/, '必须点明"未知≠正常"');
+  } finally { rmSync(empty, { recursive: true, force: true }); }
 });
