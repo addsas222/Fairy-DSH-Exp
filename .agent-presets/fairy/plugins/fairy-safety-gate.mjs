@@ -1,16 +1,19 @@
 /**
  * Fairy 安全闸门 —— preset 内 shim（与 fairy-core-runtime.mjs 同一套路）。
  *
- * 原写法用 `!!js` 拼运行期路径，违反"行名必须是字面字符串"的约束，会让 preset 判 BROKEN。
+ * 行名合规化同前：原 `!!js` 绝对路径会让 preset 判 BROKEN，改为 preset 内相对路径。
+ * 真身 runtime/safety-gate.js 不在公开仓库（本机、F: 检出、上游全历史皆无）：
+ *   1) 存在 → 转发；
+ *   2) 缺失 → 保守的缺省闸门：高风险动作要求先「警告。」并确认，与仓库既有约定一致。
  *
- * 真身 runtime/safety-gate.js **不在公开仓库里**（本机、F: 检出、上游全历史皆无），
- * 所以这里：
- *   1) 真身存在 → 转发给它；
- *   2) 缺失 → 用一个保守的缺省闸门：对高风险动作（删除、外发、凭据、付款、关机等）
- *      要求先确认，与 AGENTS §6「风险第一句"警告。"」的既有约定一致。
+ * 挂载形状照既有约定：`systemPrompt.section({ name, order, text })`（单对象 + 显式
+ * order + 返回 dispose）。order 取 49，与 persona(50 区间)/modes 的取值错开。
  */
 const repoRoot = String(process.env.DSH_FAIRY_REPO_ROOT ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
 const presetDir = repoRoot ? `file:///${repoRoot}/.agent-presets/fairy/` : null;
+
+const SECTION_NAME = 'fairy-safety-gate';
+const SECTION_ORDER = 49;
 
 async function loadPrivateGate() {
   if (!presetDir) return null;
@@ -23,22 +26,22 @@ async function loadPrivateGate() {
   return null;
 }
 
-const RISKY = /(rm\s+-rf|del\s+\/[sq]|format\s+[a-z]:|清除|删除全部|shutdown|重启|格式化|撤销|revert\s+--hard|force[ -]?push|推送|publish|npm\s+publish|转账|付款|支付|密码|凭据|token|私钥)/i;
+const FALLBACK_TEXT = [
+  '【Fairy 安全闸门（降级模式：未加载私有 safety-gate.js）】',
+  '高风险动作（删除/覆盖/格式化、对外发送或发布、凭据与密钥、支付、关机重启、不可逆的 git 操作）',
+  '必须先以「警告。」开头说明后果与不可逆性，给出可执行替代或备份方案，得到明确确认后再执行；',
+  '风险未解除前不使用玩笑或叙事语域。仅提及风险关键词（例如讨论某段代码里出现「删除」）不触发闸门。',
+].join('\n');
 
-export async function apply(ctx) {
+export async function apply(ctx, config = {}) {
   const real = await loadPrivateGate();
-  if (real) return real.apply(ctx);
+  if (real) return real.apply(ctx, config);
 
-  // 降级闸门：把风险清单作为一段常驻提示交给模型（不拦截工具，只约束措辞与确认）
-  const brief = [
-    '【Fairy 安全闸门（降级模式：未加载私有 safety-gate.js）】',
-    '高风险动作（删除/覆盖/格式化、对外发送或发布、凭据与密钥、支付、关机重启、不可逆的 git 操作）',
-    '必须先以「警告。」开头说明后果与不可逆性，给出可执行替代或备份方案，得到明确确认后再执行；',
-    '风险未解除前不使用玩笑或叙事语域。仅提及风险关键词（例如讨论某段代码里出现 "删除"）不触发闸门。',
-  ].join('\n');
-  if (ctx?.systemPrompt?.section) ctx.systemPrompt.section('fairy-safety-gate', brief);
-  return undefined;
+  const disposers = [];
+  if (typeof ctx?.systemPrompt?.section === 'function') {
+    disposers.push(ctx.systemPrompt.section({ name: SECTION_NAME, order: SECTION_ORDER, text: FALLBACK_TEXT }));
+  }
+  return () => { for (const dispose of disposers.splice(0)) { try { dispose(); } catch {} } };
 }
 
 export const inject = [];
-export const riskyPattern = RISKY;
