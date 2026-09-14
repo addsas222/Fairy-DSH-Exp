@@ -381,6 +381,23 @@ shim 的应用层验证目前只有单测：`fairy-system/test/fairy-preset-shim
 
 ## 6. 排障
 
+**启动器编码规则（同一台机器上两条相反的规矩，本会话踩过两次）**：Windows 上 `.ps1` 与 `.cmd`
+对编码的要求正好相反——
+
+| 文件 | 必须 | 否则会怎样 |
+| --- | --- | --- |
+| `*.ps1` | **UTF-8 + BOM** | PS 5.1 按 ANSI 读，中文注释里的多字节字节会"吞"掉后面的代码（实测吞掉过 `$Runtime = …` 这条赋值，表现为变量为空） |
+| `*.cmd` / `*.bat` | **纯 ASCII、无 BOM** | cmd 按控制台码页逐字节读，中文注释会把下一行行首"吞"掉、`rem` 失效后注释被当命令执行；BOM 会被当成第一条命令 |
+
+核法：`.ps1` 看前三字节是否 `efbbbf`；`.cmd` 看有无 `>127` 的字节（应为 0）。
+
+**启动器优先用 `.cmd`**：PS 5.1 会把 `.ps1` 内容交给 AMSI（Windows Defender）扫描，某些
+Defender 组合会在 `AmsiScanBuffer` 里抛 `AccessViolationException`，脚本在**编译阶段**就崩
+（报「尝试读取或写入受保护的内存」）。`-ExecutionPolicy Bypass` / `-EncodedCommand` /
+`Invoke-Expression` **都不解决**——AMSI 与执行策略无关，扫的是脚本内容。绕行只有"别让 PS
+解析这段脚本"：直接 `node <runtime> --profile web --no-open --port N` 配那四个环境变量，或用 `.cmd`。
+
+
 - **浏览器 Dock 的"在外部浏览器接管一次"没反应**：接管在 Windows 上走
   `cmd /d /s /c start "" "…"`，浏览器由 `DSH_FAIRY_HANDOFF_BROWSER` 选（空=系统默认）。
   本机没装 Chrome，隔离实例取 `msedge`；没设这个变量又盯着 Chrome 找，会以为功能坏了。

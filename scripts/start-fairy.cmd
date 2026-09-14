@@ -21,6 +21,14 @@ if "%PORT%"=="" set "PORT=3081"
 set "ISO_HOME=%~dp0"
 if "%ISO_HOME:~-1%"=="\" set "ISO_HOME=%ISO_HOME:~0,-1%"
 
+rem This copy lives in the repo for reference. It derives DSH_HOME from its own
+rem directory (%~dp0), so it is only correct when placed in the DSH_HOME root.
+if not exist "%ISO_HOME%\profiles\web\package.json" (
+  echo [start-fairy] this launcher must sit in DSH_HOME (no profiles\web found under %ISO_HOME%) 1>&2
+  echo [start-fairy] copy it to your isolated home and run it there. 1>&2
+  exit /b 1
+)
+
 set "RUNTIME=C:\tmp\dsh-011\node_modules\@deepseek-ai\dsh\lib\bin.js"
 if not exist "%RUNTIME%" (
   echo [start-fairy] missing 0.1.1-rc.2 runtime: %RUNTIME% 1>&2
