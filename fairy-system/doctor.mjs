@@ -194,10 +194,36 @@ export function checkStrayInstalls() {
   };
 }
 
+/**
+ * 这个 home 是不是**本仓的部署**？判据是部署会落下的三样标记：受控工具目录 + 系统目录 + 预设。
+ *
+ * 为什么必须判：`--home` 缺省是 `$DSH_HOME` 再 `~/.dsh`，而本机 `~/.dsh` 是**另一条工作线**
+ * （app-boot + dsh-web + @dsh-external/*），不是本仓的镜像。若不加这道闸，doctor 会为它报
+ * "镜像 behind" 并建议 `deploy-live.sh --home ~/.dsh`——**恰好是 AGENTS 明令禁止的操作**
+ * （会覆盖那条工作线的 manifest）。
+ */
+export function looksLikeRepoDeployment(home) {
+  if (!home || !existsSync(home)) return false;
+  return [
+    path.join(home, 'fairy-system', 'image-manifest.js'),
+    path.join(home, 'fairy-contracts', 'package.json'),
+    path.join(home, '.agent-presets', 'ponytail'),
+  ].every((p) => existsSync(p));
+}
+
 /** ⑥ 仓库与部署：远端是否有更新、镜像是否落后（复用 repo-update 的只读判定，不另起一套）。 */
 export function checkRepo(repo, home, offline) {
   const tool = path.join(repo, 'fairy-system', 'repo-update.mjs');
   if (!existsSync(tool)) return { status: 'skipped', name: '仓库与部署', detail: '没有 repo-update.mjs', fix: '' };
+  if (!looksLikeRepoDeployment(home)) {
+    return {
+      status: 'warn',
+      name: '仓库与部署',
+      detail: `${home} 不像本仓的部署（缺 fairy-system/ / fairy-contracts/ / .agent-presets/ponytail 之一）\n`
+        + '    → 不对它做镜像判定，**也不会**给出部署命令：对它跑 deploy-live.sh 会覆盖那一侧的 manifest',
+      fix: '隔离实例显式传 --home（本机部署是 ~/.dsh-fairy）',
+    };
+  }
   const args = ['check', '--repo', repo, '--home', home, '--json'];
   if (offline) args.push('--remote', '__offline__');
   const r = run(process.execPath, [tool, ...args], { timeout: 180_000 });

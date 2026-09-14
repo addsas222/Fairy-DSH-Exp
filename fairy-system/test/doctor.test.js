@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, exitFor, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, exitFor, EXIT } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -125,6 +125,36 @@ test('仓库与部署：工具缺失时 skipped，不抛异常', () => {
   try {
     assert.equal(checkRepo(empty, empty, false).status, 'skipped');
   } finally { rmSync(empty, { recursive: true, force: true }); }
+});
+
+test('不是本仓部署的 home：不给部署命令（否则会覆盖那一侧的 manifest）', () => {
+  const empty = mkdtempSync(path.join(tmpdir(), 'doctor-foreign-'));
+  try {
+    const repo = path.resolve(path.join(import.meta.dirname, '..', '..'));
+    const r = checkRepo(repo, empty, true);
+    assert.equal(r.status, 'warn');
+    // 只查 `fix`（可执行建议）：`detail` 里提到命令名是在**解释"为何不给"**，那是有意为之。
+    assert.doesNotMatch(r.fix, /deploy-live\.sh/, '绝不能建议对非本仓部署跑 deploy-live.sh');
+    assert.match(r.fix, /--home/, '要告诉人显式传 --home');
+    assert.equal(looksLikeRepoDeployment(empty), false);
+  } finally { rmSync(empty, { recursive: true, force: true }); }
+});
+
+test('本仓部署的识别：三样标记齐了才算（缺一即 false）', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'doctor-mirror-'));
+  try {
+    const markers = ['fairy-system/image-manifest.js', 'fairy-contracts/package.json', '.agent-presets/ponytail'];
+    assert.equal(looksLikeRepoDeployment(root), false, '空目录不算');
+    for (const m of markers.slice(0, -1)) {
+      const p = path.join(root, m);
+      mkdirSync(path.dirname(p), { recursive: true });
+      writeFileSync(p, '{}');
+    }
+    assert.equal(looksLikeRepoDeployment(root), false, '缺预设目录不算');
+    const last = path.join(root, '.agent-presets', 'ponytail');
+    mkdirSync(last, { recursive: true });
+    assert.equal(looksLikeRepoDeployment(root), true, '三样齐了才算');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {
