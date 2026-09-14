@@ -105,6 +105,33 @@ test('owns dock controls, session cleanup, and one-shot takeover', () => {
   assert.match(proxy, /setTimeout\(\(\) => process\.exit\(0\), 250\)/);
 });
 
+test('hands the takeover page to a platform browser instead of a macOS-only launcher', () => {
+  // Windows 的 URL 必须显式加引号：含 `&` 的查询串会被 cmd 当命令分隔符拆开
+  // （实测 `'b' is not recognized as an internal or external command`，浏览器只拿到
+  // 截断的 URL），Node 的 win32 转义不会替 `&` 加引号。
+  assert.match(proxy, /"\$\{url\}" --new-window "--user-data-dir=\$\{userDataDir\}"/);
+  // 浏览器路径含空格时必须加引号，否则会被 start 的窗口标题槽吞掉（实测什么都不启动）。
+  assert.match(proxy, /start "" \$\{browser \? `"\$\{browser\}" ` : ''\}/);
+  // 空标题槽位是必需的，且必须排在浏览器名之前。
+  assert.match(proxy, /'\/d', '\/s', '\/c', `start "" /);
+  // 手拼命令行必须走 windowsVerbatimArguments，否则 Node 会再套一层引号。
+  assert.match(proxy, /options: \{ windowsVerbatimArguments: true \}/);
+  assert.match(proxy, /spawnDetached\('proxy\.takeover\.spawn', handoff\.command, handoff\.args, handoff\.options\)/);
+  // 会话延续是接管的全部意义：两个平台都带 user-data-dir。
+  assert.match(proxy, /--user-data-dir=\$\{userDataDir\}/);
+  assert.match(proxy, /const browser = process\.env\.DSH_FAIRY_HANDOFF_BROWSER \|\| ''/);
+  // 非 Windows 仍走原来的 `open -na`。
+  assert.match(proxy, /command: '\/usr\/bin\/open'/);
+  assert.match(proxy, /if \(process\.platform !== 'win32'\) \{/);
+});
+
+test('a detached spawn failure is a diagnostic, not a process kill', () => {
+  // 没有 error 监听器时，spawn 失败会以未捕获异常掀掉整个 proxy（连带 MCP 会话）。
+  assert.match(proxy, /function spawnDetached\(event, command, args, options = \{\}\)/);
+  assert.match(proxy, /child\.on\('error', \(error\) => diagnostics\.warn\(event, \{ platform: process\.platform \}, error\)\)/);
+  assert.match(proxy, /spawnDetached\('proxy\.takeover\.spawn', handoff\.command, handoff\.args, handoff\.options\)/);
+});
+
 test('renders title and controls over the page without a URL header row', () => {
   assert.match(client, /dsh-browser-dock__chrome\{position:absolute/);
   assert.match(client, /inset:3px 3px auto 3px/);

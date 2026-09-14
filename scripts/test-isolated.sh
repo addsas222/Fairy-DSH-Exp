@@ -57,7 +57,31 @@ fi
 export DSH_OFFICIAL_PACKAGE DSH_OFFICIAL_RUNTIME
 export DSH_CAPABILITY_MATRIX="$repo_root/fairy-system/capability-matrix.json"
 
-echo "[1/3] package tests"
+echo "[1/4] package dependency install"
+# 从仓库根跑包测试的默认失败模式是 `ERR_MODULE_NOT_FOUND: dsh-fairy-contracts`：
+# clone 里没有 node_modules，而各包的 link: 依赖必须各自安装（与 deploy-live.sh
+# 第 3 步同一做法、与 CI 的 --frozen-lockfile 同一约定）。已装过的包直接跳过，
+# 所以重复跑不会变慢。
+if command -v pnpm >/dev/null 2>&1; then
+  for area in fairy-visual/dsh-fairy-visual fairy-voice/dsh-fairy-voice \
+              fairy-persona/dsh-fairy-persona fairy-modes/dsh-fairy-modes \
+              fairy-search/dsh-fairy-search fairy-memory/dsh-fairy-memory \
+              fairy-roleplay/dsh-fairy-roleplay; do
+    if [ -d "$repo_root/$area/node_modules" ]; then
+      echo "  ok   $area (already installed)"
+    elif (cd "$repo_root/$area" && pnpm install --frozen-lockfile --ignore-scripts >/dev/null 2>&1); then
+      echo "  ok   $area (installed)"
+    else
+      echo "pnpm install failed in $area" >&2
+      exit 1
+    fi
+  done
+else
+  echo "pnpm is required to install package dependencies" >&2
+  exit 1
+fi
+
+echo "[2/4] package tests"
 (cd "$repo_root/fairy-visual/dsh-fairy-visual" && npm test)
 (cd "$repo_root/fairy-voice/dsh-fairy-voice" && npm test)
 (cd "$repo_root/fairy-persona/dsh-fairy-persona" && npm test)
@@ -71,7 +95,7 @@ if [ -n "$DSH_OFFICIAL_PACKAGE" ] && [ -n "$DSH_OFFICIAL_RUNTIME" ]; then
   node --test --test-timeout=45000 "$repo_root"/fairy-system/test/*.test.js
 fi
 
-echo "[2/3] profile dependency check"
+echo "[3/4] profile dependency check"
 if command -v pnpm >/dev/null 2>&1; then
   (cd "$repo_root/profiles/web" && pnpm install --frozen-lockfile --ignore-scripts)
 else
@@ -79,7 +103,7 @@ else
   exit 1
 fi
 
-echo "[3/3] isolated profile smoke test"
+echo "[4/4] isolated profile smoke test"
 if command -v dsh >/dev/null 2>&1; then
   if command -v gtimeout >/dev/null 2>&1; then
     gtimeout 8 dsh --profile web --no-open --port 0 || test $? -eq 124
