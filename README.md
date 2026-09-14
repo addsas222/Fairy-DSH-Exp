@@ -205,6 +205,11 @@ node fairy-system/repo-update.mjs apply --yes     # pull --ff-only + 复用 depl
 `apply` 默认带 `--skip-evomap`（AGENTS §5.3 禁止在任何自动化里跑 `evomap join`）；
 脏工作树或找不到部署脚本时**拒绝执行**，不留下"拉了一半"的状态。
 
+镜像判定默认按 `image-manifest.js policy --lines` 的口径（与 `deploy-live.sh` 同一来源）
+忽略本机适配，也可用 `--preserve LIST` 覆盖。**`--home` 默认 `$DSH_HOME`、再默认 `~/.dsh`**：
+隔离实例必须显式传 `--home`，否则查的是主环境（实测踩过：对 `.dsh-fairy` 部署完，检查却报主环境
+缺失 289 个文件——那是主环境真实状态，不是工具的错）。
+
 ## 7. 两道门禁
 
 ```sh

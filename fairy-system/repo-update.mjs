@@ -90,16 +90,30 @@ export function compare(local, remote) {
 }
 
 /**
- * 镜像是否落后于仓库提交（复用现成的对账引擎，不另起一套）。
+ * 本机适配清单（`--preserve`）：默认取 `image-manifest.js policy --lines`，
+ * 与 `deploy-live.sh` 同一来源——不另立第二份列表，否则镜像判定会与部署各说各话
+ * （实测：不带 preserve 时对账把本机的 msedge 适配报成漂移）。
+ */
+function defaultPreserve(repo) {
+  const manifest = path.join(repo, 'fairy-system', 'image-manifest.js');
+  if (!existsSync(manifest)) return '';
+  try {
+    return execFileSync(process.execPath, [manifest, 'policy', '--lines'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 }).trim();
+  } catch { return ''; }
+}
+
+/** 镜像是否落后于仓库提交（复用现成的对账引擎，不另起一套）。
  *
  * `image-manifest check --source git` 默认比对 HEAD 的树，正是"镜像 vs 提交"的语义；
  * 它自己已有 0/1/2 的退出码，这里把它折叠成 current / behind / unknown + 摘要，不重判。
  */
-export function mirrorState({ repo, home }) {
+export function mirrorState({ repo, home, preserve = '' }) {
   const manifest = path.join(repo, 'fairy-system', 'image-manifest.js');
   if (!home || !existsSync(manifest)) return { state: 'skipped' };
+  const args = [manifest, 'check', '--source', 'git', '--home', home, '--repo', repo];
+  for (const p of preserve.split(',').map((s) => s.trim()).filter(Boolean)) args.push('--preserve', p);
   try {
-    const out = execFileSync(process.execPath, [manifest, 'check', '--source', 'git', '--home', home, '--repo', repo], {
+    const out = execFileSync(process.execPath, args, {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000,
     });
     return { state: 'current', detail: lastLine(out) };
@@ -127,7 +141,7 @@ export function isEntrypoint(argv1, moduleUrl) {
 }
 
 export function parseArgs(argv) {
-  const options = { verb: '', repo: REPO_DEFAULT, home: process.env.DSH_HOME ?? '', remote: 'origin', branch: '', json: false, dryRun: false, yes: false, skipEvomap: true };
+  const options = { verb: '', repo: REPO_DEFAULT, home: process.env.DSH_HOME ?? '', remote: 'origin', branch: '', json: false, dryRun: false, yes: false, skipEvomap: true, preserve: null };
   let i = 0;
   if (argv[0] && !argv[0].startsWith('-')) { options.verb = argv[0]; i = 1; }
   for (; i < argv.length; i++) {
@@ -139,6 +153,7 @@ export function parseArgs(argv) {
     else if (a === '--json') options.json = true;
     else if (a === '--dry-run') options.dryRun = true;
     else if (a === '--yes') options.yes = true;
+    else if (a === '--preserve') options.preserve = argv[++i];
     else if (a === '--with-evomap') options.skipEvomap = false;   // 明确反对默认值时才允许
     else if (a === '-h' || a === '--help') options.help = true;
     else { const e = new Error(`unknown argument: ${a}`); e.usage = true; throw e; }
@@ -158,6 +173,7 @@ options:
   --json         机器可读输出（只有 check；apply 是动作，输出给人看）
   --dry-run      只打印将执行的动作，不落任何改动
   --yes          跳过 apply 前的交互确认
+  --preserve LIST  逗号分隔的仓库相对路径（本机适配，默认取 image-manifest policy --lines）
   --with-evomap  允许部署链走 evomap 第 4 步（默认**不带**——AGENTS §5.3）
 
 exit: 0 已最新 | 1 远端有更新 | 2 网络/远端不可达 | 3 用法或前置条件错误`;
@@ -183,7 +199,8 @@ async function main() {
   }
 
   const state = compare(local, remote.sha);
-  const mirror = mirrorState({ repo: root, home });
+  const preserve = options.preserve ?? defaultPreserve(root);
+  const mirror = mirrorState({ repo: root, home, preserve });
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ verb: options.verb, repo: root, branch, remote: options.remote, local, remoteHead: remote.sha, state, mirror }, null, 2)}\n`);
@@ -214,6 +231,7 @@ async function main() {
   // --- apply ---
   const deploy = path.join(root, 'scripts', 'deploy-live.sh');
   const deployArgs = ['--home', home, '--skip-evomap'];
+  if (preserve) deployArgs.push('--preserve', preserve);
   const blockers = [];
   const dirty = git(root, ['status', '--porcelain'], { allowFailure: true }).out.split('\n').filter((l) => l.trim() && !l.startsWith('??'));
   if (dirty.length) blockers.push(`工作树有未提交改动（${dirty.length} 个文件）——--ff-only 下会留下半成品`, ...dirty.slice(0, 5));
@@ -241,7 +259,7 @@ async function main() {
     process.stdout.write(`\n❌ 部署失败：\n${String(error.stdout ?? error.message).split('\n').slice(-12).join('\n')}\n`);
     return EXIT.USAGE;
   }
-  const after = mirrorState({ repo: root, home });
+  const after = mirrorState({ repo: root, home, preserve });
   process.stdout.write(`\n镜像   : ${after.state === 'current' ? '与提交一致 ✅' : `仍需处理（${after.state}）${after.detail ? `：${after.detail}` : ''}`}\n`);
   return after.state === 'current' ? EXIT.CURRENT : EXIT.BEHIND;
 }

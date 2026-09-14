@@ -202,6 +202,12 @@ FETCH_HEAD），应用是 `pull --ff-only` + 复用 `scripts/deploy-live.sh`（�
 它的 `fix` 会修改官方安装（§5.1 只读边界），**只在宿主已混版且明确要求对齐时**用，不进 CI。
 注意 `fix` 的 npm 是整树 reify，不是只替换那几个目录（实测会连带 removed/changed 别的包）。
 
+`repo-update.mjs` 的镜像判定按 §3 的 `--preserve` 口径：默认取
+`image-manifest.js policy --lines`（与 `deploy-live.sh` 同一来源），也可用
+`--preserve LIST` 覆盖、或在 `check`/`apply` 上显式指定。不带它时本机适配会被报成漂移
+（实测：`profiles/web/cordis.patch.yml` 的 msedge 通道）。**`--home` 默认是 `$DSH_HOME`，
+再默认 `~/.dsh`**——隔离实例要显式传 `--home`，否则查的是主环境而产出误导结论。
+
 `image-manifest.js check` 报**三类**差异并以 exit 1 判决：`extra`（镜像里有、
 清单里没有 —— 上游删过的文件残留在这里）、`missing`（清单里有、镜像里没有）、
 `drifted`（两边都有、内容不同）。它是唯一会看「多出来的文件」的门禁：`verify-build.js`
