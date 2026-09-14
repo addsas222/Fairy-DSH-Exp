@@ -1,0 +1,43 @@
+@echo off
+rem start-fairy.cmd -- launch the isolated Fairy-DSH instance WITHOUT PowerShell.
+rem
+rem Why this file exists: PowerShell 5.1 hands every .ps1 to AMSI (Windows Defender)
+rem before compiling it. Some Defender/AMSI combinations throw
+rem AccessViolationException inside AmsiScanBuffer, so the script never starts --
+rem the failure happens at compile time and has nothing to do with the script text.
+rem A .cmd does not go through AMSI. Keep this file ASCII-only: cmd reads .cmd as
+rem GBK here, and non-ASCII bytes after `rem` break the comment into "commands".
+rem
+rem Usage:  start-fairy.cmd            -> port 3081
+rem         start-fairy.cmd 3099       -> given port
+rem
+rem Same semantics as start-fairy.ps1 (DSH_HOME / two REPO_ROOT vars / PROFILE_ROOT
+rem / pinned runtime). If you change one launcher, change the other too.
+
+setlocal
+set "PORT=%~1"
+if "%PORT%"=="" set "PORT=3081"
+
+set "ISO_HOME=%~dp0"
+if "%ISO_HOME:~-1%"=="\" set "ISO_HOME=%ISO_HOME:~0,-1%"
+
+set "RUNTIME=C:\tmp\dsh-011\node_modules\@deepseek-ai\dsh\lib\bin.js"
+if not exist "%RUNTIME%" (
+  echo [start-fairy] missing 0.1.1-rc.2 runtime: %RUNTIME% 1>&2
+  echo [start-fairy] Fairy-DSH needs it; 0.1.2+ is face-incompatible. 1>&2
+  exit /b 1
+)
+
+set "DSH_HOME=%ISO_HOME%"
+set "DSH_FAIRY_REPO_ROOT=%ISO_HOME%"
+set "DSH_FAIRY_TEST_HOME=%ISO_HOME%"
+set "DSH_FAIRY_PROFILE_ROOT=%ISO_HOME%\profiles\web"
+
+echo Fairy-DSH isolated instance
+echo   DSH_HOME : %ISO_HOME%
+echo   runtime  : %RUNTIME%  (0.1.1-rc.2)
+echo   profile  : web
+echo   url      : http://127.0.0.1:%PORT%
+echo.
+
+node "%RUNTIME%" --profile web --no-open --port %PORT%
