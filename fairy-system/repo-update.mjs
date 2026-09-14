@@ -82,8 +82,10 @@ export function remoteHead({ repo, remote, branch }) {
   return { state: missing ? 'missing' : 'offline', detail };
 }
 
-/** 本地是否有远端那个提交（即「本地领先」）。只读本地对象库，不联网。 */
-function isLocalAncestorOfRemote(repo, remoteSha) {
+/** 远端那个提交是否已在本地（即「本地领先」）。只读本地对象库，不联网。
+ *  名字按**实现**取：判的是 remote 是不是 local 的祖先。原先叫 isLocalAncestorOfRemote，
+ *  字面读却是「本地是远端祖先」（那是落后）——后人照名字"修正"调用就会把方向判反。 */
+function isRemoteAncestorOfLocal(repo, remoteSha) {
   return git(repo, ['merge-base', '--is-ancestor', remoteSha, 'HEAD'], { allowFailure: true }).ok;
 }
 
@@ -103,7 +105,7 @@ function isLocalAncestorOfRemote(repo, remoteSha) {
 export function compare(repo, local, remote) {
   if (!local || !remote) return 'unknown';
   if (local === remote) return 'current';
-  if (isLocalAncestorOfRemote(repo, remote)) return 'ahead';
+  if (isRemoteAncestorOfLocal(repo, remote)) return 'ahead';
   if (git(repo, ['merge-base', '--is-ancestor', local, remote], { allowFailure: true }).ok) return 'behind';
   // 两者都判不出：要么分叉，要么本地根本没有远端那个对象。用 cat-file 区分——后者才是 unknown。
   return git(repo, ['cat-file', '-e', `${remote}^{commit}`], { allowFailure: true }).ok ? 'diverged' : 'unknown';
@@ -131,7 +133,9 @@ export function mirrorState({ repo, home, preserve = '' }) {
   const manifest = path.join(repo, 'fairy-system', 'image-manifest.js');
   if (!home || !existsSync(manifest)) return { state: 'skipped' };
   const args = [manifest, 'check', '--source', 'git', '--home', home, '--repo', repo];
-  for (const p of preserve.split(',').map((s) => s.trim()).filter(Boolean)) args.push('--preserve', p);
+  // 两种分隔都要吃：--preserve LIST 是逗号分隔，而默认来源 policy --lines 是**一行一条**。
+  // 只 split(',') 时，第二条本机适配会连同换行被当成单个路径（现有恰因只有一条而没暴露）。
+  for (const p of preserve.split(/[,\n]/).map((s) => s.trim()).filter(Boolean)) args.push('--preserve', p);
   try {
     const out = execFileSync(process.execPath, args, {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000,
@@ -210,7 +214,10 @@ exit: 0 已最新 | 1 有更新或不一致（远端领先/本地领先/镜像�
 export function exitCode(state, mirrorStateName) {
   if (state === 'diverged' || state === 'unknown') return EXIT.USAGE;   // 前置条件：需人工合/先 fetch
   if (state === 'behind' || state === 'ahead') return EXIT.BEHIND;      // 与远端不一致
-  if (state === 'current' && mirrorStateName === 'behind') return EXIT.BEHIND;
+  // current 也不能无视镜像：README 里 0 的定义是「镜像也一致」。behind 与 unknown
+  // 都给非零——否则上面刚打印「镜像 : 无法判定」，退出码却说 0，自相矛盾。
+  // 只有 skipped（没给 home / 没有对账工具）才保持 0：那是"没查"，不是"查不清"。
+  if (state === 'current' && (mirrorStateName === 'behind' || mirrorStateName === 'unknown')) return EXIT.BEHIND;
   return EXIT.CURRENT;
 }
 
@@ -227,7 +234,7 @@ const STATE_TEXT = {
   ahead: (sha) => `\n⬆️  本地领先远端 ${sha.slice(0, 7)}——远端**没有**新提交（本仓常态：提交后未推送）\n   要做的是 push，不是 pull；apply 在 --ff-only 下是 "Already up to date"。\n`,
   behind: (sha) => `\n⬆️  远端有更新（本地落后 ${sha.slice(0, 7)}）\n`,
   diverged: (sha) => `\n⚠️  本地与远端分叉（${sha.slice(0, 7)}）：两边各有对方没有的提交\n   --ff-only 一定失败，需要人工合或 rebase。本工具不猜。\n`,
-  unknown: (sha) => `\n⚠️  本地与远端 SHA 不同但判不出方向（远端 ${sha.slice(0, 7)}）\n   本地对象库里没有远端那个提交（浅克隆或从未 fetch？）——先 fetch 再判。\n`,
+  unknown: (sha) => `\n⚠️  本地与远端 SHA 不同但判不出方向（远端 ${sha.slice(0, 7)}）\n   本地对象库里没有远端那个提交——最常见就是"远端前移了、本机还没 fetch"。\n`,
 };
 
 async function main() {
@@ -275,15 +282,28 @@ async function main() {
     return exitCode(state, mirror.state);
   }
 
-  if (state === 'ahead' || state === 'diverged' || state === 'unknown') {
+  if (state === 'ahead') {
+    process.stdout.write(STATE_TEXT.ahead(remote.sha));
+    return exitCode(state, mirror.state);
+  }
+
+  if ((state === 'diverged' || state === 'unknown') && options.verb === 'check') {
     process.stdout.write(STATE_TEXT[state](remote.sha));
     return exitCode(state, mirror.state);
   }
 
-  process.stdout.write(STATE_TEXT.behind(remote.sha));
-  if (options.verb === 'check') {
-    process.stdout.write('   应用：node fairy-system/repo-update.mjs apply\n');
-    return exitCode(state, mirror.state);
+  if (state === 'diverged' || state === 'unknown') {
+    // apply 不在这里拒：`pull --ff-only` 本身就含 fetch，正是**解开**这点不确定性的动作。
+    // 真实路径「远端前移、本机还没 fetch」会被判成 unknown——若在此拦下，就得先手工
+    // git fetch 再重跑，工具在最该干活时不动。让 pull 去解决：真落后就 fast-forward 成功，
+    // 真分叉由下面的 fast-forward 分类兜底（exit 3），网络问题走 2。
+    process.stdout.write(`${STATE_TEXT[state](remote.sha)}   ↳ apply 会先 fetch 再判：能 fast-forward 就继续，分叉则由 pull 失败分类拦下。\n`);
+  } else {
+    process.stdout.write(STATE_TEXT.behind(remote.sha));
+    if (options.verb === 'check') {
+      process.stdout.write('   应用：node fairy-system/repo-update.mjs apply\n');
+      return exitCode(state, mirror.state);
+    }
   }
 
   // --- apply ---
@@ -326,7 +346,7 @@ async function main() {
   }
   const after = mirrorState({ repo: root, home, preserve });
   process.stdout.write(`\n镜像   : ${after.state === 'current' ? '与提交一致 ✅' : `仍需处理（${after.state}）${after.detail ? `：${after.detail}` : ''}`}\n`);
-  return after.state === 'current' ? EXIT.CURRENT : EXIT.BEHIND;
+  return exitCode('current', after.state);
 }
 
 if (isEntrypoint(process.argv[1], import.meta.url)) {

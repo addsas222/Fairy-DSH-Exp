@@ -203,8 +203,8 @@ node fairy-system/repo-update.mjs apply --yes     # pull --ff-only + 复用 depl
 
 | 码 | 含义 |
 | --- | --- |
-| 0 | 已最新（本地 HEAD 与远端一致，镜像也一致） |
-| 1 | 远端有新提交 / **本地领先远端**（提交后未推送，本仓常态）/ 镜像落后于提交 |
+| 0 | 已最新（本地 HEAD 与远端一致，镜像也一致；`skipped` 即"没查镜像"也算 0） |
+| 1 | 远端有新提交 / **本地领先远端**（提交后未推送，本仓常态）/ 镜像落后**或镜像状态无法判定** |
 | 2 | 网络或远端不可达——**不代表"已最新"** |
 | 3 | 用法或前置条件错误（脏工作树、缺 `deploy-live.sh`、本地与远端**分叉**） |
 
@@ -214,9 +214,14 @@ node fairy-system/repo-update.mjs apply --yes     # pull --ff-only + 复用 depl
 ```
 远端是本地祖先 → 本地领先：要 push，不是 pull（apply 在 --ff-only 下是 Already up to date）
 本地是远端祖先 → 远端领先：apply 有意义
-两者都不是     → 分叉：--ff-only 必然失败，需人工合或 rebase（本工具不猜，exit 3）
-本地无该对象   → 方向未知：先 fetch 再判
+两者都不是     → 分叉：--ff-only 必然失败，需人工合或 rebase
+本地无该对象   → 方向未知：最常见是"远端前移了、本机还没 fetch"
 ```
+
+**`unknown` 只有 `check` 判 3**（只读，判不出就不猜）；**`apply` 放它过去**——`pull --ff-only`
+本身就含 fetch，正是解开这点不确定性的动作：真落后就 fast-forward 成功，真分叉由 pull 失败
+的 fast-forward 分类拦下（exit 3），网络问题走 2。若在 apply 里也拦，就得先手工 `git fetch`
+再重跑，工具在最该干活时不动。
 
 `apply` 默认带 `--skip-evomap`（AGENTS §5.3 禁止在任何自动化里跑 `evomap join`）；
 脏工作树或找不到部署脚本时**拒绝执行**，不留下"拉了一半"的状态。确实要走 EvoMap 接入时

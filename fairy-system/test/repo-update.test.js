@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -249,17 +249,26 @@ test('JSON 与文本两条分支的退出码一致（镜像落后、分叉各自
 test('镜像落后时 JSON 与文本同码（仓库最新 ≠ 全部最新）', () => {
   const f = fixture();
   try {
-    // 拿真仓库当"仓库侧"，把 home 指到一个受控的隔离目录：那里的模块清单必然对不上。
-    // （假 git 仓里没有 fairy-system/，镜像判定会被跳过——所以要换一边受控。）
-    const repo = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
-    const home = path.join(f.root, 'past-home');
-    mkdirSync(home, { recursive: true });
-    const args = ['check', '--repo', repo, '--home', home];
+    // 不碰真仓库、不碰网络：夹具的远端就是本地 bare 仓（当前已一致），
+    // 镜像侧造一个假 image-manifest 让它报"落后"。
+    const dir = path.join(f.repo, 'fairy-system');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'image-manifest.js'), `
+if (process.argv[2] === 'policy') { process.exit(0); }
+// 真 image-manifest 把报告写在 **stdout**（只有"命令行用法错"才走 stderr）——照它来，
+// 否则测不到 mirrorState 的 stdout 解析路径。
+process.stdout.write('missing (清单里有、镜像里没有) x1:\\n  - x\\n');
+process.stdout.write('metrics : files 3 checked, extra 0, missing 1, drifted 0, allowed 0\\n');
+process.stdout.write('FAIL: the image does not match the commit\\n');
+process.exit(1);
+`);
+    const args = ['check', '--repo', f.repo, '--home', f.fakeHome()];
     const text = runAllowFailure(args);
     const json = runAllowFailure([...args, '--json']);
     const payload = JSON.parse(json.stdout);
-    assert.equal(payload.state, 'current', '这个仓库自己与远端一致（否则另说）');
-    assert.equal(payload.mirror.state, 'behind', '空 home 必然对不上清单');
+    assert.equal(payload.state, 'current', '夹具的远端此刻一致');
+    assert.equal(payload.mirror.state, 'behind');
+    assert.match(payload.mirror.detail, /missing 1/, 'detail 要带 metrics，不是空话');
     assert.equal(text.code, json.code, 'JSON 与文本必须同码');
     assert.equal(text.code, 1, '仓库最新但镜像落后 → 1，不是 0');
   } finally { f.cleanup(); }
@@ -278,13 +287,16 @@ test('本地领先时 JSON 与文本都报 1', () => {
   } finally { f.cleanup(); }
 });
 
-test('方向未知时退出 3——先 fetch 才能判，不是"已最新"', () => {
+test('方向未知时 check 退出 3——判不出方向就不猜，也不冒充"已最新"', () => {
   const f = fixture();
   try {
     f.rewindToUnknownRemote();   // 远端指向本地没有的提交
     const r = runAllowFailure(['check', '--repo', f.repo]);
     assert.equal(r.code, 3, '"判不出方向"与"已最新"必须分得清');
-    assert.match(r.stdout, /先 fetch/);
+    assert.match(r.stdout, /判不出方向/);
+    // check 只读：不 fetch、不写 FETCH_HEAD
+    const fetchHead = spawnSync('git', ['rev-parse', '--verify', '-q', 'FETCH_HEAD'], { cwd: f.repo, encoding: 'utf8' });
+    assert.notEqual(fetchHead.status, 0, 'check 不该产生 FETCH_HEAD');
   } finally { f.cleanup(); }
 });
 
@@ -305,6 +317,59 @@ test('--home 是显式指定时，回显不该再叫用户"请显式 --home"', (
     // 两者都没有时才提示（这条提示本身要保留）
     const fallback = runAllowFailure(['check', '--repo', f.repo], noEnv);
     assert.match(fallback.stdout, /默认 ~\/\.dsh/);
+  } finally { f.cleanup(); }
+});
+
+test('apply 不因"方向未知"卡死：pull 本身含 fetch，正是解开它的动作', () => {
+  const f = fixture();
+  try {
+    f.rewindToUnknownRemote();   // 远端前移、本地没 fetch 过 —— 最常见的那条路
+    const before = git(f.repo, 'rev-parse', 'HEAD');
+    // check 保持只读、判 3（不猜方向）
+    assert.equal(runAllowFailure(['check', '--repo', f.repo]).code, 3);
+    // apply --dry-run 必须走到 pull 计划，而不是被自己的前置条件挡下
+    const dry = runAllowFailure(['apply', '--repo', f.repo, '--dry-run', '--home', f.fakeHome()]);
+    assert.match(dry.stdout, /pull --ff-only/, 'apply 必须给出 pull 计划');
+    assert.doesNotMatch(dry.stdout, /不能执行 apply/);
+    assert.equal(git(f.repo, 'rev-parse', 'HEAD'), before, '--dry-run 不动 HEAD');
+  } finally { f.cleanup(); }
+});
+
+test('ahead 时 apply 只说不必 pull，不推进任何东西', () => {
+  const f = fixture();
+  try {
+    f.advanceLocal();
+    const before = git(f.repo, 'rev-parse', 'HEAD');
+    const r = runAllowFailure(['apply', '--repo', f.repo, '--yes', '--home', f.fakeHome()]);
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /本地领先远端/);
+    assert.doesNotMatch(r.stdout, /pull --ff-only/, 'ahead 不该走 pull 路径');
+    assert.equal(git(f.repo, 'rev-parse', 'HEAD'), before);
+  } finally { f.cleanup(); }
+});
+
+test('默认 preserve 走 policy --lines（换行分隔），两个条目都要被逐条传给对账', () => {
+  const f = fixture();
+  try {
+    // 夹具里没有 fairy-system/，默认 preserve 会退化成 ''——这里造一个假的 image-manifest，
+    // 让它按**真实来源的形态**吐两行，验证分隔口径与传递条数。
+    const dir = path.join(f.repo, 'fairy-system');
+    mkdirSync(dir, { recursive: true });
+    const log = path.join(f.root, 'manifest-args.txt');
+    writeFileSync(path.join(dir, 'image-manifest.js'), `
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, args.join(' ') + '\\n');
+if (args[0] === 'policy') { process.stdout.write('profiles/web/a.yml\\nprofiles/web/b.yml\\n'); process.exit(0); }
+process.exit(0);   // check：报"一致"
+`);
+    const r = runAllowFailure(['check', '--repo', f.repo, '--home', f.fakeHome()]);
+    assert.equal(r.code, 0, '镜像报一致 → 0');
+    const calls = readFileSync(log, 'utf8').trim().split('\n');
+    const checkCall = calls.find((l) => l.startsWith('check')) ?? '';
+    assert.match(checkCall, /--preserve profiles\/web\/a\.yml/, '第一个条目要作为独立参数');
+    assert.match(checkCall, /--preserve profiles\/web\/b\.yml/, '第二个条目也要——换行分隔必须被切开');
+    assert.doesNotMatch(checkCall, /a\.yml\nb\.yml|a\.yml b\.yml/, '不能把两条并成一个路径');
   } finally { f.cleanup(); }
 });
 
