@@ -127,6 +127,9 @@ const SKIP_POLICY = [
   // 仓库里没有它（不随仓库分发），所以清单里也不会列出它——不豁免的话，prune 会把它当成
   // 「镜像多出来的文件」删掉，下次部署又同步回来，形成抖动。
   { prefix: '.agent-presets/ponytail/skills', reason: 'ponytail 规则技能的本机安装槽位（不随仓库分发）' },
+  // fairy world-core：本机从游戏文本提取的索引（版权归 miHoYo），由 deploy-live.sh 同步。
+  // 与技能槽位同理：清单里没有它，不豁免的话每次部署都会被 prune 删掉再同步回来。
+  { prefix: '.agent-presets/fairy/world-core', reason: 'fairy 世界知识索引（本机提取，不随仓库分发）' },
 ];
 
 // 镜像里被接受为「可以多出来」的路径。默认只有一条：本机适配过的 profile。

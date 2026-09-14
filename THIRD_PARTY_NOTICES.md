@@ -35,6 +35,15 @@
 | --- | --- | --- | --- |
 | ponytail 技能组（6 项：ponytail 主技能 + audit/debt/gain/help/review） | 本机技能根（如 `~/.omp/agent/skills/`），**不在本仓库内** | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
 
+## 本机借用的第三方数据（不随仓库分发）
+
+| 内容 | 用途 | 来源 | 许可/版权 |
+| --- | --- | --- | --- |
+| 《绝区零》官方文本 TextMap（CHT，游戏 3.2.0，约 43.9 MB 原始 → 本机索引 3.4 万条 / 5.6 MB） | fairy preset 的 world-core 世界知识（经 `fairy_world_lookup` 按需检索） | [dimbreath/ZenlessData](https://git.mero.moe/dimbreath/ZenlessData)（git.mero.moe 镜像）的 `TextMap/TextMap_CHT*TemplateTb.json` | **游戏文本版权归 miHoYo / HoYoverse**，本仓库不主张任何权利、也不再分发 |
+
+处理方式：`C:/tmp/zzz-extract2.mjs` 把 TextMap 抽成 `world-core/<entity>.jsonl`（每行 `{key, text}`，`key` 即游戏原始文本键，可作证据引用）。
+该目录由 `.gitignore` 挡住、并在 `image-manifest.js` 的跳过策略内，**不进仓库、不随部署分发到别处**；部署时由 `deploy-live.sh` 从本机 clone 同步进目标 home。
+下游使用时请自行确认与 miHoYo 的条款一致（本仓库只做本机个人用途的技术处理）。
 ## 运行期从 CDN 加载的第三方引擎（未随仓库分发）
 
 `fairy-voice` 的浏览器内引擎 provider 在**用户浏览器**里按配置的 `moduleUrl`

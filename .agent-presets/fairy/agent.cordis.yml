@@ -50,6 +50,9 @@
 - id: fairy-safety-gate
   name: './plugins/fairy-safety-gate.mjs'
 
+- id: fairy-world-core
+  name: './plugins/fairy-world-core.mjs'
+
 
 
 

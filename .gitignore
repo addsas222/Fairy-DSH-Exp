@@ -15,3 +15,7 @@ benchmarks/
 # ponytail 技能组（MIT，上游再分发内容）只在本机 ~/.omp/agent/skills/_ponytail-vendor/ 留存，
 # 不入库、不随部署分发。
 .agent-presets/ponytail/skills/
+
+# 绝区零官方文本（借用的第三方游戏资源，版权归 miHoYo）：只在本机供 world-core 使用，
+# 不随仓库/部署分发。由 C:/tmp/zzz-extract.mjs 从 dimbreath/ZenlessData TextMap 提取。
+.agent-presets/fairy/world-core/

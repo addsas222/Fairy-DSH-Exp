@@ -186,6 +186,16 @@ else
   else
     warn "ponytail 技能未找到安装源（本机技能根为空）；preset 仍可用，只是没有这套技能"
   fi
+  # fairy world-core：从 **clone** 同步（它是本机提取产物、被 .gitignore 挡住，不在落位源里）。
+  # 与技能槽位同理：目标目录在跳过策略内（不参与对账/prune），所以必须在第 2 步之前放好。
+  if [ -d "$REPO_ROOT/.agent-presets/fairy/world-core" ]; then
+    rm -rf "$DSH_HOME_TARGET/.agent-presets/fairy/world-core"
+    cp -R "$REPO_ROOT/.agent-presets/fairy/world-core" "$DSH_HOME_TARGET/.agent-presets/fairy/" 2>/dev/null \
+      && log "  synced fairy world-core from the checkout" \
+      || warn "world-core 同步失败（不影响部署）：$REPO_ROOT/.agent-presets/fairy/world-core"
+  else
+    warn "world-core 不在 clone 里（未提取过游戏文本）；fairy 的 world-lookup 工具将不可用"
+  fi
 fi
 
 # ── 1) 与源对账（收敛语义：先删多余，再落位） ─────────────────────────────

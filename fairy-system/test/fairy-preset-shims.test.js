@@ -7,7 +7,7 @@
  * 这里按本仓既有约定（fairy-modes/test/modes.test.js 的 fakeHost）做真调用。
  */
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -119,5 +119,69 @@ test('both shims forward to the private runtime when it exists', async () => {
     assert.equal([...host2.sections.keys()][0], 'private-runtime', 'safety-gate 应转发给私有真身');
   } finally {
     repo.cleanup();
+  }
+});
+
+/**
+ * world-core 检索：把"借来的游戏文本"从"文件存在"推进到"能被工具真的查到"。
+ * 索引由 C:/tmp/zzz-extract2.mjs 从 ZZZ 官方 TextMap 提取（本机，不进仓库）。
+ * 索引/语料缺失时整组跳过——它不是仓库资产，别的机器上本来就没有。
+ */
+const WORLD_CORE = path.join(PRESET_DIR, 'plugins', 'fairy-world-core.mjs');
+const WORLD_DIR = path.join(PRESET_DIR, 'world-core');
+const hasWorldCore = existsSync(path.join(WORLD_DIR, 'MANIFEST.json'));
+
+function toolHost() {
+  const tools = new Map();
+  const sections = new Map();
+  const ctx = {
+    tools: {
+      register(definition) {
+        assert.equal(typeof definition, 'object');
+        assert.equal(typeof definition.name, 'string');
+        assert.equal(typeof definition.execute, 'function');
+        tools.set(definition.name, definition);
+        return () => tools.delete(definition.name);
+      },
+    },
+    systemPrompt: {
+      section(definition) {
+        sections.set(definition.name, definition);
+        return () => sections.delete(definition.name);
+      },
+    },
+  };
+  return { ctx, tools, sections };
+}
+
+test('world-core shim registers a lookup tool and a prompt section', { skip: !hasWorldCore && 'world-core 索引不在本机（非仓库资产）' }, async () => {
+  const repoRoot = path.resolve(PRESET_DIR, '..', '..');
+  const prevRoot = process.env.DSH_FAIRY_REPO_ROOT;
+  process.env.DSH_FAIRY_REPO_ROOT = repoRoot;   // apply() 是延迟调用，调用期也需要该变量
+  try {
+    const mod = await loadWith(repoRoot, WORLD_CORE);
+    const host = toolHost();
+    const dispose = await mod.apply(host.ctx, {});
+
+  assert.ok(host.tools.has('fairy_world_lookup'), '应注册 fairy_world_lookup');
+  assert.ok(host.sections.has('fairy-world-core'), '应挂一个世界知识段落');
+  assert.equal(typeof dispose, 'function');
+
+  const tool = host.tools.get('fairy_world_lookup');
+  const result = await tool.execute({ query: '空洞', limit: 3 });
+  const text = result.content?.[0]?.text ?? '';
+  assert.match(text, /命中 \d+ 条/, '真实检索应返回命中');
+  assert.match(text, /证据键: /, '每条结果应带原始文本键');
+  assert.ok(text.length < 4000, '返回应受 limit 约束，不会把索引倒进上下文');
+
+    const empty = await tool.execute({ query: 'zzz-绝不存在的片段-zzz', limit: 3 });
+    assert.match(empty.content[0].text, /未找到匹配|不要据此编造/, '无命中时应明确说明而不是编造');
+
+    dispose();
+    assert.equal(host.tools.size, 0, 'dispose 后工具应注销');
+    assert.equal(host.sections.size, 0);
+  } finally {
+    if (prevRoot === undefined) delete process.env.DSH_FAIRY_REPO_ROOT;
+    else process.env.DSH_FAIRY_REPO_ROOT = prevRoot;
   }
 });
