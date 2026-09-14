@@ -2,7 +2,7 @@
  * Fairy 世界知识检索：按需读本机 world-core 行式索引。
  *
  * 语料来自 ZZZ 官方 TextMap（dimbreath/ZenlessData 镜像，游戏 v3.2.0），
- * 由 C:/tmp/zzz-extract2.mjs 提取为 `world-core/<entity>.jsonl`（每行 {key, text}）。
+ * 由 `fairy-system/extract-world-core.mjs` 提取为 `world-core/<entity>.jsonl`（每行 {key, text}）。
  * 版权归 miHoYo/HoYoverse：该目录被 .gitignore 挡住，只在本机使用。
  *
  * 为什么做成工具而不是把语料塞进系统提示：单条实体索引就有 1.7 MB（hollow 9339 条），
