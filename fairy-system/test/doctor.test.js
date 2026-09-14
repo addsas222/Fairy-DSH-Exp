@@ -93,14 +93,17 @@ test('npm 工程根：一致时 ok；没有 lock 时 skipped', () => {
   } finally { t.cleanup(); }
 });
 
-test('测试门前提：缺比较对象或缺插件包都要报 warn（环境前提，不是代码回归）', () => {
+test('测试门前提：没有可用对象 / 没有装齐的 profile 时报 warn（环境前提，不是代码回归）', () => {
+  // 夹具 home 与 repo 都是临时目录：没有装齐的 profile，也没有可校验的制品。
+  // 注意"制品发现"会扫约定目录——本机确有 C:/tmp/dsh-011 时它会找到、于是只报 profile 侧缺，
+  // 那正是期望行为（能让体检自己找到就不该逼人从零装一份）。
   const root = mkdtempSync(path.join(tmpdir(), 'doctor-home-'));
   try {
     const r = checkTestPrereqs(root, path.join(root, 'empty-home'));
     assert.equal(r.status, 'warn');
-    assert.match(r.detail, /DSH_OFFICIAL_PACKAGE/);
+    assert.match(r.detail, /profile|制品/, '要说清差在哪一侧');
     assert.match(r.detail, /不是代码回归/);
-    assert.match(r.fix, /DSH_OFFICIAL_PACKAGE=/);
+    assert.match(r.fix, /DSH_OFFICIAL_PACKAGE|旋钮/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -150,4 +153,12 @@ test('未知项在输出里显式成行（spawn 守渲染；退出码由上面�
     assert.match(r.stdout, /未知/, '摘要里必须显式列出未知项数');
     assert.match(r.stdout, /无法判定（不等于正常）/, '必须点明"未知≠正常"');
   } finally { rmSync(empty, { recursive: true, force: true }); }
+});
+
+test('制品发现：约定目录里的 0.1.1-rc.2 能被找到（不是只看环境变量）', async () => {
+  const { artifactRoots } = await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
+  const roots = artifactRoots();
+  assert.ok(roots.length >= 2, `搜索根应含系统临时目录与约定目录，实际 ${JSON.stringify(roots)}`);
+  const roots2 = artifactRoots();
+  assert.deepEqual(roots, roots2, '搜索根应稳定（去重后顺序一致）');
 });

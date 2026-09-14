@@ -18,6 +18,7 @@
  * 退出码：0 全绿 ｜ 1 有 fail ｜ 2 有 warn（无 fail）｜ 3 用法/前置错误
  */
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -217,28 +218,98 @@ export function checkRepo(repo, home, offline) {
   };
 }
 
-/** ⑦ 测试门的前提：没比较对象时那两组整组红，而这是**环境**问题不是代码回归。 */
+/**
+ * ⑦ 测试门的前提：`preflight`/`upgrade` 两组要一份**0.1.1-rc.2 比较对象**与一份装齐的 profile。
+ *
+ * 这条不做"缺了就警告"的懒判定——合适的对象本机往往**就有**（隔离部署、别处的制品目录）。
+ * 所以它自己找候选、逐项**校验 pins**（版本 + runtime 的 sha256 必须等于
+ * `preflight-build.js` 里 pin 的值），校验通过才算就位，并直接给出可直接粘的运行命令。
+ * 只有真找不到/校验不过时才是 warn，且说明差在哪。
+ */
 export function checkTestPrereqs(repo, home) {
-  const missing = [];
-  const official = process.env.DSH_OFFICIAL_PACKAGE || path.join(os.homedir(), '.local/lib/node_modules/@deepseek-ai/dsh/package.json');
-  const runtime = process.env.DSH_OFFICIAL_RUNTIME || path.join(os.homedir(), '.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js');
-  if (!existsSync(official)) missing.push(`DSH_OFFICIAL_PACKAGE（默认 ${official}）`);
-  if (!existsSync(runtime)) missing.push(`DSH_OFFICIAL_RUNTIME（默认 ${runtime}）`);
-  const profile = path.join(home, 'profiles', 'web');
+  const preflightSrc = path.join(repo, 'fairy-system', 'preflight-build.js');
+  let pinned = '';
+  try { pinned = /runtimeSha256:\s*'([0-9a-f]{64})'/.exec(readFileSync(preflightSrc, 'utf8'))?.[1] ?? ''; } catch { /* 读不到就只校验版本 */ }
+
+  const candidates = [
+    process.env.DSH_OFFICIAL_PACKAGE,                                          // ① 显式旋钮
+    path.join(os.homedir(), '.local/lib/node_modules/@deepseek-ai/dsh/package.json'),  // ② 仓库测试的默认位
+    ...discoverArtifacts(),                                                    // ③ 约定目录（本机 C:/tmp/dsh-011 就在这类位置）
+  ].filter(Boolean);
+  const found = [];
+  for (const pkg of [...new Set(candidates)]) {
+    if (!existsSync(pkg)) continue;
+    const root = path.dirname(pkg);
+    let version = '';
+    try { version = JSON.parse(readFileSync(pkg, 'utf8')).version ?? ''; } catch { /* 半写 */ }
+    const runtime = path.join(root, 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js');
+    const hasRuntime = existsSync(runtime);
+    const hash = hasRuntime ? crypto.createHash('sha256').update(readFileSync(runtime)).digest('hex') : '';
+    found.push({ pkg, runtime, version, hasRuntime, hash, hashOk: pinned ? hash === pinned : hasRuntime });
+  }
+  const usable = found.find((f) => f.hasRuntime && f.hashOk);
+
+  // 装齐的 profile：当前 home 优先，其次同级的隔离部署（本机 `~/.dsh-fairy` 就是那种）
   const planted = ['dsh-fairy-persona', 'dsh-reasoning-effort', 'dsh-message-edit'];
-  const absent = planted.filter((n) => !existsSync(path.join(profile, 'node_modules', n)));
-  if (missing.length || absent.length) {
-    const lines = [];
-    if (missing.length) lines.push('缺比较对象：' + missing.join('；'));
-    if (absent.length) lines.push(`${profile} 里没有 ${absent.join('/')}`);
+  const homes = [home, ...readdirSafe(path.dirname(home)).map((d) => path.join(path.dirname(home), d))]
+    .filter((h, i, arr) => h && arr.indexOf(h) === i && existsSync(path.join(h, 'profiles', 'web', 'package.json')));
+  const suitHome = homes.find((h) => planted.every((n) => existsSync(path.join(h, 'profiles', 'web', 'node_modules', n))));
+
+  const run = 'node --test fairy-system/test/*.test.js';
+  if (usable && suitHome) {
     return {
-      status: 'warn',
+      status: 'ok',
       name: '测试门前提',
-      detail: lines.join('\n    ') + '\n    → preflight/upgrade 两组会整组红，属环境前提（不是代码回归）',
-      fix: `指旋钮跑：DSH_OFFICIAL_PACKAGE=… DSH_OFFICIAL_RUNTIME=… DSH_HOME=<装齐的部署> node --test ${path.join(repo, 'fairy-system/test/*.test.js')}`,
+      detail: `比较对象 ${path.dirname(usable.pkg)}（${usable.version}，runtime sha256 ${pinned ? '与 pin 一致' : '未校验'}）\n`
+        + `    profile：${suitHome}`,
+      fix: `DSH_OFFICIAL_PACKAGE="${usable.pkg}" DSH_OFFICIAL_RUNTIME="${usable.runtime}" DSH_HOME="${suitHome}" DSH_CAPABILITY_MATRIX="${path.join(repo, 'fairy-system/capability-matrix.json')}" ${run}`,
     };
   }
-  return { status: 'ok', name: '测试门前提', detail: '比较对象与 profile 都就位', fix: '' };
+  const why = [];
+  if (!found.length) why.push('没找到 0.1.1-rc.2 制品（找过 $DSH_OFFICIAL_PACKAGE 与 ~/.local/lib/…）');
+  else if (!usable) {
+    const bad = found.map((f) => `${f.pkg}（版本 ${f.version || '?'}${f.hasRuntime ? (f.hashOk ? '' : '，runtime sha256 与 pin 不符') : '，缺嵌套 runtime'}）`);
+    why.push(`候选都不合用：${bad.join('；')}`);
+  }
+  if (!suitHome) why.push(`没有装齐的 profile（找过 ${homes.length} 个 home，逐个缺 ${planted.join('/')} 之一）`);
+  return {
+    status: 'warn',
+    name: '测试门前提',
+    detail: `${why.join('\n    ')}\n    → preflight/upgrade 两组会整组红，属环境前提（不是代码回归）`,
+    fix: '按 AGENTS §3 指旋钮：DSH_OFFICIAL_PACKAGE / DSH_OFFICIAL_RUNTIME / DSH_HOME / DSH_CAPABILITY_MATRIX',
+  };
+}
+
+/** 读目录名，失败就返回空数组（不是所有父目录都读得了）。 */
+function readdirSafe(dir) {
+  try { return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name); }
+  catch { return []; }
+}
+
+/** 制品搜索根：系统临时目录 + 约定目录（Windows 上 `/tmp` 并非 `os.tmpdir()`）。 */
+export function artifactRoots() {
+  return [...new Set([
+    os.tmpdir(),
+    process.env.TMPDIR,
+    process.platform === 'win32' ? 'C:/tmp' : '/tmp',
+  ].filter(Boolean))];
+}
+
+/**
+ * 在约定目录里找现成的 0.1.1-rc.2 制品（`<搜索根>/dsh-<任意后缀>` 下的
+ * `node_modules/@deepseek-ai/dsh/package.json`）。本机的 `C:/tmp/dsh-011` 就是这类——
+ * 测试门要的比较对象往往早就在机器上，让体检**自己找**比逼人去装一份新的合理。
+ */
+function discoverArtifacts() {
+  const out = [];
+  for (const root of artifactRoots()) {
+    for (const dir of readdirSafe(root)) {
+      if (!/^dsh[-_.]/i.test(dir)) continue;
+      const pkg = path.join(root, dir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json');
+      if (existsSync(pkg)) out.push(pkg);
+    }
+  }
+  return out;
 }
 
 /** 跑全部检查。任何单个检查抛错都降级成 fail，不影响其余检查。 */
