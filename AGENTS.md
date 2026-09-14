@@ -257,24 +257,29 @@ done
 机器上 `verify.js`/`check.sh` 依赖 macOS live 布局，不适合作为本地验证入口；
 `verify-build.js` 与 `image-manifest.js` 才是跨平台的那两道。）
 
-具体一点：**没有官方安装时 `preflight.test.js` 与 `upgrade.test.js` 会整组失败**
-（13 例 = preflight 6 + upgrade 7）。两组的**外部前提不同**，别混：
+具体一点：**没有官方安装时 `preflight.test.js` 与 `upgrade.test.js` 会整组失败**。
+本机 2026-09-14 的处置与现状：
 
-- `preflight.test.js`（6）：要 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json`
-  存在（`preflight-build.js:13-14` 的默认路径，Windows 上根本没有），版本还得是官方
-  **0.1.1-rc.2**（hash + lock 清单都 pin 死）。它把 `DSH_HOME` 指向临时夹具
-  （`preflight.test.js:76`），所以**读不到主环境**——补 `~/.dsh` 对它没用。
-- `upgrade.test.js`（7）：`createIsolatedFixture` 要从 `$DSH_HOME`（缺省 `~/.dsh`）的
-  profile 里链接十个插件包 + 官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份
-  runtime（默认同为 `~/.local/…`）。缺任一环就在 `realpathSync` 上 ENOENT。
+- `preflight.test.js`（6）——**已补绿**。它要 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json`
+  存在（`preflight-build.js:13-14` 的默认路径）且是官方 **0.1.1-rc.2**（hash + lock 清单 pin 死）。
+  补法（不碰宿主的 `~/node_modules`）：`npm pack @deepseek-ai/dsh@0.1.1-rc.2` 与
+  `@deepseek-ai/dsh-client-runtime@0.1.1-rc.2`，手工解到上面那条路径（后者按嵌套位置
+  `dsh/node_modules/@deepseek-ai/dsh-client-runtime/` 摆）。registry 那份的
+  `lib/client.js` sha256 与 pin 的 `13a5fe0…f669` 逐字节一致，所以 hash 断言也过。
+  **别用 `npm install` 装它**：`.local/lib` 没有自己的 `package.json`，npm 会向上找到
+  `~/package.json` 当工程根并 reify 宿主那棵树。
+- `upgrade.test.js`（7）——要 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 装齐十个插件包 +
+  官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份 runtime（默认同为 `~/.local/…`）。
+  本机 `~/.dsh` 的 profile 只声明了 browser-dock/balance-meter/dsh-web/@dsh-external-*，
+  **没有** fairy 插件包，所以那 7 例只在默认 home 下红；`DSH_HOME` 指向装齐的部署
+  （如 `~/.dsh-fairy`）时 **7/7 绿**。另注：`upgrade-preflight.js:38` 把 capability-matrix
+  的默认路径硬编码成 `~/.dsh/fairy-system/capability-matrix.json`（不认 `DSH_HOME`），
+  所以那份文件要存在于 `~/.dsh` 下才走得下去。
 
-即：**"补 `~/.dsh`"只对 upgrade 那 7 例有意义**。这是环境前提，不是代码回归；而且它们守的是
-0.1.1-rc.2 的升级契约，本机跑 0.1.5-rc.2——补绿等于在这台机器上并存一份旧官方安装。
-其余 **62 例**（= 75 − 13；含 10 例
-`image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装，任何平台都该
-**61 通过 + 1 跳过**（跳过的那例是 `world-core tool definition passes the host schema engine`，
-本机解析不到 `@deepseek-ai/dsh-tools` 时它才 skip）；其中 `repo-update`（本地 bare 仓当远端）
-与 `host-align`（临时目录造假安装树，不碰 git）两组连网络都不用。
+修后实测：全量 **75 例，68 通过 / 6 失败 / 1 跳过**（6 例即默认 home 下的 upgrade 组；
+把 `DSH_HOME` 指向装齐的部署时那组转绿，只剩 6 例是**默认 home 的 profile 未部署**）。
+其余用例（含 10 例 `image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装
+与部署成色，任何平台都该绿。
 
 **预设健康检查**（发现器的真实判定，避免"能启动但选不中"；服务运行中执行，
 端口取启动日志 `dsh web: http://127.0.0.1:<port>`）：

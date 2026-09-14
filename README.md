@@ -136,22 +136,24 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 `fairy-system/test/` 里比较「当前 live 布局」的用例需要 `DSH_HOME` + `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已安装的官方 runtime；缺这两个旋钮时它们没有比较对象（不是断言放宽）。纯 Windows 机器上 `verify.js` / `check.sh` 依赖 macOS live 布局，不适合作为本地验证入口。
 
-2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **75 例，61 通过 / 13 失败 / 1 跳过**（加了用例计数就会变——对不上时以实跑为准，别为凑数字改断言）。
-13 例的归属与**真实外部前提**（逐个跑出失败行核对过，不是估的）：
+2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **75 例，68 通过 / 6 失败 / 1 跳过**（加了用例计数就会变——对不上时以实跑为准，别为凑数字改断言）。这 6 例全部来自 `upgrade.test.js`，且只在默认 home（`~/.dsh`，其 profile 未部署 fairy 插件包）下失败；`DSH_HOME` 指向已装齐的部署时那 7 例是 **7/7 绿**。
+`preflight.test.js` 那 6 例**已经补绿**（补的是 pin 死的官方 0.1.1-rc.2 到 `preflight-build.js` 的默认路径）。
+13 例（修前）的归属与**真实外部前提**（逐个跑出失败行核对过，不是估的）：
 
-| 组 | 例数 | 缺的东西（实测失败行） | 能不能补 |
+| 组 | 例数 | 缺的东西（实测失败行） | 怎么补 |
 | --- | --- | --- | --- |
-| `preflight.test.js` | 6 | `DSH_PREFLIGHT_ERROR scope="dsh_version" file="…/.local/lib/node_modules/@deepseek-ai/dsh/package.json" actual="ENOENT"`——它按 `preflight-build.js:13-14` 的默认路径找官方包 | 需在那条路径装**官方 0.1.1-rc.2**（`dsh-client-runtime@0.1.1-rc.2` 在 registry 上仍 200） |
-| `upgrade.test.js` | 7 | `ENOENT: lstat '…\.dsh\profiles\web\node_modules\dsh-fairy-persona'`——`createIsolatedFixture` 要从当前 profile 链接十个插件包 + 官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份 runtime（默认同为 `~/.local/…`） | 需 `--home` 那份 profile 装齐插件（即一次 `deploy-live.sh`），**且** runtime 路径也要能解析 |
+| `preflight.test.js` | 6 | `DSH_PREFLIGHT_ERROR scope="dsh_version" file="…/.local/lib/node_modules/@deepseek-ai/dsh/package.json" actual="ENOENT"`——按 `preflight-build.js:13-14` 的默认路径找官方包，版本须是官方 **0.1.1-rc.2** | **已补**：装着该路径后 6/6 绿。registry 上那份的 `dsh-client-runtime/lib/client.js` sha256 与 preflight pin 的 `13a5fe0…f669` **逐字节一致**，所以 hash 断言也过 |
+| `upgrade.test.js` | 7 | 要从 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 链接十个插件包 + 官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份 runtime（默认同为 `~/.local/…`） | **两种活法**：① `DSH_HOME` 指向已装齐的部署（如 `~/.dsh-fairy`）→ 7/7 绿；② 把插件包部署进 `~/.dsh/profiles/web`（本机那份只声明了 browser-dock/balance-meter/dsh-web/@dsh-external-*，**没有** fairy 插件包） |
 
 注意两组的 `DSH_HOME` 处理不同：`preflight.test.js` 把 `DSH_HOME` 指向临时夹具
-（`preflight.test.js:76`），所以它**读不到**主环境；`upgrade.test.js` 则用
-`$DSH_HOME` 或退回 `~/.dsh`。**因此"补 `~/.dsh`"只对 upgrade 那 7 例有意义，
-对 preflight 那 6 例没用**——后者要的是官方安装路径上的 0.1.1-rc.2。
+（`preflight.test.js:76`），所以它**读不到**主环境；`upgrade-preflight.js:38` 又把
+capability-matrix 的默认路径**硬编码**成 `~/.dsh/fairy-system/capability-matrix.json`
+（不认 `DSH_HOME`），所以 `.dsh-fairy` 里也要有那份文件才走得下去。
 
-**要不要补**：这 13 例守的是 **0.1.1-rc.2 的升级/预检契约**（pin 死版本 + runtime SHA-256
-+ lock 清单），而本机跑的是 0.1.5-rc.2——补绿它们等于在这台机器上并存一份旧官方安装。
-**不要为了让它们变绿而改断言**（AGENTS §4）；按"gate 无可比对象"如实报告即可。
+**为什么还要留着这 13 例**：它们守的是 **0.1.1-rc.2 的升级/预检契约**（pin 死版本 +
+runtime SHA-256 + lock 清单），本机日常跑 0.1.5-rc.2。跑它们需要 `DSH_HOME` 指向一份
+装齐的部署——**不要为了让它们变绿而改断言**（AGENTS §4），也不要把日常 home 改造成
+测试用的部署形态。
 
 | 测试文件 | 守的是什么 |
 | --- | --- |
