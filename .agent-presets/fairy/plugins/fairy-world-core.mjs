@@ -23,8 +23,11 @@ const TOOL_TIMEOUT_MS = 10_000;
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 8;
 
-/** 加载门控：systemPrompt 不在时本行不加载（而不是加载后静默不挂段落）。 */
-export const inject = ['systemPrompt'];
+/** 加载门控：systemPrompt 与 tools **都要声明**——本行除挂段落外还注册 fairy_world_lookup
+ *  （`ctx.tools.register`）。cordis 的门控是"没 inject 就不能取该属性"，此前只声明了
+ *  systemPrompt，于是在**新会话挂载 fairy preset** 时直接抛
+ *  `cannot get property "tools" without inject`（既有会话不受影响：已挂载的不再走这一步）。 */
+export const inject = ['systemPrompt', 'tools'];
 
 function worldCoreDir() {
   const root = String(process.env.DSH_FAIRY_REPO_ROOT ?? '').replace(/\\/g, '/').replace(/^\/+/, '');

@@ -397,6 +397,14 @@ Defender 组合会在 `AmsiScanBuffer` 里抛 `AccessViolationException`，脚�
 `Invoke-Expression` **都不解决**——AMSI 与执行策略无关，扫的是脚本内容。绕行只有"别让 PS
 解析这段脚本"：直接 `node <runtime> --profile web --no-open --port N` 配那四个环境变量，或用 `.cmd`。
 
+**改引擎 / preset 后要不要重启**：host 插件在 **boot 期** apply；而 preset（`agent.cordis.yml` 的行，
+含 `plugins/fairy-*.mjs` 与 `runtime/*.js`）是**按会话挂载**的——改完**新建一个会话**就用上了，
+**不必重启实例**（既有会话保持挂载时的那份）。判据：boot 日志里只有 host 模块打
+`DSH_FAIRY_LOG …"module":"dsh-…"`，preset 行**不会**出现在 boot 日志里——所以"boot 日志没有引擎
+import 痕迹"是正常现象，不能读作"在跑降级"。这条此前在本仓被写反过（写成"只在启动时 import 一次、
+必须重启"）。要眼见为实：在实例上建一个 fairy 会话问它"你系统提示里【Fairy 语音核心】标题括号里写的是
+完整模式还是降级模式"，模型逐字复述即可判定。
+
 
 - **浏览器 Dock 的"在外部浏览器接管一次"没反应**：接管在 Windows 上走
   `cmd /d /s /c start "" "…"`，浏览器由 `DSH_FAIRY_HANDOFF_BROWSER` 选（空=系统默认）。
