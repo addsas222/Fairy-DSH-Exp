@@ -136,24 +136,49 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 `fairy-system/test/` 里比较「当前 live 布局」的用例需要 `DSH_HOME` + `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已安装的官方 runtime；缺这两个旋钮时它们没有比较对象（不是断言放宽）。纯 Windows 机器上 `verify.js` / `check.sh` 依赖 macOS live 布局，不适合作为本地验证入口。
 
-2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **75 例，68 通过 / 6 失败 / 1 跳过**（加了用例计数就会变——对不上时以实跑为准，别为凑数字改断言）。这 6 例全部来自 `upgrade.test.js`，且只在默认 home（`~/.dsh`，其 profile 未部署 fairy 插件包）下失败；`DSH_HOME` 指向已装齐的部署时那 7 例是 **7/7 绿**。
-`preflight.test.js` 那 6 例**已经补绿**（补的是 pin 死的官方 0.1.1-rc.2 到 `preflight-build.js` 的默认路径）。
-13 例（修前）的归属与**真实外部前提**（逐个跑出失败行核对过，不是估的）：
+2026-09-14 在 Windows 开发机上的实测（两种跑法，差的就是**有没有给比较对象**）：
 
-| 组 | 例数 | 缺的东西（实测失败行） | 怎么补 |
+| 跑法 | 结果 |
+| --- | --- |
+| **仓库自己的口子**（下节那四个旋钮） | **75 例：74 通过 / 0 失败 / 1 跳过** |
+| 什么都不给（默认 `~/.local` + `~/.dsh`） | 75 例：61 通过 / 13 失败 / 1 跳过 |
+
+那 1 例跳过是 `fairy-preset-shims.test.js` 的 world-core schema 用例（解析不到官方
+`@deepseek-ai/dsh-tools` 时按设计 `t.skip`），**不报红**。
+
+**怎么拿到全绿——按仓库自己的口子，别动真实环境**（`scripts/test-isolated.sh:44-57,92-95`
+的既有契约），本机现成的 0.1.1-rc.2 制品在 `C:/tmp/dsh-011`：
+
+```sh
+D=C:/tmp/dsh-011/node_modules/@deepseek-ai/dsh
+DSH_OFFICIAL_PACKAGE="$D/package.json" \
+DSH_OFFICIAL_RUNTIME="$D/node_modules/@deepseek-ai/dsh-client-runtime/lib/client.js" \
+DSH_CAPABILITY_MATRIX="$PWD/fairy-system/capability-matrix.json" \
+DSH_HOME=~/.dsh-fairy \
+  node --test fairy-system/test/*.test.js
+```
+
+两个旋钮**不齐就整组不跑**（`test-isolated.sh` 只提示、不报红）——那才是这套门的正常形态。
+**不要**为了让它们变绿而改断言（AGENTS §4），也**不要往真实 `~/.dsh` 拷资产**（§5.6）：
+`DSH_CAPABILITY_MATRIX` 就是为替代那种拷贝而存在的，手拷的锚点会随仓库变旧。
+
+13 例（不给比较对象时）的归属与**真实外部前提**（逐个跑出失败行核对过，不是估的）：
+
+| 组 | 例数 | 缺的东西（实测失败行） | 怎么给 |
 | --- | --- | --- | --- |
-| `preflight.test.js` | 6 | `DSH_PREFLIGHT_ERROR scope="dsh_version" file="…/.local/lib/node_modules/@deepseek-ai/dsh/package.json" actual="ENOENT"`——按 `preflight-build.js:13-14` 的默认路径找官方包，版本须是官方 **0.1.1-rc.2** | **已补**：装着该路径后 6/6 绿。registry 上那份的 `dsh-client-runtime/lib/client.js` sha256 与 preflight pin 的 `13a5fe0…f669` **逐字节一致**，所以 hash 断言也过 |
-| `upgrade.test.js` | 7 | 要从 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 链接十个插件包 + 官方 `dsh-client-ui-conversation`，并 `copyFileSync` 一份 runtime（默认同为 `~/.local/…`） | **两种活法**：① `DSH_HOME` 指向已装齐的部署（如 `~/.dsh-fairy`）→ 7/7 绿；② 把插件包部署进 `~/.dsh/profiles/web`（本机那份只声明了 browser-dock/balance-meter/dsh-web/@dsh-external-*，**没有** fairy 插件包） |
+| `preflight.test.js` | 6 | 一份官方 **0.1.1-rc.2**：`preflight-build.js:13-14` 默认按 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json` 找，且其 `dsh-client-runtime/lib/client.js` 的 sha256 必须等于 pin 的 `13a5fe0e…f669` | 用 `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指过去（`preflight-build.js:251-252`），不必装到默认路径 |
+| `upgrade.test.js` | 7 | `$DSH_HOME`（缺省 `~/.dsh`）的 profile 要装齐十个插件包 + 官方 `dsh-client-ui-conversation` + `dsh-reasoning-effort` / `dsh-message-edit`（`upgrade.test.js:40-43` 逐个 `realpathSync`），并 `copyFileSync` 一份 runtime | `DSH_HOME` 指向 **`~/.dsh-fairy`**——本仓在这台机器的部署，profile 里 12 个包齐 |
 
-注意两组的 `DSH_HOME` 处理不同：`preflight.test.js` 把 `DSH_HOME` 指向临时夹具
-（`preflight.test.js:76`），所以它**读不到**主环境；`upgrade-preflight.js:38` 又把
-capability-matrix 的默认路径**硬编码**成 `~/.dsh/fairy-system/capability-matrix.json`
-（不认 `DSH_HOME`），所以 `.dsh-fairy` 里也要有那份文件才走得下去。
+⚠️ `~/.dsh` 是**另一条线**（`@deepseek-ai/dsh-app-boot` + `dsh-web` + `@dsh-external/*`，
+只 link 了 balance-meter/browser-dock），**不含** fairy 插件包是设计如此。**别对它跑
+`deploy-live.sh`**：那会用本仓 profile 覆盖它的 manifest，且与 AGENTS §1.1「同一 profile
+不能共跑 dsh-web」冲突。本仓在那台机器上的部署是 `~/.dsh-fairy`。
 
-**为什么还要留着这 13 例**：它们守的是 **0.1.1-rc.2 的升级/预检契约**（pin 死版本 +
-runtime SHA-256 + lock 清单），本机日常跑 0.1.5-rc.2。跑它们需要 `DSH_HOME` 指向一份
-装齐的部署——**不要为了让它们变绿而改断言**（AGENTS §4），也不要把日常 home 改造成
-测试用的部署形态。
+两个查证过的实现事实：① registry 上 `@deepseek-ai/dsh-client-runtime@0.1.1-rc.2` 的
+`lib/client.js` 与 pin 的哈希**逐字节一致**（`npm pack` 解包算过）；② `@deepseek-ai/dsh`
+的 manifest 里**没有**声明 `dsh-client-runtime`，所以「装 `dsh` 就会自动出现嵌套 runtime」
+不成立——得靠旋钮或显式补放。另外别用 `npm install` 往 `~/.local/lib` 装：那里没有自己的
+`package.json`，npm 会向上找到 `~/package.json` 当工程根并 reify 宿主那棵树。
 
 | 测试文件 | 守的是什么 |
 | --- | --- |

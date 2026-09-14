@@ -27,9 +27,9 @@ function fakeRuntime(spec) {
   return { root: path.join(root, 'node_modules'), cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-function run(args) {
+function run(args, env) {
   try {
-    const stdout = execFileSync(process.execPath, [TOOL, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdout = execFileSync(process.execPath, [TOOL, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: env ?? process.env });
     return { code: 0, stdout };
   } catch (error) {
     return { code: error.status ?? 1, stdout: String(error.stdout ?? '') + String(error.stderr ?? '') };
@@ -77,8 +77,15 @@ test('dry-run never touches the install and still reports the plan', () => {
 test('a --runtime without the dsh package is rejected as usage error', () => {
   const rt = fakeRuntime({ 'dsh-settings': '0.1.5-rc.2' });   // 没有 dsh 本体 → 取不到目标版本
   try {
-    const r = run(['check', '--runtime', rt.root]);
+    // 必须挡住"向上回退"：resolveRuntimeDir 在 --runtime 之后会试
+    // `$DSH_HOME/../node_modules`，而批跑时若继承了外层的 DSH_HOME（例如部署 home
+    // 的父目录下正好有带 dsh 本体的 node_modules），夹具的"缺 dsh 本体"前提就被绕过，
+    // 于是这条会因为环境而翻红。显式把 DSH_HOME 指到空目录，并另给一个空的 home 回退位。
+    const empty = mkdtempSync(path.join(tmpdir(), 'host-align-empty-'));
+    const env = { ...process.env, DSH_HOME: empty };
+    const r = run(['check', '--runtime', rt.root], env);
     assert.equal(r.code, 2, '用法/前置错误应与"混版"区分（退出码 2）');
     assert.match(r.stdout + r.stdout, /dsh|找不到/);
+    rmSync(empty, { recursive: true, force: true });
   } finally { rt.cleanup(); }
 });
