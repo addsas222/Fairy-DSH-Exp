@@ -1,7 +1,7 @@
 # Third-party notices
 
-本仓库不复制第三方源码，唯一例外是 `.agent-presets/ponytail/skills/`：该目录
-再分发 ponytail 技能文本（MIT，见下表「再分发的第三方内容」）。其余第三方依赖
+本仓库不复制第三方源码，也不随仓库分发第三方技能文本：ponytail 规则技能组（MIT）
+在**本机**按上游条款安装使用，来源与许可见下表。其余第三方依赖
 由包管理器或 DSH 宿主安装；它们不在 Fairy-DSH 的 Apache-2.0 原创代码许可范围内，
 发布时必须继续保留各自的许可证、版权和 NOTICE 要求。
 
@@ -23,11 +23,11 @@
 宿主提供，不随本仓库 vendoring，也不由本项目重新授权。使用者应按照 DSH
 发行包中的许可证和版权文件处理。
 
-## 再分发的第三方内容
+## 本机安装的第三方技能（不随仓库分发）
 
 | 内容 | 位置 | 许可证 | 版权 / 来源 |
 | --- | --- | --- | --- |
-| ponytail 技能组 | `.agent-presets/ponytail/skills/ponytail*/SKILL.md` | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)；许可证全文见 `.agent-presets/ponytail/skills/ponytail.LICENSE` |
+| ponytail 技能组 | 本机技能根（如 `~/.omp/agent/skills/`），**不在本仓库内** | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
 
 ## 运行期从 CDN 加载的第三方引擎（未随仓库分发）
 

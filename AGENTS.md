@@ -37,7 +37,7 @@
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
 | `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/ponytail/` | 模式预设（**公开入口**；自带 ponytail 规则技能、modes 与 memory 的 agent 面 shim） |
+| `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim。ponytail 规则技能按上游 MIT 在**本机技能根**安装，不入库、不随部署落位） |
 | `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |

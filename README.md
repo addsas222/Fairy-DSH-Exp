@@ -60,10 +60,9 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 ## 第三方依赖
 
-第三方包只通过 manifest/lockfile 引用，不复制其源码；唯一例外是
-`.agent-presets/ponytail/skills/` —— 该目录是 MIT 授权的 ponytail 技能文本
-（来源与许可见 `THIRD_PARTY_NOTICES.md`）。许可证与来源在
-`THIRD_PARTY_NOTICES.md` 中维护。
+第三方包只通过 manifest/lockfile 引用，**不复制其源码**（含 ponytail 技能文本：
+它按上游 MIT 条款使用，但只在本机安装、不随本仓库分发，来源与许可见
+`THIRD_PARTY_NOTICES.md`）。许可证与来源在 `THIRD_PARTY_NOTICES.md` 中维护。
 
 ## 致谢
 
@@ -78,7 +77,7 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 **社区插件**：[Moeblack/dsh-message-edit](https://github.com/Moeblack/dsh-message-edit)、[HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort)——本仓库只 pin，不复制源码。
 
-**再分发内容**：[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)——`.agent-presets/ponytail/skills/` 下的技能文本（MIT）。
+**本机安装、不随仓库分发**：[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)——ponytail 规则技能组（MIT），按上游条款在**本机**安装使用，不进本仓库、不随部署落位。
 
 **运行期从 CDN 加载的语音引擎**：[hexgrad/kokoro](https://github.com/hexgrad/kokoro)（kokoro-js）、[vits-web 生态的 piper-tts-web](https://github.com/diffusionstudio/vits-web)（含 onnxruntime-web）、[KittenML/KittenTTS](https://github.com/KittenML/KittenTTS)（权重 Apache-2.0）与 [Algiras/kitten-tts-js](https://github.com/Algiras/kitten-tts-js)（社区非官方移植）。
 

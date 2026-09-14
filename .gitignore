@@ -11,3 +11,7 @@ playwright-profile/
 world-core/
 browser-evidence/
 benchmarks/
+
+# ponytail 技能组（MIT，上游再分发内容）只在本机 ~/.omp/agent/skills/_ponytail-vendor/ 留存，
+# 不入库、不随部署分发。
+.agent-presets/ponytail/skills/
