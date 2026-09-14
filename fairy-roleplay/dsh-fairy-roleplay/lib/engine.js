@@ -10,7 +10,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 import { FAIRY_ROLEPLAY_DEFAULTS, roleplayConfigPath, roleplayStylePath } from './index.js';
+import { readFileSync } from 'node:fs';
 import { check, renderReport } from './humanizer.js';
+import { buildRoleplayPrefsText } from './prefs.js';
 import { mergeStyleEntries, parseStyleEntries, parseStyleFile, renderStyleBlock } from './style.js';
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-roleplay');
@@ -170,7 +172,47 @@ export function apply(ctx) {
   return diagnostics.guard('apply', () => {
     ctx.tools.register(createRoleplayCheckTool());
     ctx.tools.register(createRoleplayStyleTool());
+    /* 动态段落：文本每轮按设置渲染（官方 plan-mode 用的同一种函数式 text）。顺序排在
+     * 模式段落与流水线段落之后；拿不到 section 顺序的 cohort 用 53（plan 政策 50 之后）。 */
+    const prefs = createPrefsReader();
+    let cached = '';
+    ctx.systemPrompt.section({
+      name: 'fairy:roleplay-prefs',
+      order: typeof ctx.systemPrompt.getSectionOrder === 'function' ? ctx.systemPrompt.getSectionOrder('PLAN_POLICY') + 3 : 53,
+      text: () => cached,
+    });
+    void prefs().then((text) => { cached = text; });
+    ctx.on?.('agent/pre-step', async (_payload, next) => {
+      cached = await prefs();
+      return next();
+    });
   }, { surface: 'agent' });
 }
 
-export const inject = ['tools'];
+/**
+ * 设置卡 → 提示词：偏好段落按当前设置渲染，是那些开关的唯一消费者。
+ *
+ * ponytail: 1 秒记忆（与 persona 包同一策略）——设置改动最多 1 秒后生效，代价是
+ * 每秒至多两次小文件读；升级路径：宿主在 /fairy-roleplay/config 写入后广播失效。
+ */
+function createPrefsReader({ getSettings = readRoleplaySettings, stylePath = roleplayStylePath } = {}) {
+  let cache = { at: 0, text: '' };
+  const readStyleEntries = (path) => {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      return Array.isArray(parsed?.entries) ? parsed.entries : [];
+    } catch {
+      return [];
+    }
+  };
+  return async () => {
+    const now = Date.now();
+    if (now - cache.at > 1_000) {
+      const settings = await getSettings();
+      cache = { at: now, text: buildRoleplayPrefsText(settings, readStyleEntries(stylePath(settings))) };
+    }
+    return cache.text;
+  };
+}
+
+export const inject = ['tools', 'systemPrompt'];

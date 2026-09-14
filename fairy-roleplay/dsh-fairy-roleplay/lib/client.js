@@ -16,6 +16,13 @@ window.__ModuleLoader__.load({
       { value: 'l4', label: 'L1-L4 含通读终审' },
     ];
 
+    const TOGGLES = {
+      timingGate: '时机门（只在该开口时回复，其余保持沉默）',
+      styleEnabled: '使用风格库（角色自己的表达优先）',
+      autoCheck: '发送前自检（模型先跑一遍去AI味检查）',
+      memoryImpression: '记录聊天印象（值得记住的设定落到长期记忆）',
+    };
+
     function row(label, control) {
       return jsx.jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }, children: [
         jsx.jsx('span', { style: { flex: '0 0 260px', fontSize: '13px' }, children: label }),
@@ -76,6 +83,10 @@ window.__ModuleLoader__.load({
           style: { fontSize: '13px', minWidth: '240px' },
           children: LEVELS.map((level) => jsx.jsx('option', { value: level.value, children: level.label }, level.value)),
         })),
+        ...Object.entries(TOGGLES).map(([key, label]) => row(label, jsx.jsx('input', {
+          type: 'checkbox', checked: draft[key] !== false, 'data-dsh-fairy-roleplay-toggle': key,
+          onChange: (event) => change(key, event.target.checked),
+        }))),
         row('风格库文件', jsx.jsx('input', {
           type: 'text', value: draft.stylePath || '', placeholder: state?.style?.path || '$DSH_HOME/fairy-roleplay/style.json',
           'data-dsh-fairy-roleplay-style-path': 'true',

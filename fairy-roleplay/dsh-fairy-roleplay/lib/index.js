@@ -53,12 +53,20 @@ export function roleplayStylePath(settings) {
 export const FAIRY_ROLEPLAY_DEFAULTS = Object.freeze({
   version: 1,
   humanizerLevel: 'l1',
+  timingGate: true,
+  styleEnabled: true,
+  autoCheck: true,
+  memoryImpression: true,
   stylePath: '',
 });
 
 export const FairyRoleplaySettings = z.object({
   version: z.number().step(1).default(1),
   humanizerLevel: z.string().default(FAIRY_ROLEPLAY_DEFAULTS.humanizerLevel),
+  timingGate: z.boolean().default(FAIRY_ROLEPLAY_DEFAULTS.timingGate),
+  styleEnabled: z.boolean().default(FAIRY_ROLEPLAY_DEFAULTS.styleEnabled),
+  autoCheck: z.boolean().default(FAIRY_ROLEPLAY_DEFAULTS.autoCheck),
+  memoryImpression: z.boolean().default(FAIRY_ROLEPLAY_DEFAULTS.memoryImpression),
   stylePath: z.string().default(FAIRY_ROLEPLAY_DEFAULTS.stylePath),
 });
 
@@ -89,6 +97,9 @@ export function createRoleplaySettingsBoundary(initial = FAIRY_ROLEPLAY_DEFAULTS
 /** 只接受已知键，档位取值必须合法：设置面的输入不可信。 */
 function sanitizePatch(current, patch) {
   const next = { ...current };
+  for (const key of ['timingGate', 'styleEnabled', 'autoCheck', 'memoryImpression']) {
+    if (typeof patch?.[key] === 'boolean') next[key] = patch[key];
+  }
   const level = typeof patch?.humanizerLevel === 'string' ? patch.humanizerLevel.trim().toLowerCase() : '';
   if (HUMANIZER_LEVELS.includes(level)) next.humanizerLevel = level;
   if (typeof patch?.stylePath === 'string') next.stylePath = patch.stylePath.trim().slice(0, 400);

@@ -43,9 +43,11 @@ const withHome = async (run) => {
 
 test('the settings boundary only accepts known keys and valid levels', async () => {
   const settings = createRoleplaySettingsBoundary();
-  const next = await settings.write({ humanizerLevel: 'l9', bogus: 'x', stylePath: '  C:/tmp/style.json  ' });
+  const next = await settings.write({ humanizerLevel: 'l9', timingGate: false, bogus: 'x', stylePath: '  C:/tmp/style.json  ' });
   assert.equal(next.humanizerLevel, FAIRY_ROLEPLAY_DEFAULTS.humanizerLevel, 'an unknown level must not be stored');
   assert.equal(next.stylePath, 'C:/tmp/style.json', 'strings are trimmed');
+  assert.equal(next.timingGate, false, 'a boolean switch is stored');
+  assert.equal(next.autoCheck, true, 'and an untouched switch keeps its default');
   assert.equal('bogus' in next, false);
 });
 
@@ -67,9 +69,9 @@ test('the config route writes through and reports what changed', async () => {
     const settings = createRoleplaySettingsBoundary();
     const handlers = createFairyRoleplayHandlers({ settings });
     const res = fakeRes();
-    await handlers.config(fakeReq({ humanizerLevel: 'l3' }), res);
+    await handlers.config(fakeReq({ humanizerLevel: 'l3', memoryImpression: false }), res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body.changed, ['humanizerLevel']);
+    assert.deepEqual(res.body.changed.sort(), ['humanizerLevel', 'memoryImpression']);
     assert.equal(settings.read().humanizerLevel, 'l3');
   });
 });
