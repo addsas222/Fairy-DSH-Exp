@@ -266,8 +266,15 @@ curl -s -X POST -H 'content-type: application/json' \
    并提供保守的风险闸门（高风险动作先"警告。"并要求确认）。
    降级路径**不含**原 runtime 的统计式语音选择，其余人格与规则照常生效。
 
-实测（隔离实例，`agentPreset.list`）：修复前 `fairy user BROKEN: …`；修复后
-`fairy user ok`，且 10 个插件全部 `apply: outcome=success`。
+证据口径（别夸大）：`fairy user ok` 只证明**发现层**——行名合法、`entryListProblem` 通过。
+日志里那 10 条 `apply: outcome=success` 是 **profile 行**（dsh-balance-meter…fairy-voice 等
+host 面插件）产生的，**不含** preset 里这两个 shim；shim 的 `apply()` 至今**没有在任何
+真实会话里执行过**（没有人开过选用 `fairy` 预设的会话）。
+
+shim 的应用层验证目前只有单测：`fairy-system/test/fairy-preset-shims.test.js`（fakeHost 形状
+对齐 fairy-modes/test/modes.test.js）断言段落形状合法、两段不重名、私有真身存在时转发；
+把调用改回错误形状跑它会失败，故能防假绿。**真实会话内 apply 待验**：开一次选 fairy 的会话，
+看系统提示里是否出现 `fairy-voice-core` / `fairy-safety-gate` 两段。
 
 因此公开 clone 上 `fairy` 现在**可用**（降级模式）；把私有 `runtime/` 放到
 `$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy/runtime/` 即自动切换为完整模式，无需改配置。
