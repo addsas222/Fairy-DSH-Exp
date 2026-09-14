@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, exitFor, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, killCommandFor, exitFor, EXIT } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -178,6 +178,24 @@ test('安装进程签名：pnpm/yarn/bun 与非 node 进程都要认（不只 np
     '',
   ];
   for (const cmd of no) assert.equal(isInstallLikeCommand(cmd), false, `不该误报：${cmd}`);
+});
+
+test('命中时的命令按平台分岔（非 Windows 不能给 taskkill）', () => {
+  assert.match(killCommandFor(1234, 'win32'), /^taskkill \/PID 1234 \/T \/F$/);
+  const posix = killCommandFor(1234, 'darwin');
+  assert.match(posix, /kill -9 1234/);
+  assert.doesNotMatch(posix, /taskkill/, 'macOS/Linux 上没有 taskkill 这个命令');
+  const linux = killCommandFor(99, 'linux');
+  assert.match(linux, /kill -9 99/);
+  assert.doesNotMatch(linux, /taskkill/);
+});
+
+test('检测到 install 进程时不建议盲目杀（本仓日常就在跑 pnpm）', () => {
+  // 只测签名与措辞取向：真机扫描依赖环境，但"命中≠该杀"这条是必须钉住的口径——
+  // 旧文案直接给 `taskkill ... /T /F`，会把用户正在跑的部署杀掉。
+  assert.equal(isInstallLikeCommand('pnpm install --frozen-lockfile'), true);
+  const cmd = killCommandFor(4321, process.platform);
+  assert.ok(cmd.includes('4321'), '命令要带具体 PID');
 });
 
 test('退出码语义稳定（0 全绿 / 1 fail / 2 warn / 3 用法）', () => {

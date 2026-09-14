@@ -189,6 +189,14 @@ export function isInstallLikeCommand(cmdLine) {
   return /\b(install|add|ci|link|rebuild)\b/i.test(s) || /npm-cli\.js/i.test(s);
 }
 
+/**
+ * 命中时的"确认是残留再动手"命令——**按平台分岔**：非 Windows 上给 `taskkill` 是错的
+ * （那是 Windows 才有的命令）。Unix 侧用 `kill -9`；要连整棵树可加 `pkill -P <pid>`。
+ */
+export function killCommandFor(pid, platform = process.platform) {
+  return platform === 'win32' ? `taskkill /PID ${pid} /T /F` : `kill -9 ${pid}（子进程可用 pkill -P ${pid}）`;
+}
+
 /** ⑤ 残留安装进程：被取消/超时的安装可能仍在跑，且随时写树。按**命令行签名**认，不按进程名。 */
 export function checkStrayInstalls() {
   const hits = [];
@@ -224,12 +232,19 @@ export function checkStrayInstalls() {
   }
   if (note) return { status: 'unknown', name: '残留安装进程', detail: note, fix: '' };
   if (!hits.length) return { status: 'ok', name: '残留安装进程', detail: `无（扫了 ${scanned} 个候选进程）`, fix: '' };
+  // **不判 fail、不建议杀**：本仓日常就是 pnpm——`deploy-live.sh` 第 3/4 步与
+  // `test-isolated.sh` 都跑 `pnpm install`，正在进行的部署/测试会命中本条。此时
+  // `taskkill` 会杀掉用户（或我）刚起的活儿，是比"有个进程在写树"更糟的事故。
+  // 所以只报事实与影响：树的状态是快照、判定可能过期；要跑测试就**等它结束**。
   return {
-    status: 'fail',
+    status: 'warn',
     name: '残留安装进程',
-    detail: `有安装/落位进程仍在跑，随时会写树：\n    ` + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    '),
-    // 实测教训：job/会话里的"取消"不等于进程终止；必须按 PID 杀整个进程树
-    fix: hits.map((h) => `taskkill /PID ${h.pid} /T /F`).join('  &&  '),
+    detail: `有安装/落位进程在跑（${hits.length} 个）——本仓的部署与隔离回路都会跑 pnpm install，\n`
+      + '    命中很可能是**正在进行的正常部署**，不是残留：\n    '
+      + hits.map((h) => `PID ${h.pid}: ${h.cl}`).join('\n    ')
+      + '\n    → 本次体检的树状态是快照；等它结束后再复跑，别在写树过程中下结论',
+    fix: '若确认是自己起的部署/测试，等它跑完即可；**只有**在确认是失控残留时才 '
+      + killCommandFor(Number(hits[0].pid)),
   };
 }
 
