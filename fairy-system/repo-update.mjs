@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `repo-update.js` —— 检查并应用**本仓库自身**的更新。
+ * `repo-update.mjs` —— 检查并应用**本仓库自身**的更新。
  *
  * 边界（AGENTS §4/§5 把它钉死在哪）：
  *   - 只动这份仓库的代码：远端是否有更新 → `git ls-remote` 比 HEAD；应用 = `pull --ff-only`
@@ -12,8 +12,8 @@
  *     而 §5.3 禁止在任何自动化里跑 `evomap join`（外网注册 + 本机凭据）。
  *
  * 用法：
- *   node fairy-system/repo-update.js check [--json] [--remote NAME] [--branch NAME]
- *   node fairy-system/repo-update.js apply [--dry-run] [--home DIR] [--yes] [--remote NAME] [--branch NAME]
+ *   node fairy-system/repo-update.mjs check [--json] [--remote NAME] [--branch NAME]
+ *   node fairy-system/repo-update.mjs apply [--dry-run] [--home DIR] [--yes] [--remote NAME] [--branch NAME]
  *
  * 退出码（**离线绝不与"已最新"同码**——这台机器 GitHub 通路时通时断，同码会让检查静默说谎）：
  *   0 已最新 | 1 远端有更新（或 apply 后镜像仍需人工处理）| 2 网络/远端不可达 | 3 用法或前置条件错误
@@ -146,7 +146,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-const USAGE = `usage: repo-update.js <check|apply> [options]
+const USAGE = `usage: repo-update.mjs <check|apply> [options]
   check  只读：远端是否有更新（git ls-remote 比 HEAD）+ 镜像是否落后于提交
   apply  有更新时 git pull --ff-only，再走 scripts/deploy-live.sh 落位
 
@@ -207,7 +207,7 @@ async function main() {
 
   process.stdout.write(`\n⬆️  远端有更新（本地落后 ${remote.sha.slice(0, 7)}）\n`);
   if (options.verb === 'check') {
-    process.stdout.write('   应用：node fairy-system/repo-update.js apply\n');
+    process.stdout.write('   应用：node fairy-system/repo-update.mjs apply\n');
     return EXIT.BEHIND;
   }
 

@@ -21,7 +21,7 @@
 | `fairy-roleplay/` | 角色扮演：去AI味检查器（L1 词表 → L4 通读）+ 风格库 + 规划/时机/回复规则 |
 | `fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT 路线 |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
-| `fairy-system/` | 验证/预检/审计工具（`verify-build.js`、`image-manifest.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js`） |
+| `fairy-system/` | 验证/预检/审计工具（`verify-build.js`、`image-manifest.js`、`repo-update.mjs`、`host-align.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js`） |
 | `persona-packs/` | 内置人格包（`fairy`、`standard`） |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `.agent-presets/ponytail/` | 精简模式 preset（modes 与 memory 的 agent 面 shim；规则技能见下） |
@@ -136,6 +136,19 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 `fairy-system/test/` 里比较「当前 live 布局」的用例需要 `DSH_HOME` + `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已安装的官方 runtime；缺这两个旋钮时它们没有比较对象（不是断言放宽）。纯 Windows 机器上 `verify.js` / `check.sh` 依赖 macOS live 布局，不适合作为本地验证入口。
 
+2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **66 例，52 通过 / 13 失败**。
+13 例全部来自 `upgrade.test.js`，根因是前置条件缺失——`~/.dsh/profiles/web/node_modules/`
+下没有 `dsh-fairy-persona` 等包，夹具在 `realpathSync` 上直接 ENOENT（**不是断言放宽**，
+与 `repo-update` / `host-align` 的改动无关：stash 掉这两个改动后同样是 52/13）。
+新加的两组测试单独跑是 13/13 绿，且不依赖任何外部服务。
+
+| 测试文件 | 守的是什么 |
+| --- | --- |
+| `host-align.test.js` | 混版判定与退出码：独立版本线不误报、dry-run 不改动、"用法错"与"混版"分开（2 vs 1） |
+| `repo-update.test.js` | 远端落后/不可达/分支不存在三态分明（0/1/2）、脏工作树与缺部署脚本拒执行、`--dry-run` 不动 HEAD |
+
+两组都用**本地 bare 仓夹具**（`git init --bare` + `commit-tree`），**零外网**，符合 AGENTS §5.6。
+
 ---
 
 ## 6. 官方安装检查与对齐
@@ -153,13 +166,44 @@ Error: ... does not provide an export named 'SESSION_QUERY_DEFAULT_PREPARED_SESS
 ```
 
 看起来像代码 bug，实际是 `dsh-session-query@0.1.2-rc.1` 配 `dsh-session-query-sqlite@0.1.5-rc.2`。
-本机实测形态：208 个包是 0.1.5-rc.2，另有 23 个仍停在 0.1.2-rc.1（"只升级顶层 dsh、
-依赖树没全量重装"之后很常见）。
+这类混版在"只升级顶层 `dsh`、依赖树没全量重装"之后很常见。本机 2026-09-14 的实际形态与
+上面不同：**240 个包里 231 个是 0.1.5-rc.2**，非 0.1.5-rc.2 的 9 个全部是独立版本线
+（cordis/cosmokit/schemastery）+ 1 个原生构建物 `node-addon-system@0.1.2`——即按本工具的
+判据**无混版**。核查用 `node -e` 逐包读取比任何口径都可靠（`--json` 也只报判据内的结论）。
 
 判据：只比对**同一版本线**（如 0.1.x）的包；`cordis`/`cosmokit`/`schemastery` 等独立版本线
 不参与。默认也只动 `dsh-*` 家族（`node-addon-*` 是原生构建物，需显式 `--include-addons`）。
 这个脚本修改的是 **DSH 官方安装**（AGENTS §5.1 的只读边界）：只在宿主已混版且明确要对齐时用，
 **不要**放进 CI 或自动部署链。
+
+⚠️ `fix` 的 npm 是**整树 reify**，不是"只替换那几个目录"。实测在副本上对齐 3 个包时，
+npm 报的是 `removed 21 packages, changed 5 packages`——它会把 `<root>/node_modules` 的
+上层当工程根重算整棵树。因此：动真机前先备份 `package.json` / `package-lock.json` /
+`node_modules/.package-lock.json`，并**先在副本上用 `--runtime` 指过去跑通**。
+
+## 6.1 本仓库自身的更新
+
+```sh
+node fairy-system/repo-update.mjs check          # 只读：远端是否有更新 + 镜像是否落后于提交
+node fairy-system/repo-update.mjs apply --dry-run # 看将执行的动作
+node fairy-system/repo-update.mjs apply --yes     # pull --ff-only + 复用 deploy-live.sh 落位
+```
+
+只管**这份仓库的代码**：`git ls-remote` 比对远端（不下载、不写 `FETCH_HEAD`），
+应用是 `pull --ff-only` + `deploy-live.sh`（对账与两道门禁都在那条链里，不另写一套）。
+**不碰 DSH 版本**——`@deepseek-ai/*` 的升级走 §4 的候选择预检流程。
+
+退出码刻意把「离线」与「已最新」分开，因为这台机器到 GitHub 的通路时通时断：
+
+| 码 | 含义 |
+| --- | --- |
+| 0 | 已最新（镜像也一致） |
+| 1 | 远端有更新 / 镜像落后于提交 |
+| 2 | 网络或远端不可达——**不代表"已最新"** |
+| 3 | 用法或前置条件错误（脏工作树、缺 `deploy-live.sh`） |
+
+`apply` 默认带 `--skip-evomap`（AGENTS §5.3 禁止在任何自动化里跑 `evomap join`）；
+脏工作树或找不到部署脚本时**拒绝执行**，不留下"拉了一半"的状态。
 
 ## 7. 两道门禁
 

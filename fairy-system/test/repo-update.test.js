@@ -15,7 +15,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const TOOL = path.resolve(fileURLToPath(new URL('..', import.meta.url)), 'repo-update.js');
+const TOOL = path.resolve(fileURLToPath(new URL('..', import.meta.url)), 'repo-update.mjs');
 
 function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

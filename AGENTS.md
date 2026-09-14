@@ -35,7 +35,7 @@
 | `browser-dock/` | 浏览器 Dock（宿主插件 + 独立 `proxy.cjs` 进程 + `fs.watch` 状态桥） |
 | `fairy-startup/` | 启动动作（恢复会话选择、按 workspace 就绪开新会话） |
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
-| `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
+| `fairy-system/` | 验证/预检/审计工具：`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
 | `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
 | `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |
@@ -184,7 +184,23 @@ node fairy-system/skill-audit.js      # 技能/插件冗余审计（--self-test 
 # 镜像 vs 源的对账（只读；部署第 6 步自动跑的就是它）
 node fairy-system/image-manifest.js check --repo . --home "$DSH_HOME"
 node fairy-system/image-manifest.js --self-test        # 清单/prune 自检
+
+# 更新与一致性（都只读；上游有更新时 repo-update 以 exit 1 判决）
+node fairy-system/repo-update.mjs check      # 远端是否有更新 + 镜像是否落后于提交
+node fairy-system/host-align.js check        # 官方安装的 @deepseek-ai/* 是否同版本线一致
 ```
+
+`repo-update.mjs` 只负责**这份仓库的代码**：远端比对用 `git ls-remote`（不下载、不写
+FETCH_HEAD），应用是 `pull --ff-only` + 复用 `scripts/deploy-live.sh`（对账与两道门禁都在
+那条链里）。**它不碰 DSH 版本** —— `@deepseek-ai/*` 的升级属 §4 的候选择预检流程。
+退出码把「离线」与「已最新」分开（0 最新 / 1 有更新 / 2 网络或远端不可达 / 3 用法）：
+这台机器 GitHub 通路时通时断，同码会让检查静默说谎。无人值守用 `apply --yes`
+（默认已带 `--skip-evomap`；§5.3 禁任何自动化里跑 `evomap join`）。
+
+`host-align.js check` 只比**同一版本线**（0.1.x）内的 `dsh-*`，独立版本线
+（cordis/cosmokit/schemastery）与原生构建物（`node-addon-*`，需 `--include-addons`）不参与。
+它的 `fix` 会修改官方安装（§5.1 只读边界），**只在宿主已混版且明确要求对齐时**用，不进 CI。
+注意 `fix` 的 npm 是整树 reify，不是只替换那几个目录（实测会连带 removed/changed 别的包）。
 
 `image-manifest.js check` 报**三类**差异并以 exit 1 判决：`extra`（镜像里有、
 清单里没有 —— 上游删过的文件残留在这里）、`missing`（清单里有、镜像里没有）、
