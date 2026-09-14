@@ -139,7 +139,8 @@ export const inject = ['systemPrompt'];
 // 判据必须是"**本文件**是入口"——不能用 `argv[1].endsWith('index.js')`：那样任何
 // `import()` 到本文件的进程都会命中（`node -e 'import(...)'` 的 argv[1] 就是本文件），
 // 自检正文会污染调用方的 stdout。
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// 判据用**路径比较**（不靠 URL 形态）：任何 import 到本模块的进程都不能触发自检分支。
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const text = buildSectionText({ fidelity: 'strict', exampleLimit: 2 }) ?? '(语料不可用)';
   process.stdout.write(`${text}\n`);
   const checks = [

@@ -109,7 +109,8 @@ export async function apply(ctx, config = {}) {
 export const inject = ['systemPrompt'];
 
 // 同 index.js：必须判"本文件是入口"，否则 import 本文件的进程会被自检输出污染 stdout。
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// 同 index.js：路径比较，避免 import 本模块的进程触发自检、污染其 stdout。
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const text = buildSectionText({ fidelity: 'strict' });
   process.stdout.write(`${text}\n`);
   const checks = [

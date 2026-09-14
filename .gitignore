@@ -10,15 +10,23 @@ runtime/
 # …但 .agent-presets/fairy/runtime/{index.js,safety-gate.js} 是**显式 -f 跟踪**的例外：
 # 它们是公开语料（style/*.json + behavior/*.json）的产物，随仓分发以便任何机器部署后即可跑完整模式。
 #
-# 两条边界的**风险不在同一侧**：
-#   部署/对账侧：无害。 SKIP_POLICY 已把 `.agent-presets/fairy/runtime` 整目录排除
-#                （"私有部署资产，不进公开仓库"），放私有真身做 drop-in 不会被判 drift、
-#                也不会被部署覆盖——所以**不需要** --preserve，也**不要**在 LOCAL_ADAPTATIONS 里加条目。
+# 三条边界要分清（改这里前务必读完——写错会让人以为私有真身很安全）：
+#   对账 check/prune：无害。 SKIP_POLICY 有 `.agent-presets/fairy/runtime` 前缀项，
+#                     私有真身放 home 侧不会被判 drift，也不会被 prune 删掉。
+#   落位 deploy：**会覆盖**。 落位是 `git archive` 解包那份已跟踪内容，压根不看 SKIP_POLICY
+#                     （deploy 脚本自己的注释：落位会覆盖一切，包括 --preserve 声明的路径）。
+#                     → home 侧的私有真身，下一次 deploy 就会被仓里的公开引擎盖掉。
 #   git 侧：有风险。    它们已是"已跟踪文件"——把私有真身写到同名文件上，一次 `git add -A`
-#                就会把私有实现推上公开仓。替换前先脱钩：
-#   git update-index --skip-worktree .agent-presets/fairy/runtime/index.js
-#   git update-index --skip-worktree .agent-presets/fairy/runtime/safety-gate.js
-# （仓库内引擎的替代路径也可以是 plugins/ 下新增文件，而不是覆盖这两个。）
+#                     就会把私有实现推上公开仓。
+#
+# 所以放私有真身只有两条路，各自付代价（别只看好处）：
+#   A) 放 **repo 侧**（推荐）：私有真身成为受控内容，部署/对账/新机器全部正常；
+#      代价是 git 侧要盯住别误推（公开仓）。放之前先想清楚这份实现是否允许公开。
+#   B) 放 **home 侧** + 每次部署显式 `--preserve .agent-presets/fairy/runtime/index.js
+#      --preserve .agent-presets/fairy/runtime/safety-gate.js`：能保住 home 内容，
+#      代价是 home 的引擎从此**冻结**——仓库后续更新（或换成新真身）都不会再到达它，
+#      且每个跑部署的人都得记得带这两个参数，漏一次就被覆盖。
+#   （C) 想让两种模式并存，正解是改 preset 的 name 指向新路径，而不是覆盖这两个文件名。）
 playwright-profile/
 world-core/
 browser-evidence/

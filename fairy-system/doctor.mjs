@@ -417,12 +417,13 @@ export function checkFairyRuntime(home) {
     // 按**真实行为**判，不用正则：shim 的判据是 `typeof mod.apply === 'function'`，
     // 而正则两向都会偏——`export const apply = …` / `export { apply }` 明明能加载却会误报，
     // 注释里出现同样文字则会把"其实在降级"误报成完整模式（恰是这条检查要防的坑）。
-    // 注意要把路径转成 file:// URL——`import()` 不认 Windows 裸路径。
+    // URL 直接内联进探测代码，**不经 argv 传**：任何"argv[1] 恰为本模块路径"的写法都可能
+    // 命中模块自己的"直接运行才自检"分支，把整段提示喷进 stdout（那样这行判据必然不成立）。
+    const url = pathToFileURL(file).href;
     const probed = run(process.execPath, ['--input-type=module', '-e',
-      'const m = await import(process.argv[1]); process.stdout.write(typeof m.apply);',
-      pathToFileURL(file).href], { timeout: 60_000 });
+      `const m = await import(${JSON.stringify(url)}); process.stdout.write('typeof=' + typeof m.apply);`], { timeout: 60_000 });
     if (!probed.ok) return { label, state: 'unloadable', why: (probed.stderr || '').split('\n')[0].slice(0, 90) };
-    return { label, state: probed.out.trim() === 'function' ? 'full' : 'bad-signature' };
+    return { label, state: /typeof=function$/.test(probed.out.trim()) ? 'full' : 'bad-signature' };
   });
   const full = states.filter((s) => s.state === 'full');
   const broken = states.filter((s) => s.state === 'bad-signature' || s.state === 'unloadable');
