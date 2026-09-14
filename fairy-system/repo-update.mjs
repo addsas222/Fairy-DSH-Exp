@@ -165,13 +165,13 @@ export function isEntrypoint(argv1, moduleUrl) {
 }
 
 export function parseArgs(argv) {
-  const options = { verb: '', repo: REPO_DEFAULT, home: process.env.DSH_HOME ?? '', remote: 'origin', branch: '', json: false, dryRun: false, yes: false, skipEvomap: true, preserve: null };
+  const options = { verb: '', repo: REPO_DEFAULT, home: process.env.DSH_HOME ?? '', homeSource: process.env.DSH_HOME ? 'env' : 'default', remote: 'origin', branch: '', json: false, dryRun: false, yes: false, skipEvomap: true, preserve: null };
   let i = 0;
   if (argv[0] && !argv[0].startsWith('-')) { options.verb = argv[0]; i = 1; }
   for (; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--repo') options.repo = argv[++i];
-    else if (a === '--home') options.home = argv[++i];
+    else if (a === '--home') { options.home = argv[++i]; options.homeSource = 'flag'; }
     else if (a === '--remote') options.remote = argv[++i];
     else if (a === '--branch') options.branch = argv[++i];
     else if (a === '--json') options.json = true;
@@ -202,6 +202,25 @@ options:
 
 exit: 0 已最新 | 1 有更新或不一致（远端领先/本地领先/镜像落后） | 2 网络或远端不可达 | 3 用法或前置条件错误（含分叉）`;
 
+/**
+ * 状态 → 退出码。**JSON 与文本两条分支必须调这一个**：分开写就会漂移
+ * （实测漂过：`--json` 只看 state，于是"仓库最新但镜像落后"给 0、分叉给 1，
+ * 而文本分支分别给 1 和 3——同一状态两种结论，README 的语义表当场作废）。
+ */
+export function exitCode(state, mirrorStateName) {
+  if (state === 'diverged' || state === 'unknown') return EXIT.USAGE;   // 前置条件：需人工合/先 fetch
+  if (state === 'behind' || state === 'ahead') return EXIT.BEHIND;      // 与远端不一致
+  if (state === 'current' && mirrorStateName === 'behind') return EXIT.BEHIND;
+  return EXIT.CURRENT;
+}
+
+/** 镜像根那行的后缀：按 **来源** 说话，而不是看环境变量在不在。
+ *  （踩过：`--home X` 且未设 $DSH_HOME 时，明明已经显式指定，却还在叫用户"请显式 --home"。） */
+function homeLabel(source) {
+  if (source === 'flag') return '（--home）';
+  if (source === 'env') return '（$DSH_HOME）';
+  return '（默认 ~/.dsh——要查隔离实例请显式 --home）';
+}
 /** 各状态的人读说法。分开写是因为"本地领先"与"远端领先"的**动作完全不同**
  *  （前者要 push，后者才 pull），把它们都说成"远端有更新"是假话。 */
 const STATE_TEXT = {
@@ -236,14 +255,14 @@ async function main() {
   const mirror = mirrorState({ repo: root, home, preserve });
 
   if (options.json) {
-    process.stdout.write(`${JSON.stringify({ verb: options.verb, repo: root, branch, remote: options.remote, home, local, remoteHead: remote.sha, state, preserve, mirror }, null, 2)}\n`);
-    return state === 'current' ? EXIT.CURRENT : EXIT.BEHIND;
+    process.stdout.write(`${JSON.stringify({ verb: options.verb, repo: root, branch, remote: options.remote, home, homeSource: options.homeSource, local, remoteHead: remote.sha, state, preserve, mirror }, null, 2)}\n`);
+    return exitCode(state, mirror.state);
   }
 
   process.stdout.write(`仓库   : ${root}（${branch} → ${options.remote}/${branch}）\n`);
   // 必须回显 home：默认是 ~/.dsh，而隔离实例在别处——不回显时"镜像落后"看不出是在说谁
-  // （实测踩过：对 .dsh-fairy 部署完，CLI 报落后，其实查的是主环境 ~/.dsh）。
-  process.stdout.write(`镜像根 : ${home}${process.env.DSH_HOME ? '（$DSH_HOME）' : '（默认 ~/.dsh——要查隔离实例请显式 --home）'}\n`);
+  // （实测踩过：对 .dsh-fairy 部署完，CLI 报落后其实查的是主环境 ~/.dsh）。
+  process.stdout.write(`镜像根 : ${home}${homeLabel(options.homeSource)}\n`);
   process.stdout.write(`本机适配: ${preserve || '(无)'}\n`);
   process.stdout.write(`本地   : ${local.slice(0, 12)}\n远端   : ${remote.sha.slice(0, 12)}\n`);
   if (mirror.state === 'behind') process.stdout.write(`镜像   : 落后于提交（${mirror.detail}）\n`);
@@ -252,22 +271,19 @@ async function main() {
 
   if (state === 'current') {
     process.stdout.write('\n✅ 已是最新（本地 HEAD 与远端一致）\n');
-    if (mirror.state === 'behind') {
-      process.stdout.write('   但镜像落后：node scripts/deploy-live.sh --home <镜像> --skip-evomap\n');
-      return EXIT.BEHIND;
-    }
-    return EXIT.CURRENT;
+    if (mirror.state === 'behind') process.stdout.write('   但镜像落后：node scripts/deploy-live.sh --home <镜像> --skip-evomap\n');
+    return exitCode(state, mirror.state);
   }
 
   if (state === 'ahead' || state === 'diverged' || state === 'unknown') {
     process.stdout.write(STATE_TEXT[state](remote.sha));
-    return state === 'ahead' ? EXIT.BEHIND : EXIT.USAGE;
+    return exitCode(state, mirror.state);
   }
 
   process.stdout.write(STATE_TEXT.behind(remote.sha));
   if (options.verb === 'check') {
     process.stdout.write('   应用：node fairy-system/repo-update.mjs apply\n');
-    return EXIT.BEHIND;
+    return exitCode(state, mirror.state);
   }
 
   // --- apply ---

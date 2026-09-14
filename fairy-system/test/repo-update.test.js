@@ -94,19 +94,33 @@ function fixture() {
       git(repo, 'update-ref', 'refs/heads/main', sha);
       return sha;
     },
+    /** 两边各有对方没有的提交（分叉）。 */
+    diverged() {
+      const local = this.advanceLocal();
+      const remoteSha = this.colleaguePushes();
+      return { local, remote: remoteSha };
+    },
+    /** 把远端分支指向一个本地没有的全新提交（模拟"远端有本地从未 fetch 过的提交"）。
+     *  bare 仓没有工作树，不能用 commit 助手（它会 git add）；直接写一个空树提交。 */
+    rewindToUnknownRemote() {
+      const tree = execFileSync('git', ['mktree'], { cwd: remote, encoding: 'utf8', input: '' }).trim();
+      const sha = execFileSync('git', ['-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit-tree', tree, '-m', 'outside'], { cwd: remote, encoding: 'utf8' }).trim();
+      git(remote, 'update-ref', 'refs/heads/main', sha);
+      return sha;
+    },
     /** 只保留 git 目录之外的一个假家目录（用于镜像判定）。 */
     fakeHome() { const home = path.join(root, 'home'); mkdirSync(home, { recursive: true }); return home; },
   };
 }
 
-/** 跑工具，返回 { code, stdout }。 */
-function run(args) {
-  const result = execFileSync(process.execPath, [TOOL, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+/** 跑工具，返回 { code, stdout }。env 可覆盖环境（用于验证 $DSH_HOME 缺失时的文案）。 */
+function run(args, env) {
+  const result = execFileSync(process.execPath, [TOOL, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: env ?? process.env });
   return { code: 0, stdout: result };
 }
 
-function runAllowFailure(args) {
-  try { return run(args); } catch (error) { return { code: error.status ?? -1, stdout: `${error.stdout ?? ''}` }; }
+function runAllowFailure(args, env) {
+  try { return run(args, env); } catch (error) { return { code: error.status ?? -1, stdout: `${error.stdout ?? ''}` }; }
 }
 
 test('本地与远端一致时 check 退出 0，且 JSON 报 current', () => {
@@ -214,6 +228,83 @@ test('缺 deploy-live.sh 时 apply 拦阻（退出 3），不 pull', () => {
     assert.equal(r.code, 3);
     assert.match(r.stdout, /找不到 .*deploy-live\.sh/);
     assert.equal(git(f.repo, 'rev-parse', 'HEAD'), before);
+  } finally { f.cleanup(); }
+});
+
+test('JSON 与文本两条分支的退出码一致（镜像落后、分叉各自对齐）', () => {
+  const f = fixture();
+  try {
+    // ① 分叉：按 USAGE 是前置条件错误（3），两条分支都要 3
+    f.diverged();
+    const textDiv = runAllowFailure(['check', '--repo', f.repo]);
+    const jsonDiv = runAllowFailure(['check', '--repo', f.repo, '--json']);
+    assert.equal(JSON.parse(jsonDiv.stdout).state, 'diverged');
+    assert.equal(textDiv.code, 3, '分叉不是"有更新"（1）——人工合是前置条件问题');
+    assert.equal(jsonDiv.code, 3, 'JSON 分支此前落到 1');
+    assert.equal(textDiv.code, jsonDiv.code);
+    assert.match(textDiv.stdout, /分叉/);
+  } finally { f.cleanup(); }
+});
+
+test('镜像落后时 JSON 与文本同码（仓库最新 ≠ 全部最新）', () => {
+  const f = fixture();
+  try {
+    // 拿真仓库当"仓库侧"，把 home 指到一个受控的隔离目录：那里的模块清单必然对不上。
+    // （假 git 仓里没有 fairy-system/，镜像判定会被跳过——所以要换一边受控。）
+    const repo = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+    const home = path.join(f.root, 'past-home');
+    mkdirSync(home, { recursive: true });
+    const args = ['check', '--repo', repo, '--home', home];
+    const text = runAllowFailure(args);
+    const json = runAllowFailure([...args, '--json']);
+    const payload = JSON.parse(json.stdout);
+    assert.equal(payload.state, 'current', '这个仓库自己与远端一致（否则另说）');
+    assert.equal(payload.mirror.state, 'behind', '空 home 必然对不上清单');
+    assert.equal(text.code, json.code, 'JSON 与文本必须同码');
+    assert.equal(text.code, 1, '仓库最新但镜像落后 → 1，不是 0');
+  } finally { f.cleanup(); }
+});
+
+test('本地领先时 JSON 与文本都报 1', () => {
+  const f = fixture();
+  try {
+    f.advanceLocal();
+    const text = runAllowFailure(['check', '--repo', f.repo]);
+    const json = runAllowFailure(['check', '--repo', f.repo, '--json']);
+    assert.equal(JSON.parse(json.stdout).state, 'ahead');
+    assert.equal(text.code, 1);
+    assert.equal(json.code, 1, '方向未知不得被当成"已最新"或"用法错"');
+    assert.equal(text.code, json.code);
+  } finally { f.cleanup(); }
+});
+
+test('方向未知时退出 3——先 fetch 才能判，不是"已最新"', () => {
+  const f = fixture();
+  try {
+    f.rewindToUnknownRemote();   // 远端指向本地没有的提交
+    const r = runAllowFailure(['check', '--repo', f.repo]);
+    assert.equal(r.code, 3, '"判不出方向"与"已最新"必须分得清');
+    assert.match(r.stdout, /先 fetch/);
+  } finally { f.cleanup(); }
+});
+
+test('--home 是显式指定时，回显不该再叫用户"请显式 --home"', () => {
+  const f = fixture();
+  try {
+    const home = f.fakeHome();
+    const noEnv = { ...process.env };
+    delete noEnv.DSH_HOME;   // 关键：清掉 $DSH_HOME，否则测的是 env 那条文案
+
+    const withFlag = runAllowFailure(['check', '--repo', f.repo, '--home', home], noEnv);
+    assert.match(withFlag.stdout, /镜像根 : .*（--home）/);
+    assert.doesNotMatch(withFlag.stdout, /请显式 --home/);
+
+    const viaEnv = runAllowFailure(['check', '--repo', f.repo], { ...noEnv, DSH_HOME: home });
+    assert.match(viaEnv.stdout, /镜像根 : .*（\$DSH_HOME）/);
+
+    // 两者都没有时才提示（这条提示本身要保留）
+    const fallback = runAllowFailure(['check', '--repo', f.repo], noEnv);
+    assert.match(fallback.stdout, /默认 ~\/\.dsh/);
   } finally { f.cleanup(); }
 });
 
