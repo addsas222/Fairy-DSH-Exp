@@ -141,12 +141,28 @@ test('availability follows each engine own key or address rule', () => {
   assert.equal(availabilityKeyFor('perplexity'), 'perplexity');
 });
 
-test('the hub reports availability for the selected engine only', () => {
+test('the hub stays available while per-engine readiness stays honest', () => {
+  // harness 把「注册了这个 id 但 available() 为 false」当成配置错误硬抛
+  // （WEB_PROVIDER_CONFIGURED_UNAVAILABLE），而 profile 默认就把 provider 钉在 hub 上：
+  // hub 因此恒可用——缺引擎的问题推迟到调用点报出（见下一条用例），设置卡按引擎逐项显示。
   const hub = createFairySearchHub({ getSettings: () => ({ provider: 'exa' }), env: { DEEPSEEK_API_KEY: 'env-key' } });
   assert.equal(hub.id, FAIRY_SEARCH_PROVIDER_ID);
-  assert.equal(hub.available(), false);
+  assert.equal(hub.available(), true);
+  assert.equal(providerAvailability(resolveFairySearchSettings({ provider: 'exa' }), { DEEPSEEK_API_KEY: 'env-key' }).exa.available, false);
   const configured = createFairySearchHub({ getSettings: () => ({ provider: 'exa', exa: { apiKey: 'exa-key' } }), env: {} });
   assert.equal(configured.available(), true);
+});
+
+test('routing falls back to a configured engine, and names what is missing when none is', async () => {
+  const fetchImpl = recordingFetch(() => fetchResponse({ choices: [{ message: { content: 'ok' } }] }));
+  // 只配了 custom：默认引擎（deepseek-official）没有 key，路由仍要能搜。
+  const engine = createRoutedSearchProvider(resolveFairySearchSettings({ custom: { baseURL: 'https://gw.example/v1' } }), { fetchImpl, env: {} });
+  assert.equal(engine.id, 'custom');
+  // 一个引擎都没配：在调用点报出每项缺什么，而不是静默走一个必然失败的引擎。
+  assert.throws(
+    () => createRoutedSearchProvider(resolveFairySearchSettings({}), { fetchImpl, env: {} }),
+    (error) => /没有可用的搜索引擎/.test(error.message) && /DEEPSEEK_API_KEY/.test(error.message),
+  );
 });
 
 test('the routing table sends each engine to its own transport', async () => {
@@ -204,7 +220,8 @@ test('the custom engine sends an OpenAI chat body and derives sources from the a
     fetchImpl,
   }).search({ query: '自定义查询' });
 
-  assert.equal(createRoutedSearchProvider(resolveFairySearchSettings({ provider: 'custom' }), { fetchImpl }).id, 'custom');
+  // 引擎必须真的可用才会被路由到这里：custom 的可用性判据是有合法 baseURL。
+  assert.equal(createRoutedSearchProvider(resolveFairySearchSettings({ provider: 'custom', custom: { baseURL: 'https://gw.example/v1/' } }), { fetchImpl, env: {} }).id, 'custom');
   assert.equal(fetchImpl.calls[0].url, 'https://gw.example/v1/chat/completions');
   assert.equal(fetchImpl.calls[0].method, 'POST');
   assert.equal(fetchImpl.calls[0].headers.authorization, 'Bearer gw-key');

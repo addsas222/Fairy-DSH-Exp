@@ -7,6 +7,21 @@ Fairy 的搜索引擎中枢与设置面板。双面插件：
 
 模型侧仍然使用官方 `web_search` 工具与其结果卡片，本插件不重建结果展示，也不注册任何会话头部条目。
 
+## hub 的可用性与路由（2026-09 修正）
+
+`fairy-search-hub` **恒可用**（`available()` 恒 `true`）：harness 把「config 里钉了这个 id、
+而它 `available()` 为 false」当成**配置错误**硬抛 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`
+（`@deepseek-ai/dsh-web`），而 `profiles/web` 默认就把 `searchProvider` 钉在 hub 上——
+所以 hub 自己不能因为「用户还没填 key」而变不可用，否则全新环境第一次搜索就进不去。
+
+引擎可用性改由两处表达，都诚实：
+
+- **设置卡 / `/fairy-search/state`**：逐引擎显示 `configured`（`providerAvailability`，
+  只看本地设置与环境变量，不联网、不回显密钥）。
+- **调用点**：所选引擎没有凭据时，路由**退回第一个可用引擎**（配了任何一个就能搜）；
+  一个都没配时 `search()` 抛出「没有可用的搜索引擎。」并逐项列出缺什么，
+  错误码 `WEB_PROVIDER_ERROR`（与 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 不同：它是
+  可执行的提示，不是启动即失败）。
 ## 引擎路由
 
 | 设置值 | 引擎 | 传输 | 可用条件 |

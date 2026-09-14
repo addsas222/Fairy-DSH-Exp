@@ -266,7 +266,19 @@ export function createCustomHttpProvider({ baseURL, apiKey = '', fetchImpl = fet
  */
 export function createRoutedSearchProvider(settings, { fetchImpl = fetch, env = process.env } = {}) {
   const resolved = resolveFairySearchSettings(settings);
-  switch (resolved.provider) {
+  const availability = providerAvailability(resolved, env);
+  // 所选引擎没填凭据时退回第一个可用引擎：hub 的职责是路由，用户配了任何一个引擎
+  // 就该能用；一个都没有时在调用点报出每项缺什么，而不是静默走一个必然失败的引擎。
+  const selected = availability[availabilityKeyFor(resolved.provider)].available
+    ? resolved.provider
+    : FAIRY_SEARCH_PROVIDER_IDS.find((id) => availability[availabilityKeyFor(id)].available);
+  if (selected === undefined) {
+    const detail = FAIRY_SEARCH_PROVIDER_IDS
+      .map((id) => `${id} ${availability[availabilityKeyFor(id)].reason}`)
+      .join(' ');
+    throw new WebError(`没有可用的搜索引擎。${detail}`, 'WEB_PROVIDER_ERROR');
+  }
+  switch (selected) {
     case 'exa':
       return new ExaSearchProvider({
         apiKey: resolved.exa.apiKey,
@@ -316,10 +328,15 @@ export function createFairySearchHub({ getSettings = () => undefined, env = proc
   const current = () => resolveFairySearchSettings(getSettings());
   return {
     id: FAIRY_SEARCH_PROVIDER_ID,
-    /** Cheap local check: the selected engine has its key/address. */
+    /**
+     * 恒可用：hub 自己总能回答——路由到第一个可用引擎，一个引擎都没配时在 `search()`
+     * 里报出每项缺什么。harness 把“配置了这个 id 而 `available()` 为 false”当作**配置
+     * 错误**硬抛（`WEB_PROVIDER_CONFIGURED_UNAVAILABLE`），而 profile 默认就把 provider
+     * 钉在 hub 上，所以这里返回 false 会让全新环境连第一次搜索都进不去。
+     * 设置卡仍按引擎逐项显示可用性（`providerAvailability`）。
+     */
     available() {
-      const settings = current();
-      return providerAvailability(settings, env)[availabilityKeyFor(settings.provider)].available;
+      return true;
     },
     async search(request, signal) {
       const startedAt = diagnostics.start();
