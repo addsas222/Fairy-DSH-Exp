@@ -35,7 +35,7 @@
 | `browser-dock/` | 浏览器 Dock（宿主插件 + 独立 `proxy.cjs` 进程 + `fs.watch` 状态桥） |
 | `fairy-startup/` | 启动动作（恢复会话选择、按 workspace 就绪开新会话） |
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
-| `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/关键包解析/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
+| `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
 | `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
 | `.agent-presets/fairy/` | 私有部署预设（依赖未公开的 runtime 资产，公开仓库里必然 broken） |

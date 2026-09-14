@@ -122,17 +122,9 @@ export function checkBinary(runtimeDir) {
   return { status: 'fail', name: '宿主可运行性（新进程）', detail: `新进程启动失败：${(r.stderr || r.out).split('\n').slice(0, 3).join(' / ')}`, fix: '看上面报错；混版通常报 ESM "does not provide an export named …"' };
 }
 
-/** ③ 模块解析：点名几个跨包引用最密的，逐个真 import（混版会在这里现形）。 */
-const IMPORTS = ['@deepseek-ai/dsh-settings', '@deepseek-ai/dsh-fs', '@deepseek-ai/dsh-sandbox', '@deepseek-ai/dsh-jobs', '@deepseek-ai/dsh-workflow'];
-export function checkImports(runtimeDir) {
-  const broken = [];
-  for (const name of IMPORTS) {
-    const r = run(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(name)})`], { cwd: runtimeDir, timeout: 60_000 });
-    if (!r.ok) broken.push(`${name}: ${(r.stderr || r.out).split('\n')[0].slice(0, 90)}`);
-  }
-  if (!broken.length) return { status: 'ok', name: '关键包解析', detail: `${IMPORTS.length} 个包都能被新进程 import`, fix: '' };
-  return { status: 'fail', name: '关键包解析', detail: broken.join('\n    '), fix: '多为混版症状；先跑混版检测' };
-}
+/** ③ 模块解析的活儿由上面的新进程启动一并验了：起得来就说明盘上树能解析。
+ *  （曾另设"点名 import 若干包"的检查，注入破坏实测中它**漏报**过一次——宿主行抓到了、
+ *  它没抓到，因为那几个包只回退了版本号、导出名未变。重复信号不是保险，删。） */
 
 /**
  * ④ npm 工程根跑偏：`npm install` 会向上找最近的 package.json 当工程根。
@@ -415,7 +407,6 @@ export function diagnose(options) {
   add(checkVersions, runtimeDir);
   add(checkStrayInstalls);
   add(checkBinary, runtimeDir);
-  add(checkImports, runtimeDir);
   add(checkNpmProjectRoot, runtimeDir);
   add(checkRepo, options.repo, options.home, options.offline);
   add(checkTestPrereqs, options.repo, options.home);
@@ -458,7 +449,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     process.stdout.write('usage: doctor.mjs [--home DIR] [--repo DIR] [--runtime DIR] [--json] [--report FILE] [--offline]\n'
-      + '  只读体检：混版 / 残留安装进程 / 宿主可运行性（新进程）/ 关键包解析 / npm 工程根 / 仓库与部署 / 测试门前提\n'
+      + '  只读体检：混版 / 残留安装进程 / 宿主可运行性（新进程）/ npm 工程根 / 仓库与部署 / 测试门前提\n'
       + '  退出码：0 全绿 ｜ 1 有 fail ｜ 2 有 warn ｜ 3 用法错误\n');
     return EXIT.OK;
   }
