@@ -184,8 +184,14 @@ async function main() {
     // 严格 peer 校验会因邻居未同步而拒绝；--no-save 避免在该目录生成 package.json 契约。
     // 必须显式把**工程根**（含 @deepseek-ai 的那层 node_modules 的父目录）当项目根：
     // 只给 `cwd: runtimeDir` 时 npm 会从 `<root>/node_modules` 向上找到 `<root>/package.json`，
-    // 于是按那份（可能陈旧的）lock 去 reify **整棵树**——实测宿主被这样从 0.1.5-rc.2 拧回
-    // 0.1.2-rc.1（21 个包），而 package.json 是 `--no-save` 保护不到的。
+    // 于是按**那里**的 manifest/lock 去 reify 整棵树——`--no-save` 只保得住 package.json，
+    // 保不住树里其它包。
+    //
+    // 事故记录（2026-09-14）：本机曾观测到 21 个包处于 0.1.2-rc.1，修复后逐包比对确认无损。
+    // **机制未证实**：事后查 `~/package-lock.json`，里面 0 命中 0.1.2-rc.1 且 mtime 早于事故，
+    // 所以"按陈旧 lock 收敛"只是推断、证据不支持——别把它当结论写进报告。
+    // 能确证的是：run 期间有两个失控的 `npm install`（工程根 = `~`）在写树，且 doctor 的
+    // "残留安装进程"就是为盯这类进程而设。
     // `--prefix` 与 cwd 都指过去，避免依赖 npm 的上溯行为。
     const projectRoot = path.dirname(runtimeDir);
     const output = execFileSync(process.execPath, [

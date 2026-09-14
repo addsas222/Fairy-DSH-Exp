@@ -21,7 +21,7 @@
 | `fairy-roleplay/` | 角色扮演：去AI味检查器（L1 词表 → L4 通读）+ 风格库 + 规划/时机/回复规则 |
 | `fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT 路线 |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
-| `fairy-system/` | 验证/预检/审计工具（`verify-build.js`、`image-manifest.js`、`repo-update.mjs`、`host-align.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js`） |
+| `fairy-system/` | 验证/预检/审计工具（`doctor.mjs`（**只读体检**）、`verify-build.js`、`image-manifest.js`、`repo-update.mjs`、`host-align.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js`） |
 | `persona-packs/` | 内置人格包（`fairy`、`standard`） |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `.agent-presets/ponytail/` | 精简模式 preset（modes 与 memory 的 agent 面 shim；规则技能见下） |
@@ -280,6 +280,23 @@ node fairy-system/image-manifest.js check --repo . --home /path/to/home    # 镜
 预设健康检查（发现器的真实判定，避免「能启动但选不中」）：服务运行时 POST `agentPreset.list` 到 `/api/agentPreset.list`，期望 `standard/code/minimal/cordis` 为 `system`、`ponytail` 与 `fairy` 为 `user`。
 
 ---
+
+## 7.1 一键体检（doctor）
+
+出了任何"说不清哪里不对"的状况，先跑它——**只读**，不装包、不落位、不改 home：
+
+```sh
+node fairy-system/doctor.mjs --home "$DSH_HOME"     # 0 全绿 / 1 有 fail / 2 有 warn / 3 用法错误
+node fairy-system/doctor.mjs --json --report /tmp/doctor.txt
+```
+
+七项检查：混版检测（同线内版本不一致）、残留安装进程（按**命令行签名**认，不按进程名）、
+宿主可运行性（**起新进程跑真二进制**——在跑的宿主是内存态，测不出盘上坏没坏）、关键包解析、
+npm 工程根（lock 与盘上不一致即"一次 install 可能把整棵树拧回旧版"的前置）、仓库与部署、
+测试门前提（缺比较对象时那两组会整组红，属环境前提）。
+
+它**只报不做**，每条问题后面附可执行的下一步命令；执行与否由人定。这也让"漏报"变得可查：
+本会话就漏报过一次"宿主未受影响"——两次检查之间另有进程改了树。
 
 ## 8. 排障
 
