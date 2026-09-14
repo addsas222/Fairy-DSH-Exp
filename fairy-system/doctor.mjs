@@ -222,8 +222,9 @@ export function checkRepo(repo, home, offline) {
  * ⑦ 测试门的前提：`preflight`/`upgrade` 两组要一份**0.1.1-rc.2 比较对象**与一份装齐的 profile。
  *
  * 这条不做"缺了就警告"的懒判定——合适的对象本机往往**就有**（隔离部署、别处的制品目录）。
- * 所以它自己找候选、逐项**校验 pins**（版本 + runtime 的 sha256 必须等于
- * `preflight-build.js` 里 pin 的值），校验通过才算就位，并直接给出可直接粘的运行命令。
+ * 所以它自己找候选、逐项**校验 pin**（候选的 `dsh-client-runtime/lib/client.js` 的 sha256
+ * 必须等于 `preflight-build.js` 里 pin 的值——那才是测试门真正比对的东西；版本号只作展示，
+ * 因为它是标签、可被改写）。
  * 只有真找不到/校验不过时才是 warn，且说明差在哪。
  */
 export function checkTestPrereqs(repo, home) {
@@ -247,6 +248,8 @@ export function checkTestPrereqs(repo, home) {
     const hash = hasRuntime ? crypto.createHash('sha256').update(readFileSync(runtime)).digest('hex') : '';
     found.push({ pkg, runtime, version, hasRuntime, hash, hashOk: pinned ? hash === pinned : hasRuntime });
   }
+  // 「可用」= 有嵌套 runtime 且其 sha256 与 pin 一致（版本只做展示：pin 的是制品字节，
+  // 版本号是标签、可被改写，两者不是一回事——注释按实际校验口径写）。
   const usable = found.find((f) => f.hasRuntime && f.hashOk);
 
   // 装齐的 profile：当前 home 优先，其次同级的隔离部署（本机 `~/.dsh-fairy` 就是那种）
@@ -300,7 +303,7 @@ export function artifactRoots() {
  * `node_modules/@deepseek-ai/dsh/package.json`）。本机的 `C:/tmp/dsh-011` 就是这类——
  * 测试门要的比较对象往往早就在机器上，让体检**自己找**比逼人去装一份新的合理。
  */
-function discoverArtifacts() {
+export function discoverArtifacts() {
   const out = [];
   for (const root of artifactRoots()) {
     for (const dir of readdirSafe(root)) {

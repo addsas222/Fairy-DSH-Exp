@@ -7,8 +7,9 @@
  * 而报告说全绿。两条都被本会话真实踩过。
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -155,10 +156,26 @@ test('未知项在输出里显式成行（spawn 守渲染；退出码由上面�
   } finally { rmSync(empty, { recursive: true, force: true }); }
 });
 
-test('制品发现：约定目录里的 0.1.1-rc.2 能被找到（不是只看环境变量）', async () => {
-  const { artifactRoots } = await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
+test('制品发现：约定目录里真放一份就能被找到（不是只验搜索根的长度）', async () => {
+  const { artifactRoots, discoverArtifacts } = await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
   const roots = artifactRoots();
-  assert.ok(roots.length >= 2, `搜索根应含系统临时目录与约定目录，实际 ${JSON.stringify(roots)}`);
-  const roots2 = artifactRoots();
-  assert.deepEqual(roots, roots2, '搜索根应稳定（去重后顺序一致）');
+  // 不写死数量：Linux 上 os.tmpdir() 本身就是 /tmp，去重后只剩一项（写 >=2 会在那边挂）。
+  assert.ok(roots.length >= 1, `搜索根不该为空：${JSON.stringify(roots)}`);
+  assert.ok(roots.some((r) => /tmp$/i.test(r)), `应含约定根：${JSON.stringify(roots)}`);
+
+  // 夹具落在 `os.tmpdir()` 下、**恰好一层** `dsh-*`（与真实制品目录同形：
+  // `<搜索根>/dsh-<后缀>/node_modules/@deepseek-ai/dsh/package.json`）。
+  // 多套一层就不在发现规则的射程内——第一版正是这么写错的。
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'dsh-'));
+  try {
+    const pkgDir = path.join(dir, 'node_modules', '@deepseek-ai', 'dsh');
+    mkdirSync(pkgDir, { recursive: true });
+    const pkg = path.join(pkgDir, 'package.json');
+    writeFileSync(pkg, JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.1-rc.2' }));
+    // 路径形态可能因 8.3 短名（`ADMINI~1`）与长名混用而字符串不等，用 realpath 归一后比。
+    const found = discoverArtifacts();
+    assert.ok(Array.isArray(found), 'discoverArtifacts 必须返回数组（找不到也不抛）');
+    const same = (a, b) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
+    assert.ok(found.some((f) => same(f, pkg)), `夹具应被找到。\n  夹 具: ${pkg}\n  发现: ${JSON.stringify(found, null, 1)}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
