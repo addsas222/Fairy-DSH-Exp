@@ -224,8 +224,9 @@ FETCH_HEAD），应用是 `pull --ff-only` + 复用 `scripts/deploy-live.sh`（�
 而不计差异。**不要**靠改断言让门禁变绿；差异要么修，要么按 `--preserve` 显式声明。
 
 ```sh
-# 全矩阵（10 个测试面）
-node --test --test-timeout=45000 fairy-system/test/*.test.js   # 47 例
+# 全矩阵（10 个测试面）；下面的计数是 2026-09-14 在 Windows 开发机上的实测，
+# 加了用例就会变——对不上时以实跑为准，别为了对上数字去改断言。
+node --test --test-timeout=45000 fairy-system/test/*.test.js   # 75 例（61 通过 / 13 环境前提 / 1 跳过）
 (cd fairy-memory/dsh-fairy-memory && node --test test/*.test.js)  # 其余包同理
 (cd fairy-roleplay/dsh-fairy-roleplay && node --test test/*.test.js)
 ```
@@ -257,11 +258,12 @@ done
 `verify-build.js` 与 `image-manifest.js` 才是跨平台的那两道。）
 
 具体一点：**没有官方安装时 `preflight.test.js` 与 `upgrade.test.js` 会整组失败**
-（13 例，症状是 `DSH_PREFLIGHT_ERROR scope="dsh_version" … actual="ENOENT"`——
-预检按 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json` 找官方包，
-Windows 默认根本没有这个路径）。这是环境前提，不是代码回归：这两组用例只在
-存在官方 0.1.1-rc.2 安装的机器上才有意义。其余 34 例（含新增的 12 例
-`image-manifest.test.js`）不依赖官方安装，任何平台都该全绿。
+（13 例 = preflight 6 + upgrade 7，症状是 `DSH_PREFLIGHT_ERROR scope="dsh_version" …
+actual="ENOENT"`——预检按 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json`
+找官方包，Windows 默认根本没有这个路径）。这是环境前提，不是代码回归：这两组用例只在
+存在官方 0.1.1-rc.2 安装的机器上才有意义。其余 **60 例**（含 10 例
+`image-manifest.test.js`、18 例 `repo-update.test.js`）不依赖官方安装，任何平台都该全绿；
+其中 `repo-update` / `host-align` 两组连网络都不用（本地 bare 仓夹具）。
 
 **预设健康检查**（发现器的真实判定，避免"能启动但选不中"；服务运行中执行，
 端口取启动日志 `dsh web: http://127.0.0.1:<port>`）：

@@ -136,7 +136,7 @@ node --test --test-timeout=45000 fairy-system/test/*.test.js
 
 `fairy-system/test/` 里比较「当前 live 布局」的用例需要 `DSH_HOME` + `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指向已安装的官方 runtime；缺这两个旋钮时它们没有比较对象（不是断言放宽）。纯 Windows 机器上 `verify.js` / `check.sh` 依赖 macOS live 布局，不适合作为本地验证入口。
 
-2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **67 例，53 通过 / 13 失败 / 1 跳过**。
+2026-09-14 在 Windows 开发机上的实测：`fairy-system/test/*.test.js` 共 **75 例，61 通过 / 13 失败 / 1 跳过**（加了用例计数就会变——对不上时以实跑为准，别为凑数字改断言）。
 13 例的归属（逐个对号入座，不是估的）：**`upgrade.test.js` 7 例**（`fails closed on an unapproved
 runtime hash`、`refuses to validate the active profile…`、`validates an isolated candidate profile…` 等）
 + **`preflight.test.js` 6 例**（`accepts complete bundles and profile links`、`fails before launch
