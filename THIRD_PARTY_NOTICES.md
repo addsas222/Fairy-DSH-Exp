@@ -12,6 +12,10 @@
 | `dsh-message-edit` | `0.2.3` · [Moeblack/dsh-message-edit](https://github.com/Moeblack/dsh-message-edit) | MIT | Moeblack；随包附带声明 |
 | `dsh-reasoning-effort` | `0.6.2` · commit `83bc8c548749d7156a03d11d875d8117e9b5d994` · [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) | MIT | HanaAyane；随包附带声明 |
 | `hono` | `4.13.2` · [honojs/hono](https://github.com/honojs/hono) | MIT | Hono contributors；随包附带声明 |
+| `@deepseek-ai/schemastery` | `3.18.1` · [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | DeepSeek；随包附带声明 |
+| `mdast-util-from-markdown` | `2.0.3` · [syntax-tree/mdast-util-from-markdown](https://github.com/syntax-tree/mdast-util-from-markdown) | MIT | syntax-tree contributors；随包附带声明（`fairy-voice` 的 Markdown 解析） |
+| `mdast-util-gfm` | `3.1.0` · [syntax-tree/mdast-util-gfm](https://github.com/syntax-tree/mdast-util-gfm) | MIT | syntax-tree contributors；随包附带声明 |
+| `micromark-extension-gfm` | `3.0.0` · [micromark/micromark-extension-gfm](https://github.com/micromark/micromark-extension-gfm) | MIT | micromark contributors；随包附带声明 |
 
 ## 宿主提供的 DSH 包
 

@@ -67,73 +67,26 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 ## 致谢
 
-Fairy-DSH 站在这些开源项目与作者之上。下表按「本仓库实际引用的版本」列出，
-许可证一栏取自**已安装包的 manifest**（不是转述文档）。完整的分发义务与
-再分发内容见 `THIRD_PARTY_NOTICES.md`。
+本项目建立在下列开源工作之上（版本、来源与许可证由 `THIRD_PARTY_NOTICES.md` 统一维护，
+此处只列项目与出处，避免两处表格各自漂移）：
 
-### 平台与宿主
+**平台与宿主**：DSH / deepseek-harness（[@deepseek-ai/dsh](https://github.com/deepseek-ai/deepseek-harness)、schemastery）——本仓库 pin 的 agent 平台与设置 schema。
 
-| 项目 | 版本 | 许可证 | 作者 / 来源 |
-| --- | --- | --- | --- |
-| DSH（`@deepseek-ai/dsh`，本仓库 pin 的 agent 平台） | `0.1.1-rc.2` | MIT | DeepSeek · [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) |
-| `@deepseek-ai/schemastery`（设置 schema） | `3.18.1` | MIT | DeepSeek |
-| `@deepseek-ai/dsh-settings` / `dsh-web` / `dsh-web-search-*` | `0.1.1-rc.2` | 随 DSH 发行包 | DeepSeek；由宿主提供，不随本仓库分发 |
+**MCP 服务**：[microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp)（浏览器 Dock 的驱动）、[upstash/context7](https://github.com/upstash/context7)（文档检索）。
 
-### MCP 服务（`profiles/web` 的 preset 行）
+**运行期依赖**：[honojs/hono](https://github.com/honojs/hono)、[syntax-tree/mdast-util-from-markdown](https://github.com/syntax-tree/mdast-util-from-markdown)、[syntax-tree/mdast-util-gfm](https://github.com/syntax-tree/mdast-util-gfm)、[micromark/micromark-extension-gfm](https://github.com/micromark/micromark-extension-gfm)（fairy-voice 的 Markdown 解析）。
 
-| 项目 | 版本 | 许可证 | 作者 / 来源 |
-| --- | --- | --- | --- |
-| `@playwright/mcp`（浏览器 Dock 的驱动） | `0.0.79` | Apache-2.0 | Microsoft · [microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp) |
-| `@upstash/context7-mcp`（文档检索） | `4.0.2` | MIT | Upstash · [upstash/context7](https://github.com/upstash/context7) |
+**社区插件**：[Moeblack/dsh-message-edit](https://github.com/Moeblack/dsh-message-edit)、[HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort)——本仓库只 pin，不复制源码。
 
-### 运行期依赖
+**再分发内容**：[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)——`.agent-presets/ponytail/skills/` 下的技能文本（MIT）。
 
-| 项目 | 版本 | 许可证 | 作者 / 来源 |
-| --- | --- | --- | --- |
-| `hono` | `4.13.2` | MIT | Hono contributors · [honojs/hono](https://github.com/honojs/hono) |
-| `mdast-util-from-markdown` | `2.0.3` | MIT | syntax-tree · [syntax-tree/mdast-util-from-markdown](https://github.com/syntax-tree/mdast-util-from-markdown) |
-| `mdast-util-gfm` | `3.1.0` | MIT | syntax-tree · [syntax-tree/mdast-util-gfm](https://github.com/syntax-tree/mdast-util-gfm) |
-| `micromark-extension-gfm` | `3.0.0` | MIT | micromark · [micromark/micromark-extension-gfm](https://github.com/micromark/micromark-extension-gfm) |
+**运行期从 CDN 加载的语音引擎**：[hexgrad/kokoro](https://github.com/hexgrad/kokoro)（kokoro-js）、[vits-web 生态的 piper-tts-web](https://github.com/diffusionstudio/vits-web)（含 onnxruntime-web）、[KittenML/KittenTTS](https://github.com/KittenML/KittenTTS)（权重 Apache-2.0）与 [Algiras/kitten-tts-js](https://github.com/Algiras/kitten-tts-js)（社区非官方移植）。
 
-### 社区插件（本仓库只 pin，不复制源码）
+**概念与结构参考**：[Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot)（GPL-3.0）——仅参考 `fairy-roleplay` 的流水线结构（规划器 → 回复器 → 去AI味 → 记忆印象），提示词与词表全部自撰，故本仓库不继承其 GPL 义务；三模式与 `mode_pipeline` 的设计动机来自社区 agent 实践，实现为本仓库原创。
 
-| 项目 | 版本 / 来源 | 许可证 | 作者 / 来源 |
-| --- | --- | --- | --- |
-| `dsh-message-edit` | `0.2.3` | MIT | Moeblack · [Moeblack/dsh-message-edit](https://github.com/Moeblack/dsh-message-edit) |
-| `dsh-reasoning-effort` | `0.6.2` · commit `83bc8c5` | MIT | HanaAyane · [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) |
+**同源分发**：[addsas222/Fairy-DSH-Exp](https://github.com/addsas222/Fairy-DSH-Exp)（`ponytail` 分支，本机部署源）、[Chengzhibense/Fairy-DSH](https://github.com/Chengzhibense/Fairy-DSH)、[Guzhou2002/Fairy-DSH-Optimized](https://github.com/Guzhou2002/Fairy-DSH-Optimized)。三者的 fork 谱系与同步关系**尚未逐条核实**，此处仅记录其存在。
 
-### 再分发的第三方内容
-
-| 内容 | 许可证 | 作者 / 来源 |
-| --- | --- | --- |
-| ponytail 技能组（`.agent-presets/ponytail/skills/`） | MIT | DietrichGebert · [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)（全文见该目录 `ponytail.LICENSE`） |
-
-### 运行期从 CDN 加载的语音引擎（不随仓库分发）
-
-| 项目 | 版本 | 许可证 | 来源 |
-| --- | --- | --- | --- |
-| `kokoro-js`（内含 `@huggingface/transformers`） | `1.2.1` | Apache-2.0 | [hexgrad/kokoro](https://github.com/hexgrad/kokoro)（Kokoro-82M 权重另见其模型卡） |
-| `@realtimex/piper-tts-web`（内含 `onnxruntime-web`） | `1.1.1` | MIT | diffusion-studio / vits-web 生态的 fork；Piper 模型 MIT（Rhasspy） |
-| KittenTTS-Nano 权重 | — | Apache-2.0 | KittenML / Stellon Labs · [KittenML/KittenTTS](https://github.com/KittenML/KittenTTS) |
-| `kitten-tts-js`（社区非官方移植） | — | Apache-2.0 | Algiras · [Algiras/kitten-tts-js](https://github.com/Algiras/kitten-tts-js) |
-
-### 概念与结构参考（不含源码或提示词复制）
-
-| 项目 | 许可证 | 本仓库的取用方式 |
-| --- | --- | --- |
-| MaiBot · [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) | GPL-3.0 | 仅参考 `fairy-roleplay` 的流水线结构（规划器 → 回复器 → 去AI味 → 记忆印象）；提示词与词表全部自撰，故不继承 GPL 义务 |
-| Agent 模式理念（Explore & Check / Plan-then-Act / 长上下文记忆） | — | 三模式与 `mode_pipeline` 四站流水线的设计动机来自社区实践，实现为本仓库原创 |
-
-### 社区与第三方分发
-
-本机部署源码取自 [addsas222/Fairy-DSH-Exp](https://github.com/addsas222/Fairy-DSH-Exp)（`ponytail` 分支）；
-另有 [Chengzhibense/Fairy-DSH](https://github.com/Chengzhibense/Fairy-DSH) 与
-[Guzhou2002/Fairy-DSH-Optimized](https://github.com/Guzhou2002/Fairy-DSH-Optimized)
-等同源分支/再分发。★ 这三者与本仓库的**确切关系（fork 谱系、是否互相同步）尚未逐条核实**，
-上表仅记录它们存在，不代表已审计其内容。
-
-> 致谢列表随依赖变动维护：升级或新增依赖时，先从此处的 lockfile 复核版本与许可证，
-> 再同步 `THIRD_PARTY_NOTICES.md`，不要凭记忆写。
+感谢以上作者与社区。若某处署名或归属有误，请开 issue 指正。
 
 ## 许可边界
 
