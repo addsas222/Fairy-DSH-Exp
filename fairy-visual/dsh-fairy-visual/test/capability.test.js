@@ -122,3 +122,15 @@ test('keeps official data-slot and data-phase queries inside dom-adapter', () =>
   const offenders = files.filter((file) => directOfficialQuery.test(readFileSync(file, 'utf8')));
   assert.deepEqual(offenders, []);
 });
+
+test('exports the official slot selectors the marker pass consumes', () => {
+  const adapter = loadAdapter(mountedDocument());
+  assert.equal(adapter.composerInputDock, '[data-slot="conversation.input.dock"]');
+  assert.equal(adapter.OFFICIAL_SELECTORS.composerInputDock, '[data-slot="conversation.input.dock"]');
+  assert.equal(typeof adapter.composerAttachmentsSlot, 'function');
+  assert.equal(typeof adapter.composerInputDockSlot, 'function');
+  const direct = { matches: (selector) => selector === adapter.composerInputDock };
+  assert.equal(adapter.composerInputDockSlot({ children: [direct] }), direct, '直接子节点优先');
+  const nested = { tag: 'nested' };
+  assert.equal(adapter.composerInputDockSlot({ children: [], querySelector: (selector) => (selector === adapter.composerInputDock ? nested : null) }), nested, '非直接子节点回落查询');
+});

@@ -22,8 +22,8 @@ function migrateVisualSettings(input = {}) {
     enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
     theme: source.theme === 'light' ? 'light' : 'dark',
     mascotVisible: typeof source.mascotVisible === 'boolean' ? source.mascotVisible : true,
-    // 内容遮罩（主视觉遮挡其下正文）：默认开；显式 false 才关。
-    contentFade: typeof source.contentFade === 'boolean' ? source.contentFade : true,
+    // 内容遮罩（主视觉遮挡其下正文）：默认关；仅接受显式布尔。
+    contentFade: typeof source.contentFade === 'boolean' ? source.contentFade : false,
     mascotScale: Number.isFinite(numericScale) ? clamp(numericScale, 0.55, 1) : 1,
     mascotAnimationSpeed: Number.isFinite(numericSpeed) ? nearest(numericSpeed, SPEED_STOPS) : 1,
     powerMode: source.powerMode === 'low-power' ? 'low-power' : 'normal',

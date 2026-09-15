@@ -11,7 +11,7 @@ test('migrates a fresh or incomplete profile to the canonical v2 defaults', () =
     enabled: false,
     theme: 'dark',
     mascotVisible: true,
-    contentFade: true,
+    contentFade: false,
     mascotScale: 1,
     mascotAnimationSpeed: 1,
     powerMode: 'normal',

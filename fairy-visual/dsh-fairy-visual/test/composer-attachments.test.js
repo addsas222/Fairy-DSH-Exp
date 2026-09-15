@@ -56,6 +56,26 @@ test('attachment layout identifies only the official direct slot and preserves t
   assert.equal(attachmentDockHeight(400, 68, 132, 420), 420);
 });
 
+test('measures the input dock height from the union of its strip entries', () => {
+  const { inputDockRailHeight } = loadCommonJs(attachmentsSource, (id) => {
+    if (id === './dom-adapter.js') return {
+      OFFICIAL_SELECTORS: { composerAttachmentsSlot: 'conversation.input.attachments' },
+      composerAttachmentsSlot: () => null,
+    };
+    throw new Error(`unexpected dependency: ${id}`);
+  });
+  const strip = (top, height) => { const node = new FakeNode(); node.getBoundingClientRect = () => ({ top, bottom: top + height, height }); return node; };
+  const slot = new FakeNode();
+  assert.equal(inputDockRailHeight(slot), 0);
+  assert.equal(inputDockRailHeight(null), 0);
+  slot.append(strip(0, 0));
+  assert.equal(inputDockRailHeight(slot), 0, '空条不占高度');
+  slot.append(strip(100, 30));
+  assert.equal(inputDockRailHeight(slot), 30);
+  slot.append(strip(136, 24));
+  assert.equal(inputDockRailHeight(slot), 60, '多条（todo+queue）取并集而非求和');
+});
+
 test('attachment slots receive their own marker and never become generic accessories', () => {
   const attachments = loadCommonJs(attachmentsSource, (id) => {
     if (id === './dom-adapter.js') return {

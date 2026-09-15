@@ -43,7 +43,7 @@ test('Visual settings schema keeps the registered fields, defaults, and bounds',
   assert.equal(fields.enabled.meta.default, false);
   assert.equal(fields.theme.meta.default, 'dark');
   assert.equal(fields.mascotVisible.meta.default, true);
-  assert.equal(fields.contentFade.meta.default, true);
+  assert.equal(fields.contentFade.meta.default, false);
   assert.deepEqual(
     { step: fields.mascotScale.meta.step, min: fields.mascotScale.meta.min, max: fields.mascotScale.meta.max, default: fields.mascotScale.meta.default },
     { step: 0.01, min: 0.55, max: 1, default: 1 },

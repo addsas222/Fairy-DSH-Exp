@@ -750,6 +750,38 @@ test('rebinds the composer dock when the official conversation surface is replac
   assert.match(composerDockSource, /node\.matches\?\.\(`\[\$\{OFFICIAL_ATTRIBUTES\.composerSeat\}\]`\) \|\| node\.querySelector\?\.\(`\[\$\{OFFICIAL_ATTRIBUTES\.composerSeat\}\]`\)/);
 });
 
+test('hands the seat height back while a question card is elected', () => {
+  const syncStart = composerDockSource.indexOf('  function sync() {');
+  const bindStart = composerDockSource.indexOf('\n  function bind()', syncStart);
+  assert.ok(syncStart >= 0 && bindStart > syncStart, 'composer dock sync body should be present');
+  const syncSource = composerDockSource.slice(syncStart, bindStart);
+  assert.match(composerDockSource, /function questionElected\(seat\) \{/);
+  assert.match(composerDockSource, /data-slot="conversation\.composer"\] > \[data-chain-overlay-fallback\]/);
+  assert.match(composerDockSource, /getComputedStyle\(fallback\)\.display === 'none'/);
+  assert.match(syncSource, /if \(questionElected\(seat\)\) \{\s*seat\.style\.removeProperty\('height'\);\s*seat\.style\.removeProperty\('--dsh-fairy-composer-height'\);\s*\} else \{/, '提问件当选时必须交还 seat 高度');
+  assert.match(composerDockSource, /const composerInsetHeight = \(\) => \{[\s\S]*?questionElected\(seat\)[\s\S]*?seat\.getBoundingClientRect\(\)\.height/, '留白高度必须跟随提问卡实测高度');
+  assert.match(composerDockSource, /getHeight: composerInsetHeight/);
+});
+
+test('focuses the input from a click anywhere on the composer card', () => {
+  assert.match(composerDockSource, /const CARD_FOCUS_SKIP = 'button, a, input, select, textarea, label, \[role="button"\], \[contenteditable="true"\], \[data-dsh-fairy-composer-tools="true"\] \*';/);
+  assert.match(composerDockSource, /if \(event\.button !== 0 \|\| event\.defaultPrevented\) return;/);
+  assert.match(composerDockSource, /if \(event\.target\?\.closest\?\.\(CARD_FOCUS_SKIP\)\) return;/);
+  assert.match(composerDockSource, /const field = inputScroll\(card\)\?\.querySelector\('textarea, \[contenteditable="true"\]'\);/);
+  assert.match(composerDockSource, /event\.preventDefault\(\);\n    field\.focus\(\);/);
+  assert.match(composerDockSource, /card\.addEventListener\('mousedown', onCardMouseDown\)/);
+  assert.match(composerDockSource, /card\?\.removeEventListener\('mousedown', onCardMouseDown\)/);
+  assert.match(composerDockSource, /ensureCardFocusHandler\(\);\n      createHandle\(\);/);
+  assert.match(composerDockSource, /removeCardFocusHandler\(\);\n    clearControls\(\);/, 'seat 归还时必须摘掉监听器');
+});
+
+test('keeps the todo/queue input dock out of the composer chrome pass', () => {
+  assert.match(composerMarkerSource, /composerInputDock,/);
+  assert.match(composerMarkerSource, /!node\.matches\?\.\(composerInputDock\)\)\.forEach\(\(node\) => mark\(node, 'data-dsh-fairy-composer-chrome'\)\)/, 'chrome 隐藏不得吞掉 input.dock（todo/queue 条）');
+  assert.match(styleSource, /\[data-dsh-fairy-composer-chrome="true"\]\{display:none!important\}/);
+  assert.match(composerDockSource, /inputDockRailHeight\(composerInputDockSlot\(seat\)\)/, '浮起的条必须计入 dock 高度，否则压住卡片/留白不足');
+});
+
 test('starts session transition with a captured base and defers heavy glitch layers', () => {
   assert.match(visualTransitionsSource, /const base = this\.cloneFrame\(region\.frame\)/);
   assert.match(visualTransitionsSource, /const addSlices = \(\) => \{/);
@@ -867,7 +899,9 @@ test('anchors the original content mask to the stationary conversation viewport'
 });
 
 test('keeps the sidebar hardware above the composer edge in every session', () => {
-  assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]>\*:not\(\[data-testid="todo-panel"\]\)\{display:none!important\}/);
+  assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]\{display:none!important\}/);
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:absolute!important;left:0!important;right:0!important;bottom:100%!important;display:block!important;pointer-events:auto!important\}/, 'todo/queue 条必须浮在 seat 上方且可点');
+  assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
   assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:1!important/);
   assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/);
 });

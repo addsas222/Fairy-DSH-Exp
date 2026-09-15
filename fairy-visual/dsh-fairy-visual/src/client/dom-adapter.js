@@ -12,6 +12,7 @@ const diagnostics = {
 
 const OFFICIAL_SLOT_VALUES = Object.freeze({
   composerAttachments: 'conversation.input.attachments',
+  inputDock: 'conversation.input.dock',
 });
 
 const VOICE_CONTROL_FALLBACK_SELECTOR = '[aria-label="Fairy 朗读控制"],input[aria-label="朗读音量"]';
@@ -111,6 +112,7 @@ const OFFICIAL_SELECTORS = Object.freeze({
   composerCard: '[data-composer-card="true"]',
   composerTextarea: 'textarea',
   composerAttachmentsSlot: `[data-slot="${OFFICIAL_SLOT_VALUES.composerAttachments}"]`,
+  composerInputDock: `[data-slot="${OFFICIAL_SLOT_VALUES.inputDock}"]`,
   conversationScroll: '[data-conversation-scroll]',
   inputScroll: '[data-input-scroll]',
   conversationComposerDock: '[data-slot="conversation.composer.dock"]',
@@ -141,6 +143,8 @@ const OFFICIAL_SELECTORS = Object.freeze({
   toBottom: ariaLabelSelector('toBottom', { base: 'button' }),
   headerElement: ':scope > header',
 });
+
+const composerInputDock = OFFICIAL_SELECTORS.composerInputDock;
 
 const OFFICIAL_ATTRIBUTES = Object.freeze({
   slot: 'data-slot',
@@ -356,6 +360,11 @@ function composerAttachmentsSlot(scope) {
     || node?.getAttribute?.(OFFICIAL_ATTRIBUTES.slot) === OFFICIAL_SLOT_VALUES.composerAttachments
   )) || null;
 }
+// The input dock (todo/queue strips) lives inside the composer stack.
+function composerInputDockSlot(scope) {
+  const direct = [...(scope?.children || [])].find((node) => node?.matches?.(composerInputDock));
+  return direct || query(scope, composerInputDock);
+}
 function conversationScroll(scope) { return officialNode('conversationScroll', scope); }
 function conversationScrolls(scope) { return officialNodes('conversationScroll', scope); }
 function inputScroll(scope) { return officialNode('inputScroll', scope); }
@@ -532,6 +541,8 @@ module.exports = {
   composerCard,
   composerTextarea,
   composerAttachmentsSlot,
+  composerInputDock,
+  composerInputDockSlot,
   conversationScroll,
   conversationScrolls,
   inputScroll,

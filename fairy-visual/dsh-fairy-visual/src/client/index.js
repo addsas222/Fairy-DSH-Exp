@@ -324,10 +324,10 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       const visible = enabled && state.settings.mascotVisible;
       const visibleRef = React.useRef(visible);
       const fadeLifecycleRef = React.useRef(null);
-      const contentFadeRef = React.useRef(true);
+      const contentFadeRef = React.useRef(false);
       visibleRef.current = visible;
-      // 内容遮罩开关（默认开）：关闭后主视觉不再遮挡其下正文。
-      contentFadeRef.current = state.settings.contentFade !== false;
+      // 内容遮罩开关（默认关）：开启后主视觉会遮挡其下正文（生成期间新文字变淡）。
+      contentFadeRef.current = state.settings.contentFade === true;
 
       React.useLayoutEffect(() => {
         const stageNode = stageRef.current;
@@ -825,7 +825,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       theme: visual.theme === 'light' ? 'light' : 'dark',
       mascotVisible: visual.mascotVisible === true,
       powerMode: visual.powerMode === 'low-power' ? 'low-power' : 'normal',
-      contentFade: visual.contentFade !== false,
+      contentFade: visual.contentFade === true,
       mode: identity.mode || 'ling',
       customName: typeof identity.customName === 'string' ? identity.customName : '',
       secondAssistant: typeof identity.secondAssistant === 'string' ? identity.secondAssistant : '',

@@ -1,5 +1,6 @@
 const {
   OFFICIAL_ATTRIBUTES,
+  composerInputDock,
   inputScroll,
   sendButton,
   contextControl,
@@ -127,7 +128,10 @@ function markControls(card) {
     mark(barHost, 'data-dsh-fairy-composer-bar-host');
     let workspaceRow = workspaceButton;
     while (workspaceRow?.parentElement && workspaceRow.parentElement !== stack) workspaceRow = workspaceRow.parentElement;
-    [...stack.children].filter((node) => node !== barHost && node !== workspaceRow).forEach((node) => mark(node, 'data-dsh-fairy-composer-chrome'));
+    // The chrome pass hides the official composer skin Fairy replaces. The
+    // input dock is not chrome: the todo and queue strips live there, so
+    // hiding it (display:none) removes them from the seat entirely.
+    [...stack.children].filter((node) => node !== barHost && node !== workspaceRow && !node.matches?.(composerInputDock)).forEach((node) => mark(node, 'data-dsh-fairy-composer-chrome'));
     mark(workspaceRow, 'data-dsh-fairy-composer-workspace');
     mark(workspaceButton, 'data-dsh-fairy-composer-workspace-control');
     const modeButton = workspaceRow

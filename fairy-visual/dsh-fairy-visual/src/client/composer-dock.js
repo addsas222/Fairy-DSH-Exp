@@ -4,10 +4,11 @@ const {
   conversationScrolls,
   chatFlows,
   inputScroll,
+  composerInputDockSlot,
   sessionAgentPresetLabel,
   sessionHeaderActions,
 } = require('./dom-adapter.js');
-const { attachmentSlot, attachmentRail, attachmentRailHeight, attachmentDockHeight } = require('./composer-attachments.js');
+const { attachmentSlot, attachmentRail, attachmentRailHeight, attachmentDockHeight, inputDockRailHeight } = require('./composer-attachments.js');
 const { createLifecycleScope, claimSingleton } = require('./lifecycle.js');
 const { createManagedMutationObserver, getDomObserverManager } = require('./dom-observer-manager.js');
 const { markControls } = require('./composer-marker-projection.js');
@@ -57,6 +58,14 @@ const MARKER_ATTRS = [
 ];
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+// The chain overlay renders the elected entry as a sibling of a fallback node.
+// While a question is elected the composer stack is display:none and the
+// question card owns the seat's layout.
+function questionElected(seat) {
+  const fallback = seat?.querySelector?.('[data-slot="conversation.composer"] > [data-chain-overlay-fallback]');
+  return Boolean(fallback && getComputedStyle(fallback).display === 'none');
+}
 
 function clearMarker(node, name) {
   if (node?.isConnected) node.removeAttribute(name);
@@ -108,10 +117,17 @@ function mountComposerDock(controller) {
   };
   const renderedHeight = () => attachmentDockHeight(
     height,
-    attachmentRailHeight(attachmentSlot(card)),
+    attachmentRailHeight(attachmentSlot(card)) + inputDockRailHeight(composerInputDockSlot(seat)),
     HEIGHT_MIN,
     maximumDockHeight(),
   );
+  // While the question card is elected the seat is auto-height. Reserve its
+  // measured height so the transcript keeps a reachable strip above it.
+  const composerInsetHeight = () => {
+    if (!seat) return renderedHeight();
+    if (questionElected(seat)) return Math.max(0, Math.round(seat.getBoundingClientRect().height || 0));
+    return renderedHeight();
+  };
 
   const schedule = () => {
     if (!frame && !disposed) frame = domObserverManager.scheduleFrame(layoutFrameKey, sync);
@@ -134,7 +150,7 @@ function mountComposerDock(controller) {
   // Contract: lifecycle-ownership.json#owners[subsystem=short-content anchoring, scroll insets and to-bottom position]
   const insetSynchronizer = createInsetSynchronizer({
     getScrollNodes: () => conversationScrolls(conversation),
-    getHeight: renderedHeight,
+    getHeight: composerInsetHeight,
     requestFrame: (callback) => requestAnimationFrame(callback),
     cancelFrame: (id) => cancelAnimationFrame(id),
     isDisposed: () => disposed,
@@ -204,6 +220,7 @@ function mountComposerDock(controller) {
     // on a descendant that is no longer reachable through the current owner
     // disposer, so clearing only the seat itself is insufficient.
     MARKER_ATTRS.forEach((name) => clearMarkerTree(seat, name));
+    removeCardFocusHandler();
     clearControls();
     if (previousSeatStyle) {
       Object.entries(previousSeatStyle).forEach(([name, { value, priority }]) => {
@@ -284,6 +301,26 @@ function mountComposerDock(controller) {
   const removeLegacyVoiceDensityMarker = (node = card) => {
     node?.removeAttribute?.('data-dsh-fairy-composer-voice-density');
   };
+  // The official composer only focuses the field when the textarea itself is
+  // hit; the card's padding and empty rows belong to no one. The whole card is
+  // the user's click target, so the dock owns that mapping. mousedown owns the
+  // focus default, so the handler must run there and cancel it before moving
+  // focus into the field. Interactive controls keep their own event flow.
+  const CARD_FOCUS_SKIP = 'button, a, input, select, textarea, label, [role="button"], [contenteditable="true"], [data-dsh-fairy-composer-tools="true"] *';
+  const onCardMouseDown = (event) => {
+    if (event.button !== 0 || event.defaultPrevented) return;
+    if (event.target?.closest?.(CARD_FOCUS_SKIP)) return;
+    const field = inputScroll(card)?.querySelector('textarea, [contenteditable="true"]');
+    if (!field) return;
+    event.preventDefault();
+    field.focus();
+  };
+  const removeCardFocusHandler = () => card?.removeEventListener('mousedown', onCardMouseDown);
+  const ensureCardFocusHandler = () => {
+    if (!card) return;
+    removeCardFocusHandler();
+    card.addEventListener('mousedown', onCardMouseDown);
+  };
   // The native reasoning menu lives inside the composer stack, while the
   // resize handle is a sibling with a higher local z-index. Reflect the menu's
   // open state on the stack so CSS can raise the complete interactive context
@@ -349,9 +386,11 @@ function mountComposerDock(controller) {
       });
       seat.setAttribute(COMPOSER_ATTR, 'true');
       clearControls = markControls(card);
+      ensureCardFocusHandler();
       createHandle();
     } else if (currentCard !== card) {
       clearControls();
+      removeCardFocusHandler();
       workspaceProjection?.remove();
       workspaceProjection = null;
       removeMaterialLayer();
@@ -361,6 +400,7 @@ function mountComposerDock(controller) {
       card = currentCard;
       removeLegacyVoiceDensityMarker();
       clearControls = markControls(card);
+      ensureCardFocusHandler();
     }
     removeLegacyMascotScaleControl();
     ensureMascotScaleBase();
@@ -388,9 +428,16 @@ function mountComposerDock(controller) {
     if (!resizeController.dragging && pendingPersistedHeight !== null) height = pendingPersistedHeight;
     seat.style.setProperty('left', `${Math.round(rect.left)}px`);
     seat.style.setProperty('width', `${Math.round(rect.width)}px`);
-    const displayHeight = renderedHeight();
-    seat.style.setProperty('height', `${Math.round(displayHeight)}px`);
-    seat.style.setProperty('--dsh-fairy-composer-height', `${Math.round(displayHeight)}px`);
+    // The pinned height belongs to the composer. A pending question replaces
+    // the stack, so hand layout back to the card instead of squeezing it.
+    if (questionElected(seat)) {
+      seat.style.removeProperty('height');
+      seat.style.removeProperty('--dsh-fairy-composer-height');
+    } else {
+      const displayHeight = renderedHeight();
+      seat.style.setProperty('height', `${Math.round(displayHeight)}px`);
+      seat.style.setProperty('--dsh-fairy-composer-height', `${Math.round(displayHeight)}px`);
+    }
     syncMaterialLayer();
     insetSynchronizer.flush();
     contentAnchor.flush();
@@ -418,6 +465,7 @@ function mountComposerDock(controller) {
       clearControls();
       clearControls = markControls(card);
       removeLegacyMascotScaleControl();
+      ensureCardFocusHandler();
     }
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');
     if (workspaceRow) captureWorkspaceTemplate(workspaceRow);

@@ -11,7 +11,7 @@ export const DEFAULT = {
   enabled: false,
   theme: 'dark',
   mascotVisible: true,
-  contentFade: true,
+  contentFade: false,
   mascotScale: 1,
   mascotAnimationSpeed: 1,
   powerMode: 'normal',
