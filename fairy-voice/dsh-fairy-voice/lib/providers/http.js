@@ -9,6 +9,17 @@ export function providerError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+/** A provider that only exists so the settings card can list it: the host has
+ * no transport for it and answers 409 (`client-side`); the browser half runs
+ * the real work. `member` is the transport method the host rejects. */
+export function clientSideProvider(id, member, message) {
+  return Object.freeze({
+    id,
+    available: () => ({ available: true, reason: null }),
+    [member]: () => Promise.reject(providerError('client-side', message)),
+  });
+}
+
 /** Strip a trailing slash so `${baseURL}/path` never doubles the separator. */
 export function trimBaseUrl(value) {
   return String(value ?? '').trim().replace(/\/+$/, '');

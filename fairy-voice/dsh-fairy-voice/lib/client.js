@@ -1343,6 +1343,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return availabilitySnapshot;
     }
 
+    /** The active provider decides who speaks: the browser provider has no
+     * host-side engine, so it is served by speechSynthesis end to end. */
+    function speechOwnerOf(availability) {
+      return availability?.provider === 'browser' ? 'system' : 'fairy';
+    }
+
     function requestAvailability(force = false) {
       if (availabilityRequest) return availabilityRequest;
       if (!force && availabilityCheckedAt && Date.now() - availabilityCheckedAt < AVAILABILITY_TTL_MS) {
@@ -2447,9 +2453,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const [audioReady, setAudioReady] = React.useState(false);
       const [baselineReady, setBaselineReady] = React.useState(false);
       const availability = React.useSyncExternalStore(availabilityStore.subscribe, availabilityStore.getSnapshot, availabilityStore.getSnapshot);
-      // The active provider decides who speaks: the browser provider has no
-      // host-side engine, so it is served by speechSynthesis end to end.
-      const engine = availability.provider === 'browser' ? 'system' : 'fairy';
+      const engine = speechOwnerOf(availability);
       const seen = React.useRef(new Set());
       const autoReadRef = React.useRef(autoRead);
       autoReadRef.current = autoRead;
@@ -2933,7 +2937,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         : undefined;
       const [state, setState] = React.useState(() => readVoiceState(sessionKey));
       const availability = React.useSyncExternalStore(availabilityStore.subscribe, availabilityStore.getSnapshot, availabilityStore.getSnapshot);
-      const engine = availability.provider === 'browser' ? 'system' : 'fairy';
+      const engine = speechOwnerOf(availability);
       React.useLayoutEffect(() => {
         setState(readVoiceState(sessionKey));
         const listener = (event) => { if (event.detail?.sessionKey === sessionKey) setState(event.detail); };

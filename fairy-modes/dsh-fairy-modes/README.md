@@ -71,18 +71,19 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 ## 挂载（宿主侧集成点）
 
 ```yaml
-# preset（每会话隔离）
+# preset（每会话隔离）——行名必须是字面字符串或 preset 内相对路径；
+# 子行 id 必须与组 id 不同（同名会让 loader 卡死），详见 PONYTAIL-DESIGN.md。
 - id: fairy-modes
   name: cordis:group
   group: true
   isolate: { fairyMode: true }
   config:
-    - id: fairy-modes
-      name: 'dsh-fairy-modes'
+    - id: fairy-modes-engine
+      name: './plugins/fairy-modes.mjs'   # preset 内 shim → DSH_FAIRY_REPO_ROOT 下的真身
 
 # profile patch（host 平面，提供 chip 的两个端点 + 客户端 bundle）
 - id: fairy-modes-bridge
-  name: 'dsh-fairy-modes/bridge'
+  name: 'dsh-fairy-modes'   # 裸包名；子路径名（如 dsh-fairy-modes/bridge）进不了 boot 图
   inject: [clientModules]
 ```
 

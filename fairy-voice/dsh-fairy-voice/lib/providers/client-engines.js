@@ -7,7 +7,7 @@
  * whether it can actually run. Any load or synthesis failure falls back to
  * system speech on the client, which is why a false "ready" is affordable.
  */
-import { providerError } from './http.js';
+import { clientSideProvider } from './http.js';
 
 export const KOKORO_WEB_ID = 'kokoro-web';
 export const PIPER_WEB_ID = 'piper-web';
@@ -51,11 +51,7 @@ export const PIPER_WEB_DEFAULTS = {
 };
 
 function clientEngineProvider(id) {
-  return Object.freeze({
-    id,
-    available: () => ({ available: true, reason: null }),
-    stream: () => Promise.reject(providerError('client-side', '浏览器端引擎')),
-  });
+  return clientSideProvider(id, 'stream', '浏览器端引擎');
 }
 
 export const kokoroWebProvider = clientEngineProvider(KOKORO_WEB_ID);

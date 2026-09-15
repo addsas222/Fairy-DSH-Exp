@@ -2,7 +2,7 @@
  * Fairy 安全闸门 —— preset 内 shim（与 fairy-core-runtime.mjs 同一套路）。
  *
  * 行名合规化同前：原 `!!js` 绝对路径会让 preset 判 BROKEN，改为 preset 内相对路径。
- * 真身 runtime/safety-gate.js 不在公开仓库（本机、F: 检出、上游全历史皆无）：
+ * 真身优先私有同名实现；本仓的 runtime/safety-gate.js 是随仓分发的公开引擎：
  *   1) 存在 → 转发；
  *   2) 缺失 → 保守的缺省闸门：高风险动作要求先「警告。」并确认，与仓库既有约定一致。
  *

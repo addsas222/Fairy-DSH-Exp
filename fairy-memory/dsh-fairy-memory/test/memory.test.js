@@ -10,7 +10,7 @@ import { createGbrainProvider } from '../lib/providers/gbrain.js';
 import { createMem0Provider } from '../lib/providers/mem0.js';
 import { createCustomHttpProvider, parseHeaders } from '../lib/providers/custom-http.js';
 import { createLocalMarkdownProvider } from '../lib/providers/local-markdown.js';
-import { createMemoryRecallTool, createMemoryRememberTool } from '../lib/engine.js';
+import { buildMemoryRecallText, createMemoryRecallTool, createMemoryRememberTool } from '../lib/engine.js';
 
 async function withTempDir(prefix, body) {
   const directory = await mkdtemp(join(tmpdir(), prefix));
@@ -231,6 +231,12 @@ test('a tool-level error becomes a provider failure with the protocol suggestion
   );
 });
 
+test('the auto-recall switch renders both prompt states', () => {
+  assert.match(buildMemoryRecallText({ autoRecall: true }), /自动回忆已开启：回答前先用 `memory_recall`/);
+  assert.match(buildMemoryRecallText({ autoRecall: false }), /自动回忆未开启/);
+  assert.match(buildMemoryRecallText(undefined), /自动回忆未开启/, '缺配置时按默认关闭处理');
+});
+
 test('the host routes report state, mask secrets, and map failures', async () => {
   await withTempDir('fairy-memory-routes-', async (directory) => {
     const previous = process.env.DSH_HOME;
@@ -248,14 +254,17 @@ test('the host routes report state, mask secrets, and map failures', async () =>
 
       // `***` must not overwrite the stored secret; other fields still land.
       const saved = responseDouble();
-      await handlers.config(requestWithJson({ provider: 'local-markdown', providers: { gbrain: { token: '***', surface: 'full' } } }), saved);
+      await handlers.config(requestWithJson({ provider: 'local-markdown', autoRecall: true, providers: { gbrain: { token: '***', surface: 'full' } } }), saved);
       assert.equal(saved.statusCode, 200);
       assert.equal(settings.read().providers.gbrain.token, 'secret-token');
       assert.equal(settings.read().providers.gbrain.surface, 'full');
+      assert.equal(settings.read().autoRecall, true);
 
-      // The CLI mirror is what the agent half reads.
+      // The CLI mirror is what the agent half reads（自动回忆开关也必须随镜像过去，
+      // 否则设置卡的这一格在 agent 面永远无效——它曾是本仓的真机缺陷）。
       const mirror = JSON.parse(await readFile(join(directory, 'fairy-memory', 'config.json'), 'utf8'));
       assert.equal(mirror.providers.gbrain.token, 'secret-token');
+      assert.equal(mirror.autoRecall, true);
 
       const remembered = responseDouble();
       await handlers.remember(requestWithJson({ text: '本项目的发布分支是 ponytail。', tags: ['发布'] }), remembered);

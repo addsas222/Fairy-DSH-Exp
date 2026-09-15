@@ -340,8 +340,8 @@ curl -s -X POST -H 'content-type: application/json' \
      私有同名文件（从不公开）→ 用私有实现；
      无私有文件但引擎在位 → **完整模式**（引擎组段落，实测 4424 / 1243 字符）；
      两者皆无（如语料缺失）→ **降级模式**（shim 用自带语料编译一段速查 + 保守风险闸门）。
-   `runtime/fairy_core.py`、`runtime/compiler.js` 属**私有原版**，从未进过任何公开仓库，
-   且当前引擎并不消费 `.py`（预设里那条 `runtimePath` 是历史遗留，引擎只按它的**目录**找语料）。
+   `runtime/fairy_core.py`、`runtime/compiler.js` 属**私有原版**，从未进过任何公开仓库；
+   当前引擎只按 `<preset>` 与 `<preset>/runtime` 两个目录找语料，不消费任何配置键。
 3. **`inject` 漏声明 `tools`**（已修，2026-09）：`plugins/fairy-world-core.mjs` 既挂段落又
    `ctx.tools.register({name:'fairy_world_lookup'})`，但 `inject` 只有 `['systemPrompt']`——
    cordis 门控在**属性访问**处就抛 `cannot get property "tools" without inject`，

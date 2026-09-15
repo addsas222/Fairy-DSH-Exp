@@ -2,6 +2,7 @@ const { createManagedMutationObserver } = require('./dom-observer-manager.js');
 const { CSS, PULSE_SVG, HALO_SVG, SVG } = require('./mascot-assets.js');
 const { createMascotMotionClock } = require('./mascot-motion-clock.js');
 const { createMascotEventScheduler } = require('./mascot-event-scheduler.js');
+const { SPEED_EVENT } = require('./mascot-animation-speed-control.js');
 
 function createMascotRuntime() {
 	let mascotRuntime = null;
@@ -108,7 +109,7 @@ function createMascotRuntime() {
 					observedHost = null;
 					unbindMotionListener();
 					unbindLifecycleListeners();
-					if (speedListener) window.removeEventListener("dsh-fairy-mascot-animation-speed", speedListener);
+					if (speedListener) window.removeEventListener(SPEED_EVENT, speedListener);
 					speedListener = null;
 					mountGeneration += 1;
 				}
@@ -562,7 +563,7 @@ function createMascotRuntime() {
 			function bindSpeedListener() {
 				if (speedListener) return;
 				speedListener = function (event) { setAnimationRate(event?.detail?.rate); };
-				window.addEventListener("dsh-fairy-mascot-animation-speed", speedListener);
+				window.addEventListener(SPEED_EVENT, speedListener);
 			}
 			/* Build once; MutationObserver will reconnect this same node if the host removes it. */
 			function build() {

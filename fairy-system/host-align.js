@@ -88,6 +88,35 @@ function inventory(runtimeDir) {
   return versions;
 }
 
+/** 版本线：`0.1.5-rc.2` → `0.1`。 */
+function trainOf(version) {
+  return String(version).split('-')[0].split('.').slice(0, 2).join('.');
+}
+
+/**
+ * 混版判据只有这一份（doctor 的 ① 号检查也调它）：以 `base`（默认 dsh 本体）
+ * 为基准，找同一版本线内版本不同的包。默认只看 `dsh-*` 家族——独立版本线
+ * （cordis/cosmokit/schemastery）与原生构建物（node-addon-*，需 --include-addons）
+ * 本就跟着别的线走，误报会把人引向错误的修复。
+ *
+ * @param runtimeDir - `…/node_modules`。
+ * @param options.versions - 已读好的清单（缺省现场读一次）。
+ * @param options.base - 基准版本（缺省取 @deepseek-ai/dsh）。
+ * @param options.includeAddons - 把非 `dsh-*` 的同线包也纳入 stale。
+ * @returns `{ target, train, stale, foreign, versions }`；没有宿主时 target 为 null。
+ */
+function versionDrift(runtimeDir, { versions = inventory(runtimeDir), base, includeAddons = false } = {}) {
+  const target = base || versions.get(`${DEFAULTS.scope}/dsh`);
+  if (!target) return { target: null, train: null, stale: [], foreign: [], versions };
+  const train = trainOf(target);
+  const sameLine = (version) => trainOf(version) === train;
+  const stale = [...versions.entries()]
+    .filter(([name, version]) => version !== target && sameLine(version) && (includeAddons || name.startsWith(`${DEFAULTS.scope}/dsh-`)))
+    .sort();
+  const foreign = [...versions.entries()].filter(([, version]) => !sameLine(version));
+  return { target, train, stale, foreign, versions };
+}
+
 /** 定位 npm 的 CLI 入口：Windows 上 `npm` 是 .cmd，execFileSync 直接调用会 ENOENT；
  *  改用 `node <npm-cli.js>`，既绕开 shell 也避开引号/注入面。 */
 function resolveNpmCli() {
@@ -132,13 +161,8 @@ async function main() {
 
   const distribution = new Map();
   for (const v of versions.values()) distribution.set(v, (distribution.get(v) ?? 0) + 1);
-  const train = target.split('-')[0].split('.').slice(0, 2).join('.');   // 0.1.5-rc.2 → 0.1
-  const inTrain = ([, v]) => v.split('-')[0].split('.').slice(0, 2).join('.') === train;
-  const stale = [...versions.entries()].filter(([, v]) => v !== target && inTrain([, v]))
-    // 默认只对齐 dsh-* 家族：node-addon-* 是原生构建物，版本线不同、重装风险更大，需显式开启
-    .filter(([name]) => options.includeAddons || name.startsWith(`${DEFAULTS.scope}/dsh-`))
-    .sort();
-  const foreign = [...versions.entries()].filter(([, v]) => !inTrain([, v]));
+  // 混版判据只有一份：versionDrift（doctor 的 ① 号检查同源）。
+  const { train, stale, foreign } = versionDrift(runtimeDir, { versions, base: target, includeAddons: options.includeAddons });
 
   process.stdout.write(`runtime : ${runtimeDir}\n`);
   process.stdout.write(`目标版本: ${target}（取自 ${DEFAULTS.scope}/dsh）\n`);
@@ -224,4 +248,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { resolveRuntimeDir, inventory };
+module.exports = { resolveRuntimeDir, inventory, versionDrift };

@@ -5,9 +5,9 @@
  *  1) 行名合规：preset 行名必须是**字面字符串**（相对路径按 preset 目录解析），
  *     而原写法用 `!!js` 拼绝对路径 —— 发现器的 entryListProblem 要求 name 是字符串，
  *     整个 preset 因此判 BROKEN。这里用 preset 内相对路径 shim 顶替。
- *  2) 真身缺失时的降级：仓库内的 runtime/index.js **从未进过任何公开仓库**
- *     （本仓与上游 Chengzhibense/Fairy-DSH 全历史、工作树、两个 home 皆无）。
- *     存在则转发给它；缺失则把随 preset 分发的语料编译成系统提示速查段。
+ *  2) 真身缺失时的降级：私有同名实现优先；本仓的 `runtime/index.js` 是
+ *     2026-09 起随仓分发的公开引擎。存在则转发给它；缺失则把随 preset
+ *     分发的语料编译成系统提示速查段。
  *
  * 系统提示的挂载形状照本仓既有约定（fairy-persona / fairy-modes 同款）：
  * `ctx.systemPrompt.section({ name, order, text })` **单对象、显式 order、返回 dispose**。

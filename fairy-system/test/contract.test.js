@@ -92,9 +92,8 @@ test('records every package artifact mapping and rejects stale or legacy bundles
   assert.match(verifyBuild, /manifest is newer than its generated outputs/);
   assert.match(verifyBuild, /source is newer than its generated outputs/);
   assert.match(verifyBuild, /forbidden legacy path or injection/);
-  assert.match(verify, /function verifyGeneratedArtifactFreshness\(\)/);
-  assert.match(verify, /source is newer than its generated outputs/);
-  assert.match(verify, /forbidden legacy path or runtime injection/);
+  assert.doesNotMatch(verify, /function verifyGeneratedArtifactFreshness\(\)/, 'verify.js 不得再实现一份构建契约');
+  assert.match(verify, /verifyBuildPackage\(contract\)/);
   assert.match(preflightBuild, /Review the source change and rebuild this package manually before launching DSH/);
   assert.match(preflightBuild, /Review the manifest change and rebuild this package manually if that change belongs in the generated output/);
   assert.match(preflightBuild, /DSH_VERIFY_ACCEPTED_BASELINE === '1'/);

@@ -286,6 +286,12 @@ test('the settings card explains the modes and persists the new-session default 
   await bundle.settle(8);
   assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), null, '不设置 removes the key');
 
+  // 角色扮演同样要能落盘：客户端本地模式表曾漏掉它，保存被静默丢弃。
+  select().props.onChange({ target: { value: 'roleplay' } });
+  saveButton().props.onClick();
+  await bundle.settle(8);
+  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), 'roleplay', 'roleplay can be stored as the default');
+
   // 浏览器拒绝写入时说 saveFailed，而不是假装已保存。
   select().props.onChange({ target: { value: 'ptc' } });
   bundle.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };

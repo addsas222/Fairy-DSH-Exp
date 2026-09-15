@@ -76,6 +76,23 @@ test('the config route writes through and reports what changed', async () => {
   });
 });
 
+test('the config route mirrors the settings where the agent tools read them', async () => {
+  await withHome(async (home) => {
+    const settings = createRoleplaySettingsBoundary();
+    const handlers = createFairyRoleplayHandlers({ settings });
+    const res = fakeRes();
+    await handlers.config(fakeReq({ humanizerLevel: 'l4', timingGate: false }), res);
+    assert.equal(res.statusCode, 200);
+    const mirrored = JSON.parse(await readFile(join(home, 'fairy-roleplay', 'config.json'), 'utf8'));
+    assert.equal(mirrored.humanizerLevel, 'l4');
+    assert.equal(mirrored.timingGate, false);
+    // 两个 agent 工具与 `fairy:roleplay-prefs` 段落都经 readRoleplaySettings 读这份镜像。
+    const tool = createRoleplayCheckTool();
+    const checked = await tool.execute({ text: '没问题。' });
+    assert.equal(checked.level, 'l4', 'the agent tool must see the mirrored level');
+  });
+});
+
 test('the check route runs the same checker the agent tool runs', async () => {
   await withHome(async () => {
     const handlers = createFairyRoleplayHandlers({ settings: createRoleplaySettingsBoundary() });

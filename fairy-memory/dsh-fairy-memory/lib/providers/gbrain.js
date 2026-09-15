@@ -244,15 +244,11 @@ export function createGbrainProvider({ fetchImpl = fetch } = {}) {
       const settings = resolveConfig(config);
       const provenance = (tags.length ? `${source} [${tags.join(', ')}]` : source).slice(0, 500);
       const chosen = String(visibility || settings.visibility || '').trim();
-      const entity = String(settings.entity || '').trim();
-      const kind = String(settings.kind || '').trim();
       const message = await callTool('remember', {
         // v1 names the payload `fact`, and provenance is required: an
         // unattributed write is rejected with `provenance_required`.
         fact: value,
         provenance: provenance || 'dsh-fairy-memory',
-        ...(entity ? { entity } : {}),
-        ...(kind ? { kind } : {}),
         ...(chosen === 'private' || chosen === 'world' ? { visibility: chosen } : {}),
       }, config, signal);
       const payload = parseMaybeJson(resultText(message));

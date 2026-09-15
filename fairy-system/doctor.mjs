@@ -73,43 +73,26 @@ export function parseArgs(argv) {
   return options;
 }
 
-/** 读一份安装树：返回 name → version 的 Map（读不到就返回 null）。 */
-function readTree(nodeModules) {
-  const scope = path.join(nodeModules, '@deepseek-ai');
-  if (!existsSync(scope)) return null;
-  const out = new Map();
-  for (const dir of readdirSync(scope)) {
-    const pj = path.join(scope, dir, 'package.json');
-    if (!existsSync(pj)) continue;
-    try { const j = JSON.parse(readFileSync(pj, 'utf8')); out.set(j.name ?? dir, j.version); } catch { /* 半写的 manifest */ }
-  }
-  return out;
-}
-
-/** 版本线：`0.1.5-rc.2` → `0.1`（判"同线内不一致"用）。 */
-const train = (v) => String(v).split('-')[0].split('.').slice(0, 2).join('.');
-
 /**
  * ① 混版：同一版本线（如 `dsh-*` 家族的 0.1.x）内出现多个版本，就是混版。
  * 独立版本线（cordis/cosmokit/schemastery）与原生构建物（node-addon-*）不参与——
- * 它们本就跟着别的线走，误报会把人引向错误的修复。
+ * 判据只有一份：与 host-align 的 `check`/`fix` 同源（`versionDrift`）。
  */
 export function checkVersions(runtimeDir) {
-  const tree = readTree(runtimeDir);
-  if (!tree) return { status: 'unknown', name: '混版检测', detail: `${path.join(runtimeDir, '@deepseek-ai')} 不存在`, fix: '' };
-  const dsh = tree.get('@deepseek-ai/dsh');
-  if (!dsh) return { status: 'fail', name: '混版检测', detail: '安装树里没有 @deepseek-ai/dsh（宿主本体缺失）', fix: '重装官方 @deepseek-ai/dsh' };
-  const line = train(dsh);
-  const stale = [...tree.entries()]
-    .filter(([n, v]) => n.startsWith('@deepseek-ai/dsh-') && train(v) === line && v !== dsh)
-    .sort();
-  if (!stale.length) return { status: 'ok', name: '混版检测', detail: `${tree.size} 个包，同线内全部 ${dsh}`, fix: '' };
+  const scopeDir = path.join(runtimeDir, '@deepseek-ai');
+  if (!existsSync(scopeDir)) {
+    return { status: 'unknown', name: '混版检测', detail: `${scopeDir} 不存在`, fix: '' };
+  }
+  const { versionDrift } = require_(path.join(HERE, 'host-align.js'));
+  const drift = versionDrift(runtimeDir);
+  if (!drift.target) return { status: 'fail', name: '混版检测', detail: '安装树里没有 @deepseek-ai/dsh（宿主本体缺失）', fix: '重装官方 @deepseek-ai/dsh' };
+  if (!drift.stale.length) return { status: 'ok', name: '混版检测', detail: `${drift.versions.size} 个包，同线内全部 ${drift.target}`, fix: '' };
   return {
     status: 'fail',
     name: '混版检测',
-    detail: `${stale.length} 个包落在同一版本线但版本不同（宿主 ${dsh}）：\n    ` + stale.map(([n, v]) => `${n}@${v}`).join('\n    '),
+    detail: `${drift.stale.length} 个包落在同一版本线但版本不同（宿主 ${drift.target}）：\n    ` + drift.stale.map(([name, version]) => `${name}@${version}`).join('\n    '),
     // 修复入口指向既有的对齐工具，doctor 自己不动手
-    fix: `node fairy-system/host-align.js fix --target ${dsh} --runtime ${runtimeDir}`,
+    fix: `node fairy-system/host-align.js fix --target ${drift.target} --runtime ${runtimeDir}`,
   };
 }
 

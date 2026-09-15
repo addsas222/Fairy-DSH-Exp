@@ -92,8 +92,6 @@ export const RHYTHM = Object.freeze({
   equalLengthTolerance: 5,
   /** 连续多少句等长即命中。 */
   equalRunLength: 3,
-  /** 长句阈值（超过即算长句）。 */
-  longSentenceChars: 30,
   /** 短句阈值（不足即算短句）。 */
   shortSentenceChars: 10,
   /** 单段破折号上限。 */

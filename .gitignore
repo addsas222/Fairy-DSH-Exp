@@ -32,6 +32,12 @@ world-core/
 browser-evidence/
 benchmarks/
 
+# tsdown 的 IIFE 中间产物：与同目录 lib/client.js 逐字节相同，bundle 时由 tsdown
+# 重新生成并经 `cp` 落成 client.js。仓库不再跟踪它们（历史上曾按死产物删除又被
+# 还原；2026-09-15 复核：无运行期/门禁/文档消费者，删除 + 忽略）。
+browser-dock/dsh-browser-dock/lib/index.iife.js
+fairy-visual/dsh-fairy-visual/lib/index.iife.js
+
 # ponytail 技能组（MIT，上游再分发内容）只在本机 ~/.omp/agent/skills/_ponytail-vendor/ 留存，
 # 不入库、不随部署分发。
 .agent-presets/ponytail/skills/

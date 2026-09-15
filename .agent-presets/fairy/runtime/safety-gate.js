@@ -20,15 +20,13 @@ const SECTION_NAME = 'fairy-safety-gate';
 const SECTION_ORDER = 49;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-function corpusDirs(config) {
-  const dirs = [];
-  if (config?.runtimePath) dirs.push(path.dirname(String(config.runtimePath)));
-  dirs.push(path.join(HERE, '..'), HERE);
-  return [...new Set(dirs.filter(Boolean))];
+/** 与 core 同一套语料目录约定；语料缺失时用内置简明版兜底。 */
+function corpusDirs() {
+  return [path.join(HERE, '..'), HERE];
 }
 
 function readCorpus(config, ...rel) {
-  for (const dir of corpusDirs(config)) {
+  for (const dir of corpusDirs()) {
     const file = path.join(dir, ...rel);
     if (!existsSync(file)) continue;
     try { return JSON.parse(readFileSync(file, 'utf8')); } catch { /* 半写跳过 */ }

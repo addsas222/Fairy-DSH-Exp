@@ -9,7 +9,7 @@ profile 机制挂载（`dsh plugin --profile web add @linxin666/dsh-web-all@late
 | | Fairy-DSH | dsh-web |
 | --- | --- | --- |
 | DSH 固定 | `0.1.1-rc.2`(capability-matrix.json + 官方 runtime SHA-256) | `>=0.1.5-rc.1`(`packages/dsh-web-all/package.json` 的 `dsh.engines.dsh`) |
-| 客户端面孔 | 9 个插件 manifest 注入 `@deepseek-ai/dsh-client-runtime` | 0.1.2+ 队列已删除该面孔（实测:本机安装的 0.1.2-rc.1 `@deepseek-ai/` 下已无 `dsh-client-runtime`,仅 41 个 `dsh-client-*` 新面孔），改注入 `dsh-client-ui-renderer` / `dsh-client-store` / `dsh-api-*-controller` |
+| 客户端面孔 | 10 个插件 manifest 注入 `@deepseek-ai/dsh-client-runtime` | 0.1.2+ 队列已删除该面孔（实测:本机安装的 0.1.2-rc.1 `@deepseek-ai/` 下已无 `dsh-client-runtime`,仅 41 个 `dsh-client-*` 新面孔），改注入 `dsh-client-ui-renderer` / `dsh-client-store` / `dsh-api-*-controller` |
 
 两包分居 0.1.2 客户端面孔切换线两侧，**同一 profile 目前不能同时运行**。
 兼容的前置条件是把 Fairy-DSH 的官方运行时固定升级到 ≥ 0.1.5-rc.1，走仓库既有

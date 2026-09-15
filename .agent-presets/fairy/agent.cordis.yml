@@ -1,5 +1,7 @@
 # Fairy preset: corpus-driven voice core over the standard DSH tool surface.
 
+# 注：下方 persona 的 text 与 persona-packs/fairy/prompt.md 必须逐字一致——
+# 无包会话只看到这段字面量；fairy-system/test/fairy-preset-shims.test.js 有同步断言。
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
@@ -42,7 +44,6 @@
 - id: fairy-core-runtime
   name: './plugins/fairy-core-runtime.mjs'
   config:
-    runtimePath: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/fairy_core.py'
     enabled: true
     fidelity: strict
     exampleLimit: 2

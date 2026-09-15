@@ -1,8 +1,8 @@
 # Ponytail preset:精简模式 composition（四站流水线：扮演→探查→建造→创造）。
 #
 # 与 fairy preset 的差异(Ponytail 标准,删除优先):
-# - 不引用任何仓库外/私有运行时资产(原 runtime/index.js、fairy_core.py、
-#   safety-gate.js 为悬空引用,公开仓库无法挂载)。
+# - 不引用任何仓库外运行时资产(fairy preset 的 runtime/* 已随仓分发;
+#   语音核心与安全闸门仍由 fairy preset 挂载,本 preset 不重复挂)。
 # - 不挂 dsh-persona 行:人格文档由 host 层 dsh-fairy-persona 按人格包热切换;
 #   未选择人格包时回落到部署默认 persona(web-app bundle 的 system-prompt 行)。
 # - 不挂 tool-presentation 行:PTC 呈现由 dsh-fairy-modes 按会话运行时切换
@@ -57,7 +57,7 @@
 # ── PTC(Build&Work)与创造(Memory&Dream) ───────────────────────────────
 # 模式状态是每会话的,entry-local 领域是正确的生命周期。
 # preset 行名必须是字面字符串(discovery 的 entryListProblem 不接受 !!js
-# 表达式名);本仓库插件经 preset 内 shim(./plugins/fairy-modes.js)加载,
+# 表达式名);本仓库插件经 preset 内 shim(./plugins/fairy-modes.mjs)加载,
 # shim 用 DSH_FAIRY_REPO_ROOT 解析真身,preset 复制/原地两种部署行为一致。
 # 创造模式的回忆由 fairy-modes 的 session_recall 工具承担
 # (dsh-tool-session-query 未随 0.1.2 发行,不能作为 preset 行)。
@@ -85,9 +85,6 @@
     - id: fairy-memory-engine
       name: './plugins/fairy-memory.mjs'
 
-# ── 极简模式(Explore&Check) ─────────────────────────────────────────────
-# 直接复用官方 plan-mode:探查、定案、exit_plan_mode 审批后才进入实施。
-# 主会话 chip 由 dsh-fairy-modes 的客户端读取 `plan` 投影显示。
 # ── 角色扮演(流水线第四站:人格/时机/回复/去AI味) ─────────────────────────
 # 与记忆同形态：agent 面只挂两个工具(roleplay_check / roleplay_style)，
 # 引擎本体(设置命名空间 fairy-roleplay + /fairy-roleplay/* 路由 + 设置卡)由

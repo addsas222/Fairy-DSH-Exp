@@ -11,8 +11,9 @@ rem
 rem Usage:  start-fairy.cmd            -> port 3081
 rem         start-fairy.cmd 3099       -> given port
 rem
-rem Same semantics as start-fairy.ps1 (DSH_HOME / two REPO_ROOT vars / PROFILE_ROOT
-rem / pinned runtime). If you change one launcher, change the other too.
+rem Same semantics as the host-side start-fairy.ps1 (DSH_HOME / two REPO_ROOT vars
+rem / PROFILE_ROOT / pinned runtime). That .ps1 is generated on the host and is
+rem not in this repo; keep the two in step manually when either changes.
 
 setlocal
 set "PORT=%~1"

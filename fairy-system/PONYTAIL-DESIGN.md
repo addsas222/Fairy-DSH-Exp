@@ -6,9 +6,11 @@
 
 ## 现状审计（精简对象)
 
+> 本表是 2026-09-13 优化前的快照，保留以记录动机；**当前状态**以 AGENTS.md §1.2/§3 为准（下面处置列已标注修复结果）。
+
 | 对象 | 问题 | 处置 |
 | --- | --- | --- |
-| `.agent-presets/fairy/agent.cordis.yml` | 依赖私有 runtime 行(`runtime/*`,在 .gitignore 内,发布树缺失);且行名是 `!!js` 表达式 → discovery 判 broken、picker 不可选。persona 行本身用的是本 cohort 的 `config.text`(0.1.1 合法;0.1.5 改为 prefix/suffix) | 公开入口为 `ponytail` preset;fairy preset 属私有部署资产,迁移到新 cohort 需改写 runtime 行与 persona 键 |
+| `.agent-presets/fairy/agent.cordis.yml` | 依赖私有 runtime 行(`runtime/*`,在 .gitignore 内,发布树缺失);且行名是 `!!js` 表达式 → discovery 判 broken、picker 不可选。persona 行本身用的是本 cohort 的 `config.text`(0.1.1 合法;0.1.5 改为 prefix/suffix) | **已修复**：行名改为 preset 内相对路径 shim；`runtime/{index.js,safety-gate.js}` 已随仓分发，fairy preset 公开可用（见 AGENTS §3） |
 | `fairy-startup` | host apply 为空操作,但 lib/client.js 承担真实启动动作(sessions.clear / workspaces.startSession,verify.js:349 钉死)且验证链全量引用 | 保持完整挂载;不是简化对象 |
 | `fairy-voice` | TTS 硬编码单一本地 GPT-SoVITS(127.0.0.1:9880)；音色与人格无绑定 | 抽象 provider 注册表；人格包绑定音色 |
 | 人格资产 | 单一人格,语料 JSON 与 prompt 静态耦合 | 人格包(pack)目录化,可切换;tone 属性渲染进人格文本 |
@@ -19,7 +21,7 @@
 
 - 探索/计划：`@deepseek-ai/dsh-plan-mode`(`plan/mode` 事件、`plan` 投影、`/plan` 命令、`exit_plan_mode` 工具）原样复用 = 极简模式（Explore&Check)。
 - PTC:`ctx.tools.presentAs('ptc')` 可在 agent 作用域运行时调用、返回 disposer、未声明 mode 的作用域才可切换 ⇒ 新 preset 不挂 `tool-presentation` 行，由模式引擎按会话切换。
-- 回忆：`dsh-tool-session-query` 的 `session_search`/`session_event_search` 覆盖"回忆所作所为"；preset 增加该行。
+- 回忆：由 `fairy-modes` 的 `session_recall` 承担（部署组合 `ctx.sessionQuery`；`profiles/web` 已把 `session-query-sqlite` 的 `openAt` 设为 `first-search`）。`dsh-tool-session-query` 未随 0.1.2 发行，不作为 preset 行。
 - 搜索：`ctx.web.registerSearchProvider` + base bundle 已挂 `web-search-deepseek`(DEEPSEEK_API_KEY 同源）+ `web-fetch-http`;`web` 行 `searchProvider` 可 pin。
 - 人格行：`dsh-persona` 是 scope-only;`ctx.systemPrompt.section()` 同名作用域覆盖、dispose 还原、`system-prompt/change` 事件 ⇒ 会话内热切换人格文档合法。
 - 技能：skill = SKILL.md 目录包；写入被扫描根（`.dsh/skills/` 或 preset `skills/`)即上线；`ctx.skills` 分层合并。

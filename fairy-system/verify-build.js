@@ -161,5 +161,9 @@ function verifyPackage(contract) {
   }
 }
 
-for (const contract of packages) verifyPackage(contract);
-process.stdout.write(`Fairy build contract verified (${packages.length} packages)\n`);
+if (require.main === module) {
+  for (const contract of packages) verifyPackage(contract);
+  process.stdout.write(`Fairy build contract verified (${packages.length} packages)\n`);
+}
+
+module.exports = { packages, verifyPackage };

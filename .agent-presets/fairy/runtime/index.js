@@ -5,7 +5,6 @@
  *   - 具名导出 `apply(ctx, config)`，返回 dispose 函数；
  *   - `inject = ['systemPrompt']`（宿主只读 shim 那行的声明，这里保留是与另两个插件同形）；
  *   - config 来自 preset 那一行，**由本模块消费**：
- *       runtimePath  语料根（默认 `<preset>/runtime/`，其父目录即 .agent-presets/fairy/）
  *       enabled      false 则不挂任何段落（但仍返回 dispose）
  *       fidelity     'strict' 全量展开；'brief' 只出骨架
  *       exampleLimit 每个 profile 取多少条真实例句
@@ -26,21 +25,16 @@ const SECTION_ORDER = 47;
 const HERE = path.dirname(fileURLToPath(import.meta.url));   // <preset>/runtime/
 
 /**
- * 语料目录。两种摆法都要容忍：
- *   a) 语料在 preset 下（`<preset>/style/…`）——仓库现状；
- *   b) 语料被搬进 runtime 内（`<preset>/runtime/style/…`）——私有打包形态。
- * 优先 config.runtimePath 的所在目录（preset 已声明该值）。
+ * 语料目录：preset 下（`<preset>/style/…`）与其 runtime 内（`<preset>/runtime/style/…`）
+ * 两种摆法都容忍；语料缺失时由各自的兜底段落接手。
  */
-function corpusDirs(config) {
-  const dirs = [];
-  if (config?.runtimePath) dirs.push(path.dirname(String(config.runtimePath)));
-  dirs.push(path.join(HERE, '..'), HERE);
-  return [...new Set(dirs.filter(Boolean))];
+function corpusDirs() {
+  return [path.join(HERE, '..'), HERE];
 }
 
 /** 逐个候选目录找语料：`<dir>/style/<file>`。 */
 function readCorpus(config, ...rel) {
-  for (const dir of corpusDirs(config)) {
+  for (const dir of corpusDirs()) {
     const file = path.join(dir, ...rel);
     if (!existsSync(file)) continue;
     try { return JSON.parse(readFileSync(file, 'utf8')); } catch { /* 半写就跳过 */ }

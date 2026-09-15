@@ -50,6 +50,10 @@ const publishedPackages = [
   paths.roleplayPlugin,
 ];
 
+// 构建契约（产物存在性 + 新鲜度 + 禁用串）只有一份实现：verify-build.js。
+// require 它不再有副作用（执行体被 require.main 守卫），这里按发布面过滤后转调。
+const { packages: buildContracts, verifyPackage: verifyBuildPackage } = require('./verify-build.js');
+
 function fail(message) {
   throw new Error(`Fairy system verification failed: ${message}`);
 }
@@ -88,70 +92,17 @@ function verifyRuntimeBoundaries() {
   assert(officialPackage.name === '@deepseek-ai/dsh' && officialPackage.version === '0.1.1-rc.2', 'official DSH dependency version drifted');
 }
 
-function verifyPublishedArtifacts() {
-  for (const packageDir of publishedPackages) {
-    const manifest = JSON.parse(read(path.join(packageDir, 'package.json')));
-    const targets = [
-      ['main', manifest.main],
-      ['exports["."]', manifest.exports?.['.']],
-      ['exports["./client"]', manifest.exports?.['./client']],
-    ];
-    for (const [label, target] of targets) {
-      assert(typeof target === 'string' && target.length > 0, `${manifest.name} does not declare ${label}`);
-      const output = path.resolve(packageDir, target);
-      assert(fs.existsSync(output) && fs.statSync(output).isFile(), `${manifest.name} ${label} build output is missing: ${output}`);
-    }
-  }
-}
-
-function verifyGeneratedArtifactFreshness() {
-  const sourceRoots = new Map([
-    [paths.browserDock, path.join(paths.browserDock, 'src')],
-    [paths.balance, null],
-    [paths.startupPlugin, null],
-    [paths.visualPlugin, path.join(paths.visualPlugin, 'src')],
-    [path.join(paths.audio, 'dsh-fairy-voice'), null],
-    [paths.personaPlugin, null],
-    [paths.modesPlugin, null],
-    [paths.searchPlugin, null],
-    [path.join(paths.memoryPlugin, 'src'), 'src'],
-    [paths.roleplayPlugin, null],
-  ]);
-  const forbiddenClient = new Map([
-    [paths.browserDock, [/child_process/, /playwright-profile/, /Google Chrome\.app/]],
-    [paths.balance, [/DEEPSEEK_API_KEY/, /Authorization/]],
-    [paths.startupPlugin, [/fairy-visual/, /fairy-voice/, /localStorage/, /sessionStorage/]],
-  ]);
-  const visit = (directory, files) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) visit(file, files);
-      else if (entry.isFile()) files.push(file);
-    }
-  };
-  for (const packageDir of publishedPackages) {
-    const manifestPath = path.join(packageDir, 'package.json');
-    const manifest = JSON.parse(read(manifestPath));
-    const outputs = [...new Set([
-      path.resolve(packageDir, manifest.main),
-      path.resolve(packageDir, manifest.exports['.']),
-      path.resolve(packageDir, manifest.exports['./client']),
-    ])];
-    const outputMtime = Math.min(...outputs.map((file) => fs.statSync(file).mtimeMs));
-    assert(fs.statSync(manifestPath).mtimeMs <= outputMtime + 1,
-      `${manifest.name} manifest is newer than its generated outputs`);
-    const sourceRoot = sourceRoots.get(packageDir);
-    if (sourceRoot) {
-      const sourceFiles = [];
-      visit(sourceRoot, sourceFiles);
-      const newestSource = Math.max(...sourceFiles.map((file) => fs.statSync(file).mtimeMs));
-      assert(newestSource <= outputMtime + 1,
-        `${manifest.name} source is newer than its generated outputs`);
-    }
-    const client = fs.readFileSync(path.resolve(packageDir, manifest.exports['./client']), 'utf8');
-    for (const pattern of forbiddenClient.get(packageDir) || []) {
-      assert(!pattern.test(client), `${manifest.name} client bundle contains a forbidden legacy path or runtime injection`);
-    }
+/**
+ * 构建契约只有一份实现（verify-build.js）：产物存在性、新鲜度（带 build-script
+ * 闸）与 10 包的禁用串都在那里。这里按发布面包过滤后转调，check.sh 与部署链
+ * 因此得到同一判据。
+ * ponytail: 先前此处各有一份副本，且新鲜度判据少一道 build-script 闸——两处
+ * 结论可以互相矛盾（实测：只 touch 手写包的 package.json，一边通过一边失败）。
+ */
+function verifyBuildContract() {
+  for (const contract of buildContracts) {
+    if (!publishedPackages.includes(contract.dir)) continue;
+    verifyBuildPackage(contract);
   }
 }
 
@@ -216,8 +167,7 @@ function auditLifecycleOwnership() {
 
 function verifyStaticContracts() {
   verifyRuntimeBoundaries();
-  verifyPublishedArtifacts();
-  verifyGeneratedArtifactFreshness();
+  verifyBuildContract();
   const lifecycleOwnerCount = auditLifecycleOwnership();
   const balancePackage = JSON.parse(read(path.join(paths.balance, 'package.json')));
   const browserDockPackage = JSON.parse(read(path.join(paths.browserDock, 'package.json')));
@@ -249,7 +199,6 @@ function verifyStaticContracts() {
     read(path.join(paths.visualPlugin, 'src', 'client', 'controller-lifecycle.js')),
     read(path.join(paths.visualPlugin, 'src', 'client', 'mode-theme.js')),
     read(path.join(paths.visualPlugin, 'src', 'client', 'stage-lifecycle.js')),
-    read(path.join(paths.visualPlugin, 'src', 'client', 'content-fade.js')),
     read(path.join(paths.visualPlugin, 'src', 'client', 'scrollbar.js')),
     read(path.join(paths.visualPlugin, 'src', 'client', 'semantic-markers.js')),
     read(path.join(paths.visualPlugin, 'src', 'client', 'geometry-lifecycle.js')),

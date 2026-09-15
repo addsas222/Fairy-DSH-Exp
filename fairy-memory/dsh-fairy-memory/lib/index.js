@@ -19,7 +19,6 @@ import {
   MEMORY_PROVIDER_IDS,
   MEMORY_SECRET_FIELDS,
   createMemoryRegistry,
-  memoryConfigKey,
 } from './providers/index.js';
 
 export const FAIRY_MEMORY_SETTINGS_NAMESPACE = 'fairy-memory';
@@ -139,7 +138,7 @@ function buildPatch(body = {}) {
   return patch;
 }
 
-/** `$DSH_HOME/fairy-memory/config.json`: the mirror the CLI reads. */
+/** `$DSH_HOME/fairy-memory/config.json`: the mirror the CLI and the agent tools read. */
 export function memoryConfigPath() {
   const home = process.env.DSH_HOME || join(homedir(), '.dsh');
   return join(home, 'fairy-memory', 'config.json');
@@ -149,7 +148,7 @@ async function writeConfigMirror(value) {
   try {
     const file = memoryConfigPath();
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify({ provider: value.provider, providers: value.providers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await writeFile(file, `${JSON.stringify({ provider: value.provider, autoRecall: value.autoRecall === true, providers: value.providers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   } catch (error) {
     diagnostics.warn('memory.mirror', {}, error);
   }

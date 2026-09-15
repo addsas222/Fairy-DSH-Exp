@@ -40,10 +40,6 @@ function configFor(id, settingsValue) {
   return { ...MEMORY_PROVIDER_DEFAULTS[key], ...(settingsValue?.providers?.[key] || {}) };
 }
 
-export function memoryConfigKey(id) {
-  return CONFIG_KEYS[id] || null;
-}
-
 export function createMemoryRegistry({ fetchImpl = fetch } = {}) {
   const providers = new Map([
     [GBRAIN_ID, createGbrainProvider({ fetchImpl })],

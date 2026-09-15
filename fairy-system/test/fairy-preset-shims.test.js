@@ -7,7 +7,7 @@
  * 这里按本仓既有约定（fairy-modes/test/modes.test.js 的 fakeHost）做真调用。
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -36,6 +36,25 @@ function fakeHost() {
   };
   return { ctx, sections };
 }
+
+test('the persona document lives twice and stays byte-equal', () => {
+  const lines = readFileSync(path.join(PRESET_DIR, 'agent.cordis.yml'), 'utf8').split('\n');
+  const start = lines.findIndex((line) => line.trim() === 'text: |-');
+  assert.notEqual(start, -1, 'fairy preset must keep the persona literal');
+  const block = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === '') { block.push(''); continue; }
+    if (!line.startsWith('      ')) break;
+    block.push(line.slice(6));
+  }
+  while (block.length > 0 && block[block.length - 1] === '') block.pop();
+  const prompt = readFileSync(path.resolve(import.meta.dirname, '..', '..', 'persona-packs', 'fairy', 'prompt.md'), 'utf8');
+  assert.equal(
+    block.join('\n'),
+    prompt.replace(/\r\n/g, '\n').replace(/\n+$/, ''),
+    '两份人格文本必须同步：预设字面量（无包时的唯一人格来源）与 persona-packs/fairy/prompt.md（人格引擎渲染的那份）',
+  );
+});
 
 /** 造一个"有语料、无私有 runtime"的临时 repo 根，用于降级路径。 */
 function fakeRepoWithoutRuntime() {

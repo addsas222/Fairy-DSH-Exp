@@ -359,7 +359,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const DEFAULT_KEY = 'dsh.fairyModes.default.v1';
     const APPLIED_PREFIX = 'dsh.fairyModes.applied.';
     /** The modes the bridge accepts; local because the browser half loads alone. */
-    const MODE_VALUES = ['off', 'explore', 'ptc', 'create'];
+    const MODE_VALUES = ['off', 'explore', 'ptc', 'create', 'roleplay'];
     const DEFAULT_MODE_ID = 'dsh-fairy-modes-default';
     const DEFAULT_MODE_OPTIONS = [
       { value: '', label: '不设置（新会话保持 off）' },

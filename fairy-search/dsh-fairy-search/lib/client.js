@@ -386,7 +386,12 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     }
 
     function useSettingsSnapshot(scope) {
-      return React.useSyncExternalStore(scope.subscribe, scope.getSnapshot, scope.getSnapshot);
+      // 官方 scope 是类实例，subscribe/getSnapshot 读 `this`：必须按接收者调用。
+      return React.useSyncExternalStore(
+        (listener) => scope.subscribe(listener),
+        () => scope.getSnapshot(),
+        () => scope.getSnapshot(),
+      );
     }
 
     // 提问行本身的观感在 ASK_STYLE 里；这里只留本卡自己的两处。

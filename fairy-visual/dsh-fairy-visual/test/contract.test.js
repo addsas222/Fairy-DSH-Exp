@@ -6,7 +6,7 @@ import test from 'node:test';
  * a CRLF checkout would silently miss them, so the line ending the platform
  * happened to write is normalized away here instead of in every pattern. */
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((value) => value.replace(/\r\n/g, '\n'));
-const [clientEntrySource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerNativeSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, serverSource, contractTypes] = await Promise.all([
+const [clientEntrySource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, serverSource, contractTypes] = await Promise.all([
   read('../src/client/index.js'),
   read('../src/client/constants.js'),
   read('../src/client/utils.js'),
@@ -14,7 +14,6 @@ const [clientEntrySource, constantsSource, utilsSource, styleSource, composerDoc
   read('../src/client/composer-dock.js'),
   read('../src/client/composer-marker-projection.js'),
   read('../src/client/composer-material-layer.js'),
-  read('../src/client/composer-native-controls.js'),
   read('../src/client/composer-workspace-projection.js'),
   read('../src/client/composer-resize-controller.js'),
   read('../src/client/composer-inset-synchronizer.js'),
@@ -54,7 +53,7 @@ const mascotEyeSvgSource = await read('../src/client/mascot-eye-svg.js');
 const mascotGeometrySource = await read('../src/client/mascot-geometry.js');
 const mascotStaticSource = [mascotAssetsSource, mascotStyleSource, mascotEffectsSvgSource, mascotEyeSvgSource, mascotGeometrySource].join('\n');
 const clientSource = [clientEntrySource, semanticManagerSource, sidebarManagerSource, scrollbarsManagerSource, heroProjectionSource, mascotRuntimeSource, mascotStaticSource].join('\n');
-const source = [clientSource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerNativeSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, selectionGuardSource, mascotScaleSource, settingsWriteSource, observerManagerSource].join('\n');
+const source = [clientSource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, selectionGuardSource, mascotScaleSource, settingsWriteSource, observerManagerSource].join('\n');
 const bundle = await read('../lib/client.js');
 const manifest = JSON.parse(await read('../package.json'));
 
@@ -674,14 +673,13 @@ test('locks native selection only for explicit drag handles', () => {
 });
 
 test('keeps composer responsibilities split around the official seat', () => {
-  assert.match(composerDockSource, /placeNativeControlMarkers/);
+  assert.match(composerDockSource, /markControls\(card\)/);
   assert.match(composerDockSource, /createMaterialLayer/);
   assert.match(composerDockSource, /createInsetSynchronizer/);
   assert.match(composerDockSource, /createComposerSessionResolver/);
   assert.match(composerDockSource, /createResizeController/);
   assert.match(composerMarkerSource, /function markControls/);
   assert.match(composerMaterialSource, /function syncMaterialLayer/);
-  assert.match(composerNativeSource, /function placeNativeControlMarkers/);
   assert.match(composerWorkspaceSource, /function ensureWorkspaceProjection/);
   assert.match(composerWorkspaceSource, /existingProjection\?\.remove\(\)/);
   assert.match(composerWorkspaceSource, /existingProjection\.parentElement === stack/);

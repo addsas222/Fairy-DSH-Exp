@@ -203,13 +203,12 @@ export function extractAnswerSources(content) {
  * // and a `custom.model` field are the upgrade path.
  *
  * @param options - `baseURL` (`/chat/completions` is appended), optional `apiKey`, fetch impl.
- * @returns a `WebSearchProvider`-shaped engine.
+ * @returns the engine the hub routes to; availability is the hub's rule, not this object's.
  */
 export function createCustomHttpProvider({ baseURL, apiKey = '', fetchImpl = fetch, model = FAIRY_SEARCH_CUSTOM_MODEL }) {
   const endpoint = `${baseURL.replace(/\/+$/, '')}/chat/completions`;
   return {
     id: 'custom',
-    available: () => URL.canParse(baseURL),
     async search(request, signal) {
       let response;
       try {

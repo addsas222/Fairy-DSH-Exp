@@ -313,7 +313,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             jsx.jsx(AskToggle, {
               id: 'fairy-memory-auto-recall',
               label: '每次回答前自动回忆',
-              hint: '关闭时只在明确要求时回忆。',
+              hint: '关闭时只在明确要求时回忆；开启后模型每轮先检索长期记忆。',
               checked: autoRecall,
               disabled: form.busy !== null,
               onChange: (checked) => form.change('autoRecall', checked),

@@ -1,7 +1,7 @@
 /* Client-side Whisper marker provider: transformers.js runs the model in the
  * browser, so the host only stores the client's config and answers 409 on
  * /fairy-voice/stt, exactly like browser recognition. */
-import { providerError } from './http.js';
+import { clientSideProvider } from './http.js';
 
 export const WHISPER_WEB_STT_ID = 'whisper-web';
 
@@ -15,8 +15,4 @@ export const STT_WHISPER_WEB_DEFAULTS = Object.freeze({
   resourceBase: '',
 });
 
-export const whisperWebSttProvider = Object.freeze({
-  id: WHISPER_WEB_STT_ID,
-  available: () => ({ available: true, reason: null }),
-  transcribe: () => Promise.reject(providerError('client-side', '浏览器端语音输入')),
-});
+export const whisperWebSttProvider = clientSideProvider(WHISPER_WEB_STT_ID, 'transcribe', '浏览器端语音输入');

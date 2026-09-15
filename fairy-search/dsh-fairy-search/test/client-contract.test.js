@@ -177,18 +177,22 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   });
 
   const writes = [];
-  const scope = {
-    getSnapshot: () => ({
-      status: 'ready',
-      writable: true,
+  // 官方 settingsScope 是类实例：方法读 `this`，把方法解引用传出去会崩。
+  // 假 scope 保持同一形状（而不是箭头函数），否则这类绑定回归测不出来。
+  class FakeSettingsScope {
+    constructor() {
+      this.status = 'ready';
+      this.writable = true;
       // A stored secret must never reach the rendered form, which is why this
       // snapshot deliberately carries one.
-      value: { version: 1, provider: 'exa', deepseek: {}, exa: { apiKey: 'sk-stored-secret' }, perplexity: {}, custom: { baseURL: 'https://gw.example/v1' } },
-    }),
-    subscribe: () => () => {},
-    set: async (field, value) => { writes.push({ op: 'set', path: [field], value }); },
-    mutate: async (ops) => { writes.push(...ops); },
-  };
+      this.value = { version: 1, provider: 'exa', deepseek: {}, exa: { apiKey: 'sk-stored-secret' }, perplexity: {}, custom: { baseURL: 'https://gw.example/v1' } };
+    }
+    getSnapshot() { return { status: this.status, writable: this.writable, value: this.value }; }
+    subscribe() { return () => {}; }
+    async set(field, value) { writes.push({ op: 'set', path: [field], value }); }
+    async mutate(ops) { writes.push(...ops); }
+  }
+  const scope = new FakeSettingsScope();
   plugin.apply({
     effect() {},
     settingsScope: { bind: (spec) => { assert.equal(spec.namespace, 'fairy-search'); return scope; } },
@@ -248,10 +252,8 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   assert.deepEqual(writes, []);
 
   // 只读会话：按钮停用，状态用套件那句 ASK_TEXT.readOnly。
-  const readOnlyScope = {
-    ...scope,
-    getSnapshot: () => ({ status: 'ready', writable: false, value: scope.getSnapshot().value }),
-  };
+  const readOnlyScope = new FakeSettingsScope();
+  readOnlyScope.writable = false;
   plugin.apply({
     effect() {},
     settingsScope: { bind: () => readOnlyScope },

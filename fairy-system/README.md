@@ -1,6 +1,6 @@
 # Fairy System：当前操作与验证
 
-本目录只负责当前 live workspace 的验证、升级预检和浏览器证据边界。工程规则在 `../AI_PROJECT_RULES.md`，架构在 `../ARCHITECTURE.md`，短运行摘要在 `../DSH-HANDOFF.md`。
+本目录只负责当前 live workspace 的验证、升级预检和浏览器证据边界。公开仓的工程规则见根 `AGENTS.md`、设计记录见 `PONYTAIL-DESIGN.md`；本文引用的 `AI_PROJECT_RULES.md` / `ARCHITECTURE.md` / `DSH-HANDOFF.md` 与语音服务脚本属私有树，不随本仓分发。
 
 ## 当前批准边界
 
@@ -79,7 +79,7 @@ node fairy-system/log-triage.js --json
 
 旧段中的 Visual build 缺失、source 新于 bundle、Cordis module 缺失不会污染当前结论。结构化日志中的 `client-aborted`、`superseded` 和配套的 `aborted: true` metric 单列为 expected cancellation，不计入 actionable。`check.sh` 使用 `--require-healthy`，因此最新段不是 ready 或存在当前 actionable 时会失败。
 
-不要为例行验证重启语音服务；服务生命周期本身是改动范围时，才使用：
+不要为例行验证重启语音服务；服务生命周期本身是改动范围时，才使用（脚本属私有/ macOS live 树，不在公开仓内）：
 
 ```sh
 fairy-voice/start_fairy_voice.sh
@@ -122,10 +122,10 @@ safari-hdd-transition-svg-integrity
 当前发布候选 checkout
 ```
 
-它是 non-voice distribution snapshot，不等于完整工程，也不会自动跟随 live 修改。更新 release 必须在 live 验证通过后重新生成 `LIVE-SOURCE-MANIFEST.json`、`SHA256SUMS` 与 ZIP，并运行 release root 的：
+它是 non-voice distribution snapshot，不等于完整工程，也不会自动跟随 live 修改。更新 release 必须在 live 验证通过后重新生成 `LIVE-SOURCE-MANIFEST.json`、`SHA256SUMS` 与 ZIP，并运行 release root 的（发布链文件属私有树，不在公开仓内；本仓的发布门禁是上文「日常验证」与 `RELEASE-CHECKLIST.md`）：
 
 ```sh
 ./verify-release.sh
 ```
 
-浏览器证据与 benchmark 保留在本目录的 append-only 子目录中，仅供人工追溯和升级审计；其他历史材料若需隔离，必须在工程外建立带清单的 quarantine。详见 `CONTENT-BOUNDARIES.md`。
+浏览器证据与 benchmark 保留在本目录的 append-only 子目录中，仅供人工追溯和升级审计；其他历史材料若需隔离，必须在工程外建立带清单的 quarantine。详见 `CONTENT-BOUNDARIES.md`。长跑基准的生成器是 `tts-long-run-benchmark.mjs`（手工运行；旋钮 `DSH_TTS_BENCH_*`；需要运行中的 fairy-voice 与 macOS 的 `pgrep`/`footprint`）。

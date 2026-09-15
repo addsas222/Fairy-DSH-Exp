@@ -150,12 +150,46 @@ export function createMemoryRememberTool({ registry = createMemoryRegistry({}), 
   };
 }
 
-/** Mount the agent half: both tools, in every mode. */
+/**
+ * 自动回忆开关 → 段落文本。这是该开关在 agent 面**唯一**的消费者：设置卡写、
+ * 宿主镜像带给引擎，开启时把"每轮先检索长期记忆"写成模型可读的要求（与 roleplay
+ * 的 autoCheck 同一模式——插件不替模型调用工具，只把行为要求注入系统提示）。
+ */
+export function buildMemoryRecallText(settings) {
+  return settings?.autoRecall === true
+    ? '自动回忆已开启：回答前先用 `memory_recall` 检索与本轮相关的长期记忆（limit 默认 6）。没有命中就正常回答，不要编造记忆内容。'
+    : '自动回忆未开启：只在用户明确要求、或确有必要时使用 `memory_recall`。';
+}
+
+/** Mount the agent half: both tools plus the auto-recall instruction section. */
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {
     ctx.inject(['tools'], (toolCtx) => {
       toolCtx.tools.register(createMemoryRecallTool({}));
       toolCtx.tools.register(createMemoryRememberTool({}));
     });
+    /* 动态段落：与 roleplay 引擎同款（函数式 text + 1s 读缓存 + pre-step 刷新）。
+     * 顺序排在模式段(51)与 roleplay 偏好段(53)之间。 */
+    let cached = buildMemoryRecallText(FAIRY_MEMORY_DEFAULTS);
+    let cachedAt = 0;
+    const refresh = () => {
+      if (Date.now() - cachedAt < 1_000) return;
+      cachedAt = Date.now();
+      void readMemorySettings()
+        .then((settings) => { cached = buildMemoryRecallText(settings); })
+        .catch(() => {});
+    };
+    ctx.systemPrompt.section({
+      name: 'fairy:memory-recall',
+      order: typeof ctx.systemPrompt.getSectionOrder === 'function' ? ctx.systemPrompt.getSectionOrder('PLAN_POLICY') + 2 : 52,
+      text: () => cached,
+    });
+    ctx.on?.('agent/pre-step', async (_payload, next) => {
+      refresh();
+      return next();
+    });
+    refresh();
   }, { surface: 'agent' });
 }
+
+export const inject = ['tools', 'systemPrompt'];

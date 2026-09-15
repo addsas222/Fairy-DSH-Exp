@@ -10,7 +10,7 @@ const {
 const { attachmentSlot, attachmentRail, attachmentRailHeight, attachmentDockHeight } = require('./composer-attachments.js');
 const { createLifecycleScope, claimSingleton } = require('./lifecycle.js');
 const { createManagedMutationObserver, getDomObserverManager } = require('./dom-observer-manager.js');
-const { placeNativeControlMarkers } = require('./composer-native-controls.js');
+const { markControls } = require('./composer-marker-projection.js');
 const {
   createMaterialLayer,
   syncMaterialLayer: syncMaterialLayerModule,
@@ -348,7 +348,7 @@ function mountComposerDock(controller) {
         };
       });
       seat.setAttribute(COMPOSER_ATTR, 'true');
-      clearControls = placeNativeControlMarkers(card);
+      clearControls = markControls(card);
       createHandle();
     } else if (currentCard !== card) {
       clearControls();
@@ -360,7 +360,7 @@ function mountComposerDock(controller) {
       removeLegacyVoiceDensityMarker(card);
       card = currentCard;
       removeLegacyVoiceDensityMarker();
-      clearControls = placeNativeControlMarkers(card);
+      clearControls = markControls(card);
     }
     removeLegacyMascotScaleControl();
     ensureMascotScaleBase();
@@ -416,7 +416,7 @@ function mountComposerDock(controller) {
     bindHeaderObserver();
     if (seat && card) {
       clearControls();
-      clearControls = placeNativeControlMarkers(card);
+      clearControls = markControls(card);
       removeLegacyMascotScaleControl();
     }
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');

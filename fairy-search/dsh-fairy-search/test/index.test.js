@@ -242,7 +242,6 @@ test('the custom engine omits authorization for a keyless gateway and honors max
     choices: [{ message: { content: '[一](https://one.example) [二](https://two.example) [三](https://three.example)' } }],
   }));
   const engine = createCustomHttpProvider({ baseURL: 'http://127.0.0.1:8080/v1', apiKey: '', fetchImpl });
-  assert.equal(engine.available(), true);
   const result = await engine.search({ query: 'local', maxResults: 2 });
   assert.equal('authorization' in fetchImpl.calls[0].headers, false);
   assert.equal(result.sources.length, 2);

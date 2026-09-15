@@ -151,6 +151,17 @@ async function writeStyle(path, entries) {
   await writeFile(path, `${JSON.stringify({ version: 1, entries }, null, 2)}\n`, 'utf8');
 }
 
+/** `$DSH_HOME/fairy-roleplay/config.json`：agent 面读的镜像；写失败只告警。 */
+async function writeConfigMirror(value) {
+  try {
+    const file = roleplayConfigPath();
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  } catch (error) {
+    diagnostics.warn('roleplay.mirror', {}, error);
+  }
+}
+
 const statusFor = (code) => (code === 'payload-too-large' ? 413 : code === 'bad-json' ? 400 : 502);
 
 /**
@@ -181,6 +192,7 @@ export function createFairyRoleplayHandlers({ settings = createRoleplaySettingsB
       const patch = await readJson(req, MAX_BODY_BYTES);
       const before = settings.read();
       const next = await settings.write(patch || {});
+      await writeConfigMirror(next);
       const changed = Object.keys(patch || {}).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(next[key]));
       sendJson(res, 200, { ok: true, config: next, changed });
     } catch (error) {
@@ -237,6 +249,7 @@ export function apply(ctx) {
     const handlers = createFairyRoleplayHandlers({ settings });
     ctx.inject(['settings'], (settingsCtx) => {
       settings.attach(settingsCtx.settings.register(FAIRY_ROLEPLAY_SETTINGS, FairyRoleplaySettings));
+      void writeConfigMirror(settings.read());
     }, { surface: 'host' });
     ctx.inject(['webServer'], (ws) => {
       ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-roleplay/state', handler: handlers.state }), 'dsh-fairy-roleplay: state');
