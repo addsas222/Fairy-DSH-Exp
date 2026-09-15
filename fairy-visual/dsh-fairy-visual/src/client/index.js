@@ -324,7 +324,10 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       const visible = enabled && state.settings.mascotVisible;
       const visibleRef = React.useRef(visible);
       const fadeLifecycleRef = React.useRef(null);
+      const contentFadeRef = React.useRef(true);
       visibleRef.current = visible;
+      // 内容遮罩开关（默认开）：关闭后主视觉不再遮挡其下正文。
+      contentFadeRef.current = state.settings.contentFade !== false;
 
       React.useLayoutEffect(() => {
         const stageNode = stageRef.current;
@@ -464,6 +467,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
         const applyContentFade = () => {
           const eye = stageNode.querySelector('#dsh-fairy-root');
           const nextSurface = conversationScroll(conversation(document));
+          if (!contentFadeRef.current) return clearContentFade();
           if (!visibleRef.current) return clearContentFade(true);
           if (!eye || !nextSurface) return clearContentFade();
           const hasActiveChatFlow = chatFlows(document).some((flow) => {
@@ -803,7 +807,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
     const askKit = createAskKit({ React, jsx, jsxs, primitives: uiPrimitives });
 
     /** 本卡提问的视觉字段（写回 `fairy-visual`）与身份字段（写回 `fairy-identity`）。 */
-    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode'];
+    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode', 'contentFade'];
     const IDENTITY_TEXT_FIELDS = ['customName', 'secondAssistant'];
     const IDENTITY_MODE_OPTIONS = [
       { value: 'ling', label: '铃' },
@@ -821,6 +825,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       theme: visual.theme === 'light' ? 'light' : 'dark',
       mascotVisible: visual.mascotVisible === true,
       powerMode: visual.powerMode === 'low-power' ? 'low-power' : 'normal',
+      contentFade: visual.contentFade !== false,
       mode: identity.mode || 'ling',
       customName: typeof identity.customName === 'string' ? identity.customName : '',
       secondAssistant: typeof identity.secondAssistant === 'string' ? identity.secondAssistant : '',
@@ -897,6 +902,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
           jsx(AskToggle, { id: 'dsh-fairy-visual-theme', label: 'HDD 日间模式', checked: value('theme') === 'light', disabled: !writable, onChange: (next) => form.change('theme', next ? 'light' : 'dark') }, 'theme'),
           jsx(AskToggle, { id: 'dsh-fairy-visual-mascot', label: '显示 Fairy 主视觉', checked: value('mascotVisible'), disabled: !writable, onChange: (next) => form.change('mascotVisible', next) }, 'mascot'),
           jsx(AskToggle, { id: 'dsh-fairy-visual-power', label: '低功耗模式', checked: value('powerMode') === 'low-power', disabled: !writable, onChange: (next) => form.change('powerMode', next ? 'low-power' : 'normal') }, 'power'),
+          jsx(AskToggle, { id: 'dsh-fairy-visual-content-fade', label: '内容遮罩', hint: '开启时主视觉会遮住其下的正文（生成期间新文字会变淡）；关闭后正文始终可读。', checked: value('contentFade'), disabled: !writable, onChange: (next) => form.change('contentFade', next) }, 'contentFade'),
           jsx(AskRow, { id: 'dsh-fairy-identity-mode', label: 'Fairy 当前将我识别为：', children: jsx(AskSelect, { id: 'dsh-fairy-identity-mode', value: value('mode'), options: IDENTITY_MODE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mode', next) }) }, 'mode'),
           jsx('div', {
             onBlur: flush,

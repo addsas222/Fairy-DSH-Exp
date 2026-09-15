@@ -134,7 +134,9 @@ function buildPatch(body = {}) {
       const next = {};
       for (const [name, value] of Object.entries(fields || {})) {
         if (!allowed.includes(name) || typeof value !== 'string') continue;
-        if (MEMORY_SECRET_FIELDS[key]?.includes(name) && value === '***') continue;
+        // 密钥字段：'***' 是"未改动"哨兵；空串同样跳过——过期标签页的快照保存
+        // 曾把新 token 覆盖成空串（GBrain 被清掉过一次）。清除需要显式的未来动作。
+        if (MEMORY_SECRET_FIELDS[key]?.includes(name) && (value === '***' || value === '')) continue;
         next[name] = value;
       }
       if (Object.keys(next).length) patch.providers[key] = next;

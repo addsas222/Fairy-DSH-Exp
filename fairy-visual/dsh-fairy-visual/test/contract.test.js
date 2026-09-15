@@ -153,6 +153,7 @@ test('coalesces marker updates and ignores unrelated class churn', () => {
   assert.match(clientSource, /lifecycle\.scheduleFrame\('sidebar-board-sync', sync(?:, [^)]+)?\)/);
   assert.match(clientSource, /lifecycle\.scheduleFrame\('stage-geometry-sync', syncStageGeometry(?:, [^)]+)?\)/);
   assert.match(clientSource, /lifecycle\.scheduleFrame\('content-fade-sync', applyContentFade(?:, [^)]+)?\)/);
+  assert.match(clientSource, /if \(!contentFadeRef\.current\) return clearContentFade\(\)/, '内容遮罩必须受设置开关约束');
   assert.match(clientSource, /const bindOwners = \(\) =>/);
   assert.match(clientSource, /observedLayer/);
   assert.match(clientSource, /resizeObserver\?\.disconnect\(\)/);
@@ -866,6 +867,7 @@ test('anchors the original content mask to the stationary conversation viewport'
 });
 
 test('keeps the sidebar hardware above the composer edge in every session', () => {
+  assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]>\*:not\(\[data-testid="todo-panel"\]\)\{display:none!important\}/);
   assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:1!important/);
   assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/);
 });

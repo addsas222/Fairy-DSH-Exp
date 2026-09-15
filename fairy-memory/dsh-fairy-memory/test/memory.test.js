@@ -344,6 +344,12 @@ test('the host routes report state, mask secrets, and map failures', async () =>
       assert.equal(settings.read().providers.gbrain.surface, 'full');
       assert.equal(settings.read().autoRecall, true);
 
+      // 空串同样不得清掉已存密钥（过期标签页快照会把新 token 覆盖成空串）。
+      const blanked = responseDouble();
+      await handlers.config(requestWithJson({ providers: { gbrain: { token: '' } } }), blanked);
+      assert.equal(blanked.statusCode, 200);
+      assert.equal(settings.read().providers.gbrain.token, 'secret-token', '空串不能当清除');
+
       // The CLI mirror is what the agent half reads（自动回忆开关也必须随镜像过去，
       // 否则设置卡的这一格在 agent 面永远无效——它曾是本仓的真机缺陷）。
       const mirror = JSON.parse(await readFile(join(directory, 'fairy-memory', 'config.json'), 'utf8'));

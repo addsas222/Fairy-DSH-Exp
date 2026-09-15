@@ -17,6 +17,8 @@ export const FairyVisualSettings = z.object({
   enabled: z.boolean().default(false),
   theme: z.union(['dark', 'light']).default('dark'),
   mascotVisible: z.boolean().default(true),
+  // 内容遮罩（主视觉遮挡其下正文）：默认开；关掉后正文始终可读。
+  contentFade: z.boolean().default(true),
   mascotScale: z.number().step(0.01).min(0.55).max(1).default(1),
   mascotAnimationSpeed: z.union([z.const(0.7), z.const(1), z.const(1.5)]).default(1),
   powerMode: z.union(['normal', 'low-power']).default('normal'),
