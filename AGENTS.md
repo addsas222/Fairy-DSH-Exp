@@ -114,10 +114,19 @@ rm -rf "$DSH_HOME/.agent-presets/fairy" "$DSH_HOME/.agent-presets/ponytail"   # 
 # 然后重启实例
 ```
 
-- 判断依据：`node fairy-system/doctor.mjs --home "$DSH_HOME" --repo .` 的「preset 目录」一项会
-  在发现历史名残留时给 warn + 上面这条 `rm -rf`（它只认这张历史名表，不会误报用户自创的 preset）。
-- **旧会话**：preset 按会话挂载，会话里记的是 preset id；改名后旧会话引用的 id 已不存在，
-  重启后可能挂载失败或回落默认。处理口径：**改名 + 重启 + 一律新开会话**，旧会话按需保留或丢弃。
+- 判断依据：`node fairy-system/doctor.mjs --home "$DSH_HOME" --repo .` 的「preset 目录」一项会给出
+  warn + 上面这条 `rm -rf`。它按**仓库 git 历史**认「曾提供、现已不在」的 preset 名，所以改名/删除
+  自动生效（无需维护别名表），也不会误报用户自创的 preset；读不到历史时报 unknown 而不是 ok。
+- **旧会话**：preset 按会话挂载，会话里记的是 preset id；**每次会话打开**都会重新解析这个 id
+  （取最新 `agent-preset/selected` 事件、回退到创建 header），id 不在 roster 里就抛 `UnknownPresetError`
+  （RPC 回 `agent-preset-not-found`，available 里只有新 id）。而 `agentPreset.select` 需要**活着的 agent**，
+  会话打不开时救不回来。处理口径：
+  1. 删旧目录前先确认没有会话钉住旧 id；不确定就先别删。
+  2. 已经删了、又需要打开旧会话 → 用**同名恢复垫**（实测可用）：
+     `agentPreset.copy { from: 'fairy-full', agentPreset: 'ponytail' }`
+     `agentPreset.copy { from: 'fairy-lite', agentPreset: 'fairy' }`
+     垫片挂载已验证可开；用完 `agentPreset.remove` 清掉。
+  3. 新会话一律不指定旧 id。
 - 默认入口不受影响：`settings.yaml` 的 `agent-presets.default` 是 `cordis`，不是这两个；
   若要把默认改成 `fairy-full`，那是**另一处**改动（`agent-presets.default: fairy-full`），需单独确认。
 

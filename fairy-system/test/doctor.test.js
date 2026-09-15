@@ -7,6 +7,7 @@
  * 而报告说全绿。两条都被本会话真实踩过。
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import os from 'node:os';
@@ -157,29 +158,48 @@ test('本仓部署的识别：三样标记齐了才算（缺一即 false）', ()
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('更名后的幽灵 preset：只认历史名，用户自创 preset 不得被误报', () => {
+test('历史 preset：按 git 历史认死副本，用户自创 preset 不误报，查不清不装干净', () => {
   const repo = mkdtempSync(path.join(tmpdir(), 'doctor-ghostrepo-'));
   const home = mkdtempSync(path.join(tmpdir(), 'doctor-ghosthome-'));
+  const commit = () => {
+    execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'step'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  };
+  const provide = (name) => {
+    mkdirSync(path.join(repo, '.agent-presets', name), { recursive: true });
+    writeFileSync(path.join(repo, '.agent-presets', name, 'preset.yml'), `name: ${name}\n`);
+  };
   try {
-    for (const dir of ['fairy-full', 'fairy-lite']) mkdirSync(path.join(repo, '.agent-presets', dir), { recursive: true });
-    mkdirSync(path.join(home, '.agent-presets', 'fairy-lite'), { recursive: true });
-    assert.equal(checkGhostPresets(home, repo).status, 'ok', '没有旧目录就是 ok');
+    // 仓库历史：曾提供 fairy / ponytail，改名后删除；现在提供 fairy-lite / fairy-full。
+    provide('fairy');
+    provide('ponytail');
+    execFileSync('git', ['-C', repo, 'init', '-q'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    commit();
+    for (const name of ['fairy', 'ponytail']) rmSync(path.join(repo, '.agent-presets', name), { recursive: true, force: true });
+    provide('fairy-lite');
+    provide('fairy-full');
+    commit();
 
-    mkdirSync(path.join(home, '.agent-presets', 'fairy'), { recursive: true });
-    mkdirSync(path.join(home, '.agent-presets', 'ponytail'), { recursive: true });
+    // home：两个历史名残留 + 一个用户自创（copy 出来的）preset。
+    for (const name of ['fairy', 'ponytail', 'my-own']) mkdirSync(path.join(home, '.agent-presets', name), { recursive: true });
     const stale = checkGhostPresets(home, repo);
     assert.equal(stale.status, 'warn');
-    assert.match(stale.fix, /rm -rf .*presets[\\/]fairy/, '要给出可执行的清理命令');
+    assert.match(stale.fix, /rm -rf .*presets[\\/]fairy(?= )/);
     assert.match(stale.fix, /rm -rf .*presets[\\/]ponytail/);
-    assert.match(stale.detail, /幽灵/);
+    assert.doesNotMatch(stale.detail, /my-own/, '用户自创 preset 不得被当成历史残留');
+    assert.match(stale.detail, /UnknownPresetError/, '要提示会话侧风险');
 
-    // 用户自创的 preset（home 有、repo 没有、且不是历史名）不报。
-    mkdirSync(path.join(home, '.agent-presets', 'my-own'), { recursive: true });
-    assert.doesNotMatch(checkGhostPresets(home, repo).detail, /my-own/);
+    // 仓库若重新提供同名目录，那就不是「已不再提供」的残留。
+    provide('fairy');
+    assert.doesNotMatch(checkGhostPresets(home, repo).detail, /presets[\\/]fairy(?![-\w])/);
 
-    // repo 里若仍提供同名目录（本例的 fairy），那是另一条工作线而不是幽灵。
-    mkdirSync(path.join(repo, '.agent-presets', 'fairy'), { recursive: true });
-    assert.doesNotMatch(checkGhostPresets(home, repo).fix, /presets[\\/]fairy /);
+    // 该 home 没有 .agent-presets → skipped；仓库不是 git 树 → unknown（查不清不等于干净）。
+    const bare = mkdtempSync(path.join(tmpdir(), 'doctor-ghostbare-'));
+    assert.equal(checkGhostPresets(bare, repo).status, 'skipped');
+    const notGit = mkdtempSync(path.join(tmpdir(), 'doctor-ghostnogit-'));
+    assert.equal(checkGhostPresets(home, notGit).status, 'unknown');
+    rmSync(bare, { recursive: true, force: true });
+    rmSync(notGit, { recursive: true, force: true });
   } finally {
     rmSync(repo, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });

@@ -432,25 +432,43 @@ export function checkFairyRuntime(home) {
   };
 }
 
-/** 更名前的 preset 名 → 现名。改名/合并会把旧目录留在镜像里，而它们不在部署受控路径内：
- *  既不被覆盖、也不被 prune 清理，`image-manifest check` 也不会报 extra —— 只在 picker 里多出幽灵项。
- *  刻意只认这张**已知历史名**表，而不是「home 有而 repo 没有」（用户自创 preset 也会长那样）。 */
-const RENAMED_PRESETS = { fairy: 'fairy-lite', ponytail: 'fairy-full' };
+/** 仓库历史里**曾提供过、现在已不在**的 preset 名（改名与删除都会留下这条痕迹）。
+ *  刻意用 git 历史而不是硬编码别名表：改名以后还会有，别名表本身也会变成「要人记住去更新」的东西。
+ *  读不到历史（仓库不是 git 树 / 没有 git）返回 null —— 「查不清」不等于「干净」。 */
+export function deletedPresetNames(repo) {
+  try {
+    const out = execFileSync('git', ['-C', repo, 'log', '--no-renames', '--diff-filter=D', '--name-only', '--pretty=format:', '--', '.agent-presets/*/preset.yml'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20_000,
+    }).trim();
+    const names = new Set();
+    for (const line of out.split(/\r?\n/)) {
+      const match = line.trim().match(/^\.agent-presets\/([^/]+)\/preset\.yml$/);
+      if (match) names.add(match[1]);
+    }
+    return names;
+  } catch { return null; }
+}
 
-/** 镜像里的历史 preset 死副本（2026-09-15 改名：ponytail→fairy-full、fairy→fairy-lite）。 */
+/** 镜像里的历史 preset 死副本：仓库曾提供、现已更名/删除，但 home 里还留着。
+ *  它们不在部署受控路径内：部署不覆盖、prune 不删、`image-manifest check` 不报 extra。 */
 export function checkGhostPresets(home, repo) {
-  const stale = Object.entries(RENAMED_PRESETS).filter(([oldName, newName]) => (
-    existsSync(path.join(home, '.agent-presets', oldName))
-    && !existsSync(path.join(repo, '.agent-presets', oldName))
-    && existsSync(path.join(repo, '.agent-presets', newName))
-  ));
-  if (!stale.length) return { status: 'ok', name: 'preset 目录', detail: '无更名前残留', fix: '' };
+  const presetsDir = path.join(home, '.agent-presets');
+  if (!existsSync(presetsDir)) return { status: 'skipped', name: 'preset 目录', detail: '该 home 没有 .agent-presets/', fix: '' };
+  const historical = deletedPresetNames(repo);
+  if (historical === null) {
+    return { status: 'unknown', name: 'preset 目录', detail: `读不到 ${repo} 的 git 历史，判不出历史名残留`, fix: '在仓库 checkout 内运行 doctor（或确认 git 可用）后重试' };
+  }
+  const ghosts = readdirSync(presetsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && historical.has(entry.name) && !existsSync(path.join(repo, '.agent-presets', entry.name)))
+    .map((entry) => entry.name);
+  if (!ghosts.length) return { status: 'ok', name: 'preset 目录', detail: '无历史名残留', fix: '' };
   return {
     status: 'warn',
     name: 'preset 目录',
-    detail: `镜像里有更名前的死副本：${stale.map(([oldName, newName]) => `.agent-presets/${oldName}（已更名 ${newName}）`).join('、')}\n`
-      + '    → 不在部署受控路径内：部署不覆盖、prune 不删、manifest 不报 extra；留着会让 preset 选择器多出幽灵项',
-    fix: `${stale.map(([oldName]) => `rm -rf ${path.join(home, '.agent-presets', oldName)}`).join(' && ')} # 然后重启实例`,
+    detail: `镜像里有仓库已不再提供的历史 preset：${ghosts.map((name) => `.agent-presets/${name}`).join('、')}\n`
+      + '    → 不在部署受控路径内：部署不覆盖、prune 不删、manifest 不报 extra；留着会让 preset 选择器多出幽灵项\n'
+      + '    → 删前先确认没有会话钉住这些 id：钉住的会话删后打不开（UnknownPresetError），而 agentPreset.select 需要活着的 agent',
+    fix: `${ghosts.map((name) => `rm -rf ${path.join(presetsDir, name)}`).join(' && ')} # 然后重启实例；旧会话一律新开`,
   };
 }
 
