@@ -1,4 +1,5 @@
-# Fairy preset: corpus-driven voice core over the standard DSH tool surface.
+# Fairy Lite preset: corpus-driven voice core over the standard DSH tool surface.
+# （纯语音核心变体：只挂语音核心/安全闸门/世界知识三行；完整目录见 fairy-full preset。）
 
 # 注：下方 persona 的 text 与 persona-packs/fairy/prompt.md 必须逐字一致——
 # 无包会话只看到这段字面量；fairy-system/test/fairy-preset-shims.test.js 有同步断言。

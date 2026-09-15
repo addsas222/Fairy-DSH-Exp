@@ -3,7 +3,7 @@
  *
  * 用法：
  *   node fairy-system/extract-world-core.mjs --src <TextMap 目录> [--out <输出目录>]
- * 默认：src = $ZZZ_TEXT_DIR 或 C:/tmp/zzz-text；out = .agent-presets/fairy/world-core（被 .gitignore 挡住）
+ * 默认：src = $ZZZ_TEXT_DIR 或 C:/tmp/zzz-text；out = .agent-presets/fairy-lite/world-core（被 .gitignore 挡住）
  *
  * 输入：TextMapTemplateTb.json + TextMapOverwriteTemplateTb.json（**简体源**；同 dump 另有
  *   TextMap_CHT* 繁体版，本项目不用，也不做繁→简机转——那会让证据键指向与源字节不符的内容）。
@@ -28,7 +28,7 @@ const { values } = parseArgs({ options: {
   src: { type: 'string' }, out: { type: 'string' },
 }, allowPositional: true });
 const SRC_DIR = values.src ?? process.env.ZZZ_TEXT_DIR ?? 'C:/tmp/zzz-text';
-const OUT_DIR = values.out ?? '.agent-presets/fairy/world-core';
+const OUT_DIR = values.out ?? '.agent-presets/fairy-lite/world-core';
 const FILES = ['TextMapTemplateTb.json', 'TextMapOverwriteTemplateTb.json'];
 
 const ENTITIES = {

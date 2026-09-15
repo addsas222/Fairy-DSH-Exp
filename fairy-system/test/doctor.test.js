@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, killCommandFor, strayActionText, exitFor, EXIT } =
+const { checkVersions, checkNpmProjectRoot, checkTestPrereqs, checkRepo, checkBinary, looksLikeRepoDeployment, isInstallLikeCommand, killCommandFor, strayActionText, exitFor, EXIT, checkGhostPresets } =
   await import(pathToFileURL(path.join(import.meta.dirname, '..', 'doctor.mjs')).href);
 
 /** 造一棵 @deepseek-ai 安装树：{name: version} 或 [name, version]。 */
@@ -143,7 +143,7 @@ test('不是本仓部署的 home：不给部署命令（否则会覆盖那一侧
 test('本仓部署的识别：三样标记齐了才算（缺一即 false）', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'doctor-mirror-'));
   try {
-    const markers = ['fairy-system/image-manifest.js', 'fairy-contracts/package.json', '.agent-presets/ponytail'];
+    const markers = ['fairy-system/image-manifest.js', 'fairy-contracts/package.json', '.agent-presets/fairy-full'];
     assert.equal(looksLikeRepoDeployment(root), false, '空目录不算');
     for (const m of markers.slice(0, -1)) {
       const p = path.join(root, m);
@@ -151,10 +151,39 @@ test('本仓部署的识别：三样标记齐了才算（缺一即 false）', ()
       writeFileSync(p, '{}');
     }
     assert.equal(looksLikeRepoDeployment(root), false, '缺预设目录不算');
-    const last = path.join(root, '.agent-presets', 'ponytail');
+    const last = path.join(root, '.agent-presets', 'fairy-full');
     mkdirSync(last, { recursive: true });
     assert.equal(looksLikeRepoDeployment(root), true, '三样齐了才算');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('更名后的幽灵 preset：只认历史名，用户自创 preset 不得被误报', () => {
+  const repo = mkdtempSync(path.join(tmpdir(), 'doctor-ghostrepo-'));
+  const home = mkdtempSync(path.join(tmpdir(), 'doctor-ghosthome-'));
+  try {
+    for (const dir of ['fairy-full', 'fairy-lite']) mkdirSync(path.join(repo, '.agent-presets', dir), { recursive: true });
+    mkdirSync(path.join(home, '.agent-presets', 'fairy-lite'), { recursive: true });
+    assert.equal(checkGhostPresets(home, repo).status, 'ok', '没有旧目录就是 ok');
+
+    mkdirSync(path.join(home, '.agent-presets', 'fairy'), { recursive: true });
+    mkdirSync(path.join(home, '.agent-presets', 'ponytail'), { recursive: true });
+    const stale = checkGhostPresets(home, repo);
+    assert.equal(stale.status, 'warn');
+    assert.match(stale.fix, /rm -rf .*presets[\\/]fairy/, '要给出可执行的清理命令');
+    assert.match(stale.fix, /rm -rf .*presets[\\/]ponytail/);
+    assert.match(stale.detail, /幽灵/);
+
+    // 用户自创的 preset（home 有、repo 没有、且不是历史名）不报。
+    mkdirSync(path.join(home, '.agent-presets', 'my-own'), { recursive: true });
+    assert.doesNotMatch(checkGhostPresets(home, repo).detail, /my-own/);
+
+    // repo 里若仍提供同名目录（本例的 fairy），那是另一条工作线而不是幽灵。
+    mkdirSync(path.join(repo, '.agent-presets', 'fairy'), { recursive: true });
+    assert.doesNotMatch(checkGhostPresets(home, repo).fix, /presets[\\/]fairy /);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('安装进程签名：pnpm/yarn/bun 与非 node 进程都要认（不只 npm-cli）', () => {

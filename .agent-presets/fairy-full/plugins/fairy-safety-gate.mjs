@@ -10,7 +10,9 @@
  * order + 返回 dispose）。order 取 49，与 persona(50 区间)/modes 的取值错开。
  */
 const repoRoot = String(process.env.DSH_FAIRY_REPO_ROOT ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
-const presetDir = repoRoot ? `file:///${repoRoot}/.agent-presets/fairy/` : null;
+// 资产归 voice-core 预设目录（改名后为 `fairy-lite`），两份 shim 副本同指一处。
+const ASSET_PRESET = 'fairy-lite';
+const presetDir = repoRoot ? `file:///${repoRoot}/.agent-presets/${ASSET_PRESET}/` : null;
 
 const SECTION_NAME = 'fairy-safety-gate';
 const SECTION_ORDER = 49;

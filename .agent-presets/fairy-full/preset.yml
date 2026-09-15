@@ -1,0 +1,3 @@
+name: Fairy Full
+description: 全集 Agent：Fairy 完整演出（语料 voice core + 安全闸门 + 世界知识）叠加四站流水线（扮演→探查→建造→创造）与重工具链（workflow/ralph、外部 agent provider 占位）；人格由 persona 包热切换。
+order: 10

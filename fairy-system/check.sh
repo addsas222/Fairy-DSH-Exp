@@ -59,7 +59,7 @@ node --check "$DSH_ROOT/fairy-roleplay/dsh-fairy-roleplay/lib/humanizer.js"
 node --check "$ROOT/skill-audit.js"
 node --check "$ROOT/scaffold-plugin.js"
 # runtime/ 是私有资产,公开仓库不含;存在才检查。
-for runtime_file in "$DSH_ROOT/.agent-presets/fairy/runtime/index.js" "$DSH_ROOT/.agent-presets/fairy/runtime/compiler.js"; do
+for runtime_file in "$DSH_ROOT/.agent-presets/fairy-lite/runtime/index.js" "$DSH_ROOT/.agent-presets/fairy-lite/runtime/compiler.js"; do
   if [[ -f "$runtime_file" ]]; then
     node --check "$runtime_file"
   fi
@@ -96,9 +96,9 @@ fi
 # below so the complete check has one deterministic owner for every test suite.
 node "$ROOT/verify.js" --live
 # 私有 runtime 的 Python/mjs 测试只在资产存在时运行(公开仓库不含 runtime/)。
-if [[ -f "$DSH_ROOT/.agent-presets/fairy/runtime/test_fairy_core.py" ]]; then
-  python3 "$DSH_ROOT/.agent-presets/fairy/runtime/test_fairy_core.py"
-  node --test "$DSH_ROOT/.agent-presets/fairy/runtime"/test_*.mjs
+if [[ -f "$DSH_ROOT/.agent-presets/fairy-lite/runtime/test_fairy_core.py" ]]; then
+  python3 "$DSH_ROOT/.agent-presets/fairy-lite/runtime/test_fairy_core.py"
+  node --test "$DSH_ROOT/.agent-presets/fairy-lite/runtime"/test_*.mjs
 fi
 node --test "$DSH_ROOT/balance-meter/dsh-balance-meter/test"/*.test.js
 node --test "$DSH_ROOT/browser-dock/dsh-browser-dock/test"/*.test.js

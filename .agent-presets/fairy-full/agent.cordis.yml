@@ -1,20 +1,36 @@
-# Ponytail preset:精简模式 composition（四站流水线：扮演→探查→建造→创造）。
+# Fairy Full preset:全集 composition（四站流水线：扮演→探查→建造→创造）。
 #
-# 与 fairy preset 的差异(Ponytail 标准,删除优先):
-# - 不引用任何仓库外运行时资产(fairy preset 的 runtime/* 已随仓分发;
-#   语音核心与安全闸门仍由 fairy preset 挂载,本 preset 不重复挂)。
+# 本 preset 是**全集**（2026-09-15 由 ponytail 更名，并入原 fairy 的演出与重工具链）:
+# - 语音核心/安全闸门/世界知识三行由本 preset 挂载（order 47/48/49 段落 +
+#   fairy_world_lookup 工具）。三份 shim 与 fairy-lite 里的副本**逐字一致**；
+#   资产（runtime/、world-core/、语料）留在 fairy-lite 目录里，两份 preset 同指一处。
 # - 不挂 dsh-persona 行:人格文档由 host 层 dsh-fairy-persona 按人格包热切换;
 #   未选择人格包时回落到部署默认 persona(web-app bundle 的 system-prompt 行)。
 # - 不挂 tool-presentation 行:PTC 呈现由 dsh-fairy-modes 按会话运行时切换
 #   (ctx.tools.presentAs),而不是进程级 DSH_TOOLS_MODE。
-# - delegation 只保留 subagent(spawn/fork/list/control);workflow/ralph 属于
-#   重型编排,PTC 模式已覆盖脚本系列编排(YAGNI;需要时经 --patch 叠加)。
-# - 新增 tool-session-query:创造模式的“回忆一切所作所为”由
-#   session_search/session_event_search 承担(要求 profile 把
-#   session-query-sqlite 的 openAt 设为 first-search,profiles/web 已配)。
+# - delegation 组内除 subagent(spawn/fork/list/control) 外，还含 workflow/ralph
+#   与两个**停用**的外部 agent 行(codex/claude-code，disabled):那两个 bundle 与本机
+#   核心不同发布线且宿主行/CLI 未就绪。四环就绪探针 `fairy-system/agent-providers.mjs`，
+#   启用步骤 `fairy-system/AGENT-PROVIDERS.md`。
 #
 # isolate 语义与官方 preset 一致:服务行必须位于带 isolate 领域的组内,
 # 否则发布为进程全局并在第二个会话挂载时冲突(详见官方 ptc preset 注释)。
+
+# ── 演出层：语音核心 / 安全闸门 / 世界知识 ────────────────────────────────
+# 行名必须是 preset 内**相对路径字符串**（绝对路径或 !!js 表达式会让 discovery 判
+# 整个 preset BROKEN）。shim 的真身与语料在 fairy-lite 目录内（见 shim 顶部注释）。
+- id: fairy-core-runtime
+  name: './plugins/fairy-core-runtime.mjs'
+  config:
+    enabled: true
+    fidelity: strict
+    exampleLimit: 2
+
+- id: fairy-safety-gate
+  name: './plugins/fairy-safety-gate.mjs'
+
+- id: fairy-world-core
+  name: './plugins/fairy-world-core.mjs'
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -41,7 +57,7 @@
   name: '@deepseek-ai/dsh-tool-jobs'
 
 # 技能:registry 在 host 平面,这里注册本 preset 层的本地发现与目录。
-# customSkillDirs 指向本 preset 自带的 ponytail 规则技能组。
+# customSkillDirs 指向本 preset 自带的规则技能组（上游 ponytail 规则集，MIT；技能名保持上游命名）。
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
@@ -163,6 +179,36 @@
         provider: fork
         toolName: subagent_fork
         backgroundMode: continuable
+    # 外部 agent provider：保持 disabled，直到四环闭合（bundle 同线 / 宿主行 / CLI / 本行启用）。
+    # 就绪体检：node fairy-system/agent-providers.mjs；启用步骤：fairy-system/AGENT-PROVIDERS.md。
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        enableRunInBackground: false
+        maxDepth: provider-managed
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        enableRunInBackground: false
+        maxDepth: provider-managed
+    # workflow/ralph 发布 workflows 类服务，必须在实域组内（散到组外会撞根实域，mount audit 拒）。
+    - id: workflow-worker-thread
+      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+    - id: tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+    - id: tool-ralph
+      name: '@deepseek-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'

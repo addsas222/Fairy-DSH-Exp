@@ -122,21 +122,21 @@ const SKIP_POLICY = [
   { prefix: 'world-core', reason: '运行期世界模型数据' },
   { prefix: 'benchmarks', reason: '运行期基准输出' },
   { file: 'browser-dock/control-token', reason: 'browser-dock 运行期控制令牌（64 字节随机值）' },
-  { prefix: '.agent-presets/fairy/runtime', reason: 'fairy 预设的私有部署资产（不进公开仓库）' },
+  { prefix: '.agent-presets/fairy-lite/runtime', reason: 'fairy 预设的私有部署资产（不进公开仓库）' },
   // ponytail 规则技能：按上游 MIT 在本机安装，由 deploy-live.sh 落位时同步进这个槽位。
   // 仓库里没有它（不随仓库分发），所以清单里也不会列出它——不豁免的话，prune 会把它当成
   // 「镜像多出来的文件」删掉，下次部署又同步回来，形成抖动。
-  { prefix: '.agent-presets/ponytail/skills', reason: 'ponytail 规则技能的本机安装槽位（不随仓库分发）' },
+  { prefix: '.agent-presets/fairy-full/skills', reason: 'ponytail 规则技能的本机安装槽位（不随仓库分发）' },
   // fairy world-core：本机从游戏文本提取的索引（版权归 miHoYo），由 deploy-live.sh 同步。
   // 与技能槽位同理：清单里没有它，不豁免的话每次部署都会被 prune 删掉再同步回来。
-  { prefix: '.agent-presets/fairy/world-core', reason: 'fairy 世界知识索引（本机提取，不随仓库分发）' },
+  { prefix: '.agent-presets/fairy-lite/world-core', reason: 'fairy 世界知识索引（本机提取，不随仓库分发）' },
 ];
 
 // 镜像里被接受为「可以多出来」的路径。默认只有一条：本机适配过的 profile。
 // 判断方式是精确路径相等，不做通配。
 const LOCAL_ADAPTATIONS = {
   'profiles/web/cordis.patch.yml': '本机适配（例如把 --browser chrome 换成已安装的通道）',
-  // 注：`.agent-presets/fairy/runtime/` 下**不放**条目——那个前缀已在 SKIP_POLICY 里整目录排除
+  // 注：`.agent-presets/fairy-lite/runtime/` 下**不放**条目——那个前缀已在 SKIP_POLICY 里整目录排除
   // （"私有部署资产，不进公开仓库"），对账本就不看它，所以私有真身 drop-in 天然不会判漂移。
   // 一条路径不可能既 skip 又 allow；写在这里只会误导。
 };

@@ -255,7 +255,7 @@ test('ponytail skills stay an install slot: synced at deploy, exempt from prune'
   // 技能文本按上游 MIT 不随仓库分发，但部署时要同步进 preset 的槽位；这个槽位必须
   // 同时避开 prune（否则每次部署先删后同步，来回抖动）。
   const script = fs.readFileSync(DEPLOY_SCRIPT, 'utf8');
-  assert.match(script, /\.agent-presets\/ponytail\/skills/, 'deploy must install into the preset skill slot');
+  assert.match(script, /\.agent-presets\/fairy-full\/skills/, 'deploy must install into the preset skill slot');
   assert.match(script, /DSH_FAIRY_SKILLS_DIR/, 'the install source must be overridable');
   // 只取 ponytail*：技能根里还有十几个与本 preset 无关的私人技能，整目录 cp 会把它们
   // 连 `_ponytail-vendor` 自身一起嵌套塞进 DSH 会话。
@@ -267,10 +267,10 @@ test('ponytail skills stay an install slot: synced at deploy, exempt from prune'
 
   // 槽位在跳过策略里（既不删也不报），且理由写明来源
   const { SKIP_POLICY, isSkipped } = manifest;
-  const slot = SKIP_POLICY.find((entry) => entry.prefix === '.agent-presets/ponytail/skills');
+  const slot = SKIP_POLICY.find((entry) => entry.prefix === '.agent-presets/fairy-full/skills');
   assert.ok(slot, 'the skill slot must be declared in SKIP_POLICY');
   assert.match(slot.reason, /不随仓库分发/);
-  assert.equal(isSkipped('.agent-presets/ponytail/skills/ponytail-help/SKILL.md'), true);
+  assert.equal(isSkipped('.agent-presets/fairy-full/skills/ponytail-help/SKILL.md'), true);
 });
 
 test('a converge-shaped deploy leaves the image byte-identical to the source', () => {

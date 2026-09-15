@@ -11,7 +11,7 @@ const sourceRoot = path.resolve(process.env.DSH_ACCEPTED_SOURCE_ROOT || path.joi
 const baselineRoot = path.resolve(process.env.DSH_ACCEPTED_BASELINE_ROOT || path.join(os.homedir(), '.dsh-accepted-baselines'));
 const currentPointer = path.join(baselineRoot, 'CURRENT');
 const scopeRoots = [
-  '.agent-presets/fairy',
+  '.agent-presets/fairy-lite',
   'balance-meter/dsh-balance-meter',
   'browser-dock/dsh-browser-dock',
   'fairy-contracts',

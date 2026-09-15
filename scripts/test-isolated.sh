@@ -11,23 +11,23 @@ export DSH_FAIRY_PROFILE_ROOT="$repo_root/profiles/web"
 export DSH_ACCEPTED_BASELINE_ROOT="$test_home/accepted-baselines"
 
 mkdir -p "$DSH_HOME"
-mkdir -p "$DSH_HOME/.agent-presets/fairy" "$DSH_HOME/accepted-baselines"
+mkdir -p "$DSH_HOME/.agent-presets/fairy-lite" "$DSH_HOME/accepted-baselines"
 # ponytail preset 复制进用户根:readdir 的 Dirent.isDirectory() 对链接/junction
 # 为假,链接形态会被发现器跳过,必须复制为真实目录。preset 内的插件 shim
 # (./plugins/fairy-modes.mjs)以 DSH_FAIRY_REPO_ROOT 解析真身,复制无损。
-if [ -e "$DSH_HOME/.agent-presets/ponytail" ]; then
-  rm -rf "$DSH_HOME/.agent-presets/ponytail"
+if [ -e "$DSH_HOME/.agent-presets/fairy-full" ]; then
+  rm -rf "$DSH_HOME/.agent-presets/fairy-full"
 fi
-cp -R "$repo_root/.agent-presets/ponytail" "$DSH_HOME/.agent-presets/ponytail"
+cp -R "$repo_root/.agent-presets/fairy-full" "$DSH_HOME/.agent-presets/fairy-full"
 for asset in runtime personality style canon behavior; do
   # runtime/ 是私有资产,公开仓库不含;只复制存在的目录。
-  if [ ! -e "$repo_root/.agent-presets/fairy/$asset" ]; then
+  if [ ! -e "$repo_root/.agent-presets/fairy-lite/$asset" ]; then
     continue
   fi
-  if [ -e "$DSH_HOME/.agent-presets/fairy/$asset" ]; then
-    mv "$DSH_HOME/.agent-presets/fairy/$asset" "$DSH_HOME/.agent-presets/fairy/$asset.previous.$$"
+  if [ -e "$DSH_HOME/.agent-presets/fairy-lite/$asset" ]; then
+    mv "$DSH_HOME/.agent-presets/fairy-lite/$asset" "$DSH_HOME/.agent-presets/fairy-lite/$asset.previous.$$"
   fi
-  cp -R "$repo_root/.agent-presets/fairy/$asset" "$DSH_HOME/.agent-presets/fairy/$asset"
+  cp -R "$repo_root/.agent-presets/fairy-lite/$asset" "$DSH_HOME/.agent-presets/fairy-lite/$asset"
 done
 
 # Keep the profile in the candidate repository while presenting it at the

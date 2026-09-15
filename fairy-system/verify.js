@@ -27,7 +27,7 @@ const paths = {
   installedVoiceLaunchAgent: path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.origen.fairy-voice-api.plist'),
   officialDshPackage: path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
   runtime: path.join(os.homedir(), '.local', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-client-runtime', 'lib', 'client.js'),
-  language: path.join(dshRoot, '.agent-presets', 'fairy'),
+  language: path.join(dshRoot, '.agent-presets', 'fairy-lite'),
   audio: path.join(dshRoot, 'fairy-voice'),
   personaPlugin: path.join(dshRoot, 'fairy-persona', 'dsh-fairy-persona'),
   modesPlugin: path.join(dshRoot, 'fairy-modes', 'dsh-fairy-modes'),

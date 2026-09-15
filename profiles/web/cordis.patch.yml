@@ -75,12 +75,12 @@
       name: 'dsh-fairy-visual'
       inject: [clientModules]
 
-    # Ponytail:人格引擎(人格包热切换 + 语音绑定)
+    # Fairy Full:人格引擎(人格包热切换 + 语音绑定)
     - id: fairy-persona
       name: 'dsh-fairy-persona'
       inject: [clientModules]
 
-    # 模式引擎的 host 桥面(每会话控制器由 ponytail preset 的 isolate 组挂载)。
+    # 模式引擎的 host 桥面(每会话控制器由 fairy-full preset 的 isolate 组挂载)。
     # 行名必须是裸包名:clientModules 扫描按行名解析包的 dsh.client 清单,
     # 子路径名会让模式 chip 的客户端 bundle 进不了 boot 图。包的默认导出即桥面。
     - id: fairy-modes-bridge
@@ -92,7 +92,7 @@
       name: 'dsh-fairy-search'
       inject: [clientModules]
 
-    # 长期记忆:宿主路由 + 设置卡(engine 面由 ponytail preset 挂载)
+    # 长期记忆:宿主路由 + 设置卡(engine 面由 fairy-full preset 挂载)
     - id: fairy-memory
       name: 'dsh-fairy-memory'
       inject: [clientModules]

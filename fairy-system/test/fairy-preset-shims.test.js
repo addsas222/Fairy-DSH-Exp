@@ -14,7 +14,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 const HOME_DIR = process.env.USERPROFILE || process.env.HOME || '';
-const PRESET_DIR = path.resolve(import.meta.dirname, '..', '..', '.agent-presets', 'fairy');
+const PRESET_DIR = path.resolve(import.meta.dirname, '..', '..', '.agent-presets', 'fairy-lite');
 const CORE = path.join(PRESET_DIR, 'plugins', 'fairy-core-runtime.mjs');
 const GATE = path.join(PRESET_DIR, 'plugins', 'fairy-safety-gate.mjs');
 
@@ -59,7 +59,7 @@ test('the persona document lives twice and stays byte-equal', () => {
 /** 造一个"有语料、无私有 runtime"的临时 repo 根，用于降级路径。 */
 function fakeRepoWithoutRuntime() {
   const root = mkdtempSync(path.join(tmpdir(), 'fairy-shim-'));
-  const dir = path.join(root, '.agent-presets', 'fairy');
+  const dir = path.join(root, '.agent-presets', 'fairy-lite');
   for (const sub of ['behavior', 'personality', 'canon', 'style']) mkdirSync(path.join(dir, sub), { recursive: true });
   writeFileSync(path.join(dir, 'behavior/fairy_behavior_rules.json'), JSON.stringify({ rules: [{}, {}, {}] }));
   writeFileSync(path.join(dir, 'personality/fairy_personality.json'), JSON.stringify({ traits: { a: 1, b: 2 } }));
@@ -121,7 +121,7 @@ test('safety-gate shim mounts one ordered section distinct from voice-core', asy
 test('both shims forward to the private runtime when it exists', async () => {
   const repo = fakeRepoWithoutRuntime();
   try {
-    const runtimeDir = path.join(repo.root, '.agent-presets', 'fairy', 'runtime');
+    const runtimeDir = path.join(repo.root, '.agent-presets', 'fairy-lite', 'runtime');
     mkdirSync(runtimeDir, { recursive: true });
     // 私有真身：记录被调用的事实，并挂一个自己的段落
     const stub = 'export async function apply(ctx) { ctx.systemPrompt.section({ name: "private-runtime", order: 7, text: "real" }); return () => {}; }\n';

@@ -17,7 +17,11 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = String(process.env.DSH_FAIRY_REPO_ROOT ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
-const presetDir = repoRoot ? `file:///${repoRoot}/.agent-presets/fairy/` : null;
+// 语料与运行时引擎归 voice-core 预设目录（改名后为 `fairy-lite`）。本文件在 fairy-full 与
+// fairy-lite 里各有一份逐字副本，两份都指向那里：preset 目录只是行的宿主，资产只有一份，
+// 免得同一份语料在两处漂移。
+const ASSET_PRESET = 'fairy-lite';
+const presetDir = repoRoot ? `file:///${repoRoot}/.agent-presets/${ASSET_PRESET}/` : null;
 
 const SECTION_NAME = 'fairy-voice-core';
 const SECTION_ORDER = 47;
@@ -35,7 +39,7 @@ async function loadPrivateRuntime() {
 
 function readCorpus(relative) {
   if (!repoRoot) return null;
-  const file = path.join(repoRoot, '.agent-presets', 'fairy', relative);
+  const file = path.join(repoRoot, '.agent-presets', ASSET_PRESET, relative);
   if (!existsSync(file)) return null;
   try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
 }

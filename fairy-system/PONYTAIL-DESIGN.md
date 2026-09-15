@@ -1,5 +1,10 @@
 # Ponytail 优化设计（2026-09-13)
 
+> **改名说明（2026-09-15）**：预设 `ponytail` 已更名为 `fairy-full`（并并入原 `fairy` 的演出与重工具链），
+> 原 `fairy` 更名为 `fairy-lite`。**本文里 `ponytail:` 标记、规则集名与技能名（`ponytail-*`）是
+> 上游规则集（DietrichGebert/ponytail，MIT）的命名空间，保持原名**；只有 `.agent-presets/` 下的
+> 路径随改名同步。
+
 标准：Ponytail 规则集（本机安装，上游 github.com/DietrichGebert/ponytail，MIT),
 强度 full:7 级懒解阶梯——能复用不新造，能 stdlib/平台不依赖，能一行不五十行。
 `ponytail:` 注释标记有意为之的上限与升级路径。
@@ -10,7 +15,7 @@
 
 | 对象 | 问题 | 处置 |
 | --- | --- | --- |
-| `.agent-presets/fairy/agent.cordis.yml` | 依赖私有 runtime 行(`runtime/*`,在 .gitignore 内,发布树缺失);且行名是 `!!js` 表达式 → discovery 判 broken、picker 不可选。persona 行本身用的是本 cohort 的 `config.text`(0.1.1 合法;0.1.5 改为 prefix/suffix) | **已修复**：行名改为 preset 内相对路径 shim；`runtime/{index.js,safety-gate.js}` 已随仓分发，fairy preset 公开可用（见 AGENTS §3） |
+| `.agent-presets/fairy-lite/agent.cordis.yml` | 依赖私有 runtime 行(`runtime/*`,在 .gitignore 内,发布树缺失);且行名是 `!!js` 表达式 → discovery 判 broken、picker 不可选。persona 行本身用的是本 cohort 的 `config.text`(0.1.1 合法;0.1.5 改为 prefix/suffix) | **已修复**：行名改为 preset 内相对路径 shim；`runtime/{index.js,safety-gate.js}` 已随仓分发，fairy preset 公开可用（见 AGENTS §3） |
 | `fairy-startup` | host apply 为空操作,但 lib/client.js 承担真实启动动作(sessions.clear / workspaces.startSession,verify.js:349 钉死)且验证链全量引用 | 保持完整挂载;不是简化对象 |
 | `fairy-voice` | TTS 硬编码单一本地 GPT-SoVITS(127.0.0.1:9880)；音色与人格无绑定 | 抽象 provider 注册表；人格包绑定音色 |
 | 人格资产 | 单一人格,语料 JSON 与 prompt 静态耦合 | 人格包(pack)目录化,可切换;tone 属性渲染进人格文本 |
@@ -31,14 +36,14 @@
 ## 新架构
 
 ```
-.agent-presets/ponytail/            精简 preset(本优化的入口)
+.agent-presets/fairy-full/            精简 preset(本优化的入口)
   agent.cordis.yml                  无悬空引用;persona 文本独立成文件引用
   preset.yml                        name: Ponytail
   (skills/ 是安装槽位，不入库)      ponytail 规则技能按上游 MIT 在本机技能根安装；部署时
                                     deploy-live.sh 把它同步进 <preset>/skills/（跳过策略内，不参与 prune）；
                                     preset 的 skill-filesystem 把 <preset>/skills/ 作为扫描根之一，
                                     槽位为空时即无这套技能（preset 本身仍可用）
-persona-packs/fairy/                内置人格包(从 .agent-presets/fairy 提炼)
+persona-packs/fairy/                内置人格包(从 .agent-presets/fairy-lite 提炼)
   persona.yml                       id/name/promptFile/tone/voice 绑定
   prompt.md                         人格文档(原 persona text)
   tone.json                         调色属性(语域/幽默密度/称呼策略);由引擎渲染成
@@ -157,7 +162,7 @@ interface SttProvider {
 
 1. **preset 行名必须是字面字符串**。`discovery.entryListProblem` 不接受 `!!js`
    表达式名(判为 "names no plugin"),且包名只从 harness 安装解析。本仓库
-   插件因此经 **preset 内 shim**(`.agent-presets/ponytail/plugins/*.mjs`)加载:
+   插件因此经 **preset 内 shim**(`.agent-presets/fairy-full/plugins/*.mjs`)加载:
    shim 在 preset 内(相对路径恒可解析),用 `DSH_FAIRY_REPO_ROOT` 动态导入真身
    (顶层 await 在 `.mjs` 中合法,`.js` 会被判 CJS 而失败)。
 2. **组 id 必须与子行 id 不同**。同名会让 cordis loader 的 entry 自我为父,

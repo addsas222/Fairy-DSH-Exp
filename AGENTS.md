@@ -35,10 +35,10 @@
 | `browser-dock/` | 浏览器 Dock（宿主插件 + 独立 `proxy.cjs` 进程 + `fs.watch` 状态桥） |
 | `fairy-startup/` | 启动动作（恢复会话选择、按 workspace 就绪开新会话） |
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
-| `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
+| `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`agent-providers.mjs`（外部 agent provider 四环就绪体检：bundle 同线 / 宿主行 / 原生 CLI / preset 行；`--json` + 诚实退出码，启用步骤见 `AGENT-PROVIDERS.md`）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/ponytail/` | 模式预设（**公开入口**；modes 与 memory 的 agent 面 shim）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
-| `.agent-presets/fairy/` | Fairy 预设：人格文本 + 语料（`behavior`/`personality`/`canon`/`style`）+ 三个插件行。**公开仓库可正常挂载**——`runtime/{index.js,safety-gate.js}` 是随仓分发的公开语料引擎（2026-09 起），不再依赖未公开资产 |
+| `.agent-presets/fairy-full/` | 全集预设（**公开入口**；modes/memory/roleplay 的 agent 面 shim + 语音核心/安全闸门/世界知识三行 + workflow/ralph 与两个停用的外部 agent 占位行）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源） |
+| `.agent-presets/fairy-lite/` | 纯语音核心预设（无模式/记忆/角色扮演引擎）：人格文本 + 语料（`behavior`/`personality`/`canon`/`style`）+ 三个插件行；语音核心与安全闸门 shim 与 fairy-full 逐字一致。**公开仓库可正常挂载**——`runtime/{index.js,safety-gate.js}` 是随仓分发的公开语料引擎（2026-09 起），不再依赖未公开资产 |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
 | `fairy-system/PONYTAIL-DESIGN.md` | 三模式与人格/语音绑定的设计记录 + 0.1.1 运行时契约 |
@@ -100,6 +100,27 @@ EvoMap 接入 → 跑两道门禁（构建契约 + 镜像对账）。常用开�
 > Windows：本机 `bash` 可能被 WSL 抢占（`/bin/bash` 不存在）。脚本已写成
 > **POSIX sh**，用 `sh scripts/deploy-live.sh …` 运行即可。
 
+#### 2.1.1 preset 改名迁移（2026-09-15）
+
+预设已改名：`ponytail` → **`fairy-full`**（全集：并入原 fairy 的语音核心/安全闸门/世界知识与 workflow 工具链），
+`fairy` → **`fairy-lite`**（纯语音核心变体）。
+
+**旧目录不会自己消失。** `.agent-presets/` 下的旧目录不在部署受控路径内——
+部署（`EXTRA_PATHS`）不覆盖它们、`image-manifest prune` 不删它们、`check` 也不会把它们报成 extra。
+**首次落位这次改动后，手工删掉镜像里的旧目录**（否则 preset 选择器里会长期多出两份幽灵）：
+
+```sh
+rm -rf "$DSH_HOME/.agent-presets/fairy" "$DSH_HOME/.agent-presets/ponytail"   # 只删这两个历史名
+# 然后重启实例
+```
+
+- 判断依据：`node fairy-system/doctor.mjs --home "$DSH_HOME" --repo .` 的「preset 目录」一项会
+  在发现历史名残留时给 warn + 上面这条 `rm -rf`（它只认这张历史名表，不会误报用户自创的 preset）。
+- **旧会话**：preset 按会话挂载，会话里记的是 preset id；改名后旧会话引用的 id 已不存在，
+  重启后可能挂载失败或回落默认。处理口径：**改名 + 重启 + 一律新开会话**，旧会话按需保留或丢弃。
+- 默认入口不受影响：`settings.yaml` 的 `agent-presets.default` 是 `cordis`，不是这两个；
+  若要把默认改成 `fairy-full`，那是**另一处**改动（`agent-presets.default: fairy-full`），需单独确认。
+
 ### 2.2 手工等价（脚本内容的来源）
 
 ```sh
@@ -109,8 +130,8 @@ REPO=$PWD; DSH_HOME=$HOME/.dsh
 #    槽位在 image-manifest 的跳过策略里（既不删也不报），所以必须在**对账之前**同步。
 SKILLS_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills/_ponytail-vendor}"
 if [ -d "$SKILLS_SRC" ]; then
-  mkdir -p "$DSH_HOME/.agent-presets/ponytail/skills"
-  cp -R "$SKILLS_SRC/." "$DSH_HOME/.agent-presets/ponytail/skills/"
+  mkdir -p "$DSH_HOME/.agent-presets/fairy-full/skills"
+  cp -R "$SKILLS_SRC/." "$DSH_HOME/.agent-presets/fairy-full/skills/"
 fi
 
 # 2) 对账：删掉受控路径下「提交里已经没有」的文件（收敛语义的关键一步；
@@ -127,7 +148,7 @@ for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
   git -C "$REPO" archive HEAD -- "$area" | tar -x -C "$DSH_HOME"
 done
 git -C "$REPO" archive HEAD -- fairy-contracts fairy-system persona-packs \
-    .agent-presets/ponytail .agent-presets/fairy profiles/web | tar -x -C "$DSH_HOME"
+    .agent-presets/fairy-full .agent-presets/fairy-lite profiles/web | tar -x -C "$DSH_HOME"
 
 # 4) 逐包安装依赖（每个包自带 lockfile；link: 依赖要各自 node_modules）
 for area in browser-dock/dsh-browser-dock balance-meter/dsh-balance-meter \
@@ -147,7 +168,7 @@ node "$DSH_HOME/fairy-memory/dsh-fairy-memory/lib/memory-cli.js" evomap join --n
   || echo "evomap join 未完成（离线或 Hub 不可达）：部署继续，稍后重跑即可。"
 
 # 7) 启动
-export DSH_FAIRY_REPO_ROOT="$DSH_HOME"   # ponytail 预设的 shim 与 persona 扫描根
+export DSH_FAIRY_REPO_ROOT="$DSH_HOME"   # preset 的 shim 与 persona 扫描根
 dsh --profile web --no-open
 ```
 
@@ -156,7 +177,7 @@ dsh --profile web --no-open
 `logs/` 之类）——清单用的是 `git ls-files --exclude-standard`，落位必须同口径，否则被忽略的
 文件会被门禁报成 extra、prune 删掉、下次落位又加回来（永不收敛）。两个例外照旧落位：
 被忽略但登记在 `fairy-system/image-manifest.js` 的 `SKIP_POLICY` 里的路径（例如
-`.agent-presets/fairy/runtime`），以及 `--preserve` 声明的本机适配。
+`.agent-presets/fairy-lite/runtime`），以及 `--preserve` 声明的本机适配。
 
 **EvoMap 第 6 步的语义**：按该服务自身的分层设计只做 Layer 1——恢复或注册节点，
 打印 `claim_url` 由操作者打开完成绑定；`node_secret` 以 0600 落在 `~/.evomap`
@@ -324,16 +345,16 @@ curl -s -X POST -H 'content-type: application/json' \
 | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const p of JSON.parse(s).result.value.presets)console.log(p.id,p.trust,p.broken?'BROKEN: '+p.broken:'')})"
 ```
 
-期望：`standard/code/minimal/cordis` 为 `system`，`ponytail` 为 `user`，
-`fairy` 为 `user ok`（私有 runtime 缺失时走降级模式，见下）。
+期望：`standard/code/minimal/cordis` 为 `system`，`fairy-full` 为 `user`，
+`fairy-lite` 为 `user ok`（私有 runtime 缺失时走降级模式，见下）。
 
-`fairy` preset 的**三处**历史缺陷**已修复**（2026-09）：
+`fairy-lite` preset 的**三处**历史缺陷**已修复**（2026-09）：
 
 1. **行名不合规**（已修）：`agent.cordis.yml` 原用
-   `name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy/runtime/index.js'`，
+   `name: !!js process.env.DSH_FAIRY_REPO_ROOT + '/.agent-presets/fairy-lite/runtime/index.js'`，
    而发现器的 `entryListProblem` 要求 `name` 必须是**字符串**——这会让整个 preset 判 BROKEN。
    现改为 preset 内相对路径 shim（`./plugins/fairy-core-runtime.mjs`、
-   `./plugins/fairy-safety-gate.mjs`），与 ponytail preset 的行名约定一致。
+   `./plugins/fairy-safety-gate.mjs`），与 fairy-full preset 的行名约定一致。
 2. **语音核心 / 安全闸门的实现**（2026-09 起随仓分发）：
    `runtime/{index.js,safety-gate.js}` 是**公开语料编译出的引擎**，随仓库分发、随部署落位。
    语义是三层，不是两层：
@@ -362,7 +383,7 @@ shim 的应用层验证有两层：单测 `fairy-system/test/fairy-preset-shims.
 `MODULE_TYPELESS_PACKAGE_JSON … runtime/safety-gate.js`（证明引擎真被 import）。
 
 因此公开 clone 上 `fairy` 现在**可用且默认就是完整模式**（引擎随仓分发）；把私有实现放到
-`$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy/runtime/` 即自动切换为完整模式，无需改配置。
+`$DSH_FAIRY_REPO_ROOT/.agent-presets/fairy-lite/runtime/` 即自动切换为完整模式，无需改配置。
 
 完整链（需 live macOS 部署：`launchers/`、LaunchAgents、语音服务）：
 `./fairy-system/check.sh`。基线只读对比：`node fairy-system/accepted-baseline.js --diff`。

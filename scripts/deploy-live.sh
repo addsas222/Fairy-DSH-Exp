@@ -123,7 +123,7 @@ fairy-memory/dsh-fairy-memory
 fairy-roleplay/dsh-fairy-roleplay"
 PACKAGE_COUNT=10
 # 非包但必须落位的受控目录：契约、验证工具、人格包、两个 preset、web profile。
-EXTRA_PATHS="fairy-contracts fairy-system persona-packs .agent-presets/ponytail .agent-presets/fairy profiles/web"
+EXTRA_PATHS="fairy-contracts fairy-system persona-packs .agent-presets/fairy-full .agent-presets/fairy-lite profiles/web"
 EXTRA_COUNT=6
 
 # ── 0) 前置条件 ───────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ if [ "$FROM_WORKTREE" = 1 ]; then SOURCE_MODE=worktree; fi
 # 主技能 ponytail/ 在留存处没有（它与 harness 自带那份内容相同、当时被去重删掉），
 # 需要时从技能根补；缺少它的目录集是 5 个附属技能，不是完整规则集。
 # 找不到就跳过（preset 仍可用，只是没有这套技能）——无网络依赖、可重复执行。
-SKILLS_DEST="$DSH_HOME_TARGET/.agent-presets/ponytail/skills"
+SKILLS_DEST="$DSH_HOME_TARGET/.agent-presets/fairy-full/skills"
 if [ "$DRY_RUN" = 1 ]; then
   printf '  would sync ponytail skills (ponytail*) → %s\n' "$SKILLS_DEST"
 else
@@ -188,11 +188,11 @@ else
   fi
   # fairy world-core：从 **clone** 同步（它是本机提取产物、被 .gitignore 挡住，不在落位源里）。
   # 与技能槽位同理：目标目录在跳过策略内（不参与对账/prune），所以必须在第 2 步之前放好。
-  if [ -d "$REPO_ROOT/.agent-presets/fairy/world-core" ]; then
-    rm -rf "$DSH_HOME_TARGET/.agent-presets/fairy/world-core"
-    cp -R "$REPO_ROOT/.agent-presets/fairy/world-core" "$DSH_HOME_TARGET/.agent-presets/fairy/" 2>/dev/null \
+  if [ -d "$REPO_ROOT/.agent-presets/fairy-lite/world-core" ]; then
+    rm -rf "$DSH_HOME_TARGET/.agent-presets/fairy-lite/world-core"
+    cp -R "$REPO_ROOT/.agent-presets/fairy-lite/world-core" "$DSH_HOME_TARGET/.agent-presets/fairy-lite/" 2>/dev/null \
       && log "  synced fairy world-core from the checkout" \
-      || warn "world-core 同步失败（不影响部署）：$REPO_ROOT/.agent-presets/fairy/world-core"
+      || warn "world-core 同步失败（不影响部署）：$REPO_ROOT/.agent-presets/fairy-lite/world-core"
   else
     warn "world-core 不在 clone 里（未提取过游戏文本）；fairy 的 world-lookup 工具将不可用"
   fi
@@ -289,7 +289,7 @@ stage() {
     # 否则两条口径打架：tar 把 `alpha/.env`、`alpha/logs/` 这类被忽略文件落进镜像，
     # 第 6 步报成 extra，prune 删掉、下一次 stage 又加回来——永不收敛（实测复现）。
     # 排除项由 git 枚举（不做第二份模式表），但**先过一遍 image-manifest 的跳过
-    # 策略**：策略里登记过的路径（如 .agent-presets/fairy/runtime 这类指定不进
+    # 策略**：策略里登记过的路径（如 .agent-presets/fairy-lite/runtime 这类指定不进
     # 公开仓库、但确实该在镜像里的资产）必须保留落位资格——否则会出现
     # 「清单放过它、门禁放过它、落位却永远不落它」的分裂。过滤走模块自己的
     # isSkipped（Windows 路径先归一化成正斜杠），语义与门禁完全同源。

@@ -1,5 +1,5 @@
 /**
- * Ponytail preset 内所有 shim 的公共装载器。
+ * Fairy Full preset 内所有 shim 的公共装载器。
  *
  * 为什么需要 shim 这一层（每个行都适用）：
  * - preset 行名必须是字面字符串，且相对路径按 preset 目录解析；
@@ -22,7 +22,7 @@ export async function loadEngine(relativePath) {
     return { apply: mod.apply, inject: mod.inject ?? [] };
   } catch (error) {
     throw new Error(
-      `ponytail preset: cannot load ${relativePath} from ${moduleUrl.href}. `
+      `fairy-full preset: cannot load ${relativePath} from ${moduleUrl.href}. `
       + 'Set DSH_FAIRY_REPO_ROOT to the Fairy-DSH checkout before launching dsh. '
       + `Cause: ${String(error?.message ?? error)}`,
       { cause: error },

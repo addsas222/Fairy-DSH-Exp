@@ -246,7 +246,7 @@ export function looksLikeRepoDeployment(home) {
   return [
     path.join(home, 'fairy-system', 'image-manifest.js'),
     path.join(home, 'fairy-contracts', 'package.json'),
-    path.join(home, '.agent-presets', 'ponytail'),
+    path.join(home, '.agent-presets', 'fairy-full'),
   ].every((p) => existsSync(p));
 }
 
@@ -258,7 +258,7 @@ export function checkRepo(repo, home, offline) {
     return {
       status: 'warn',
       name: '仓库与部署',
-      detail: `${home} 不像本仓的部署（缺 fairy-system/ / fairy-contracts/ / .agent-presets/ponytail 之一）\n`
+      detail: `${home} 不像本仓的部署（缺 fairy-system/ / fairy-contracts/ / .agent-presets/fairy-full 之一）\n`
         + '    → 不对它做镜像判定，**也不会**给出部署命令：对它跑 deploy-live.sh 会覆盖那一侧的 manifest',
       fix: '隔离实例显式传 --home（本机部署是 ~/.dsh-fairy）',
     };
@@ -388,8 +388,8 @@ export function discoverArtifacts() {
  * 并给出一键改模式的办法，省掉每次手工 grep 那些 shim 内部细节。
  */
 export function checkFairyRuntime(home) {
-  const preset = path.join(home, '.agent-presets', 'fairy');
-  if (!existsSync(preset)) return { status: 'skipped', name: '语音核心模式', detail: '该 home 没有 fairy preset', fix: '' };
+  const preset = path.join(home, '.agent-presets', 'fairy-lite');
+  if (!existsSync(preset)) return { status: 'skipped', name: '语音核心模式', detail: '该 home 没有 fairy-lite preset', fix: '' };
   const runtimeDir = path.join(preset, 'runtime');
   const targets = [
     { file: path.join(runtimeDir, 'index.js'), label: 'core' },
@@ -428,7 +428,29 @@ export function checkFairyRuntime(home) {
     name: '语音核心模式',
     detail: `降级模式（${summary}，缺 ${absent.map((a) => a.label).join('、')}）\n`
       + '    → 降级段首行会自报「降级模式：未加载私有 runtime」；放上引擎并**重启实例**才切完整模式',
-    fix: `仓库自带引擎可直接复制：cp <repo>/.agent-presets/fairy/runtime/*.js ${runtimeDir}/ 然后重启实例`,
+    fix: `仓库自带引擎可直接复制：cp <repo>/.agent-presets/fairy-lite/runtime/*.js ${runtimeDir}/ 然后重启实例`,
+  };
+}
+
+/** 更名前的 preset 名 → 现名。改名/合并会把旧目录留在镜像里，而它们不在部署受控路径内：
+ *  既不被覆盖、也不被 prune 清理，`image-manifest check` 也不会报 extra —— 只在 picker 里多出幽灵项。
+ *  刻意只认这张**已知历史名**表，而不是「home 有而 repo 没有」（用户自创 preset 也会长那样）。 */
+const RENAMED_PRESETS = { fairy: 'fairy-lite', ponytail: 'fairy-full' };
+
+/** 镜像里的历史 preset 死副本（2026-09-15 改名：ponytail→fairy-full、fairy→fairy-lite）。 */
+export function checkGhostPresets(home, repo) {
+  const stale = Object.entries(RENAMED_PRESETS).filter(([oldName, newName]) => (
+    existsSync(path.join(home, '.agent-presets', oldName))
+    && !existsSync(path.join(repo, '.agent-presets', oldName))
+    && existsSync(path.join(repo, '.agent-presets', newName))
+  ));
+  if (!stale.length) return { status: 'ok', name: 'preset 目录', detail: '无更名前残留', fix: '' };
+  return {
+    status: 'warn',
+    name: 'preset 目录',
+    detail: `镜像里有更名前的死副本：${stale.map(([oldName, newName]) => `.agent-presets/${oldName}（已更名 ${newName}）`).join('、')}\n`
+      + '    → 不在部署受控路径内：部署不覆盖、prune 不删、manifest 不报 extra；留着会让 preset 选择器多出幽灵项',
+    fix: `${stale.map(([oldName]) => `rm -rf ${path.join(home, '.agent-presets', oldName)}`).join(' && ')} # 然后重启实例`,
   };
 }
 
@@ -447,6 +469,7 @@ export function diagnose(options) {
   add(checkRepo, options.repo, options.home, options.offline);
   add(checkTestPrereqs, options.repo, options.home);
   add(checkFairyRuntime, options.home);
+  add(checkGhostPresets, options.home, options.repo);
   return checks;
 }
 

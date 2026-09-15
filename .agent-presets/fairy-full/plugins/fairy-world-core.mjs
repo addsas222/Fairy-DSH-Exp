@@ -32,7 +32,7 @@ export const inject = ['systemPrompt', 'tools'];
 function worldCoreDir() {
   const root = String(process.env.DSH_FAIRY_REPO_ROOT ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!root) return null;
-  const dir = path.join(root, '.agent-presets', 'fairy', 'world-core');
+  const dir = path.join(root, '.agent-presets', 'fairy-lite', 'world-core');
   return existsSync(path.join(dir, 'MANIFEST.json')) ? dir : null;
 }
 
