@@ -761,6 +761,9 @@ test('hands the seat height back while a question card is elected', () => {
   assert.match(syncSource, /if \(questionElected\(seat\)\) \{\s*seat\.style\.removeProperty\('height'\);\s*seat\.style\.removeProperty\('--dsh-fairy-composer-height'\);\s*\} else \{/, '提问件当选时必须交还 seat 高度');
   assert.match(composerDockSource, /const composerInsetHeight = \(\) => \{[\s\S]*?questionElected\(seat\)[\s\S]*?seat\.getBoundingClientRect\(\)\.height/, '留白高度必须跟随提问卡实测高度');
   assert.match(composerDockSource, /getHeight: composerInsetHeight/);
+  assert.match(composerDockSource, /const syncQuestionObserver = \(\) => \{[\s\S]*?questionElected\(seat\)[\s\S]*?new ResizeObserver\(\(\) => flushScrollInsets\(\)\)/, '提问卡自身换题/展开改高时留白要跟着走');
+  assert.match(composerDockSource, /insetSynchronizer\.flush\(\);\n    syncQuestionObserver\(\);/);
+  assert.match(composerDockSource, /seatObserver\?\.disconnect\(\);\n    clearControls\(\);/, 'seat 归还时观察器必须断开');
 });
 
 test('focuses the input from a click anywhere on the composer card', () => {
@@ -772,7 +775,7 @@ test('focuses the input from a click anywhere on the composer card', () => {
   assert.match(composerDockSource, /card\.addEventListener\('mousedown', onCardMouseDown\)/);
   assert.match(composerDockSource, /card\?\.removeEventListener\('mousedown', onCardMouseDown\)/);
   assert.match(composerDockSource, /ensureCardFocusHandler\(\);\n      createHandle\(\);/);
-  assert.match(composerDockSource, /removeCardFocusHandler\(\);\n    clearControls\(\);/, 'seat 归还时必须摘掉监听器');
+  assert.match(composerDockSource, /removeCardFocusHandler\(\);\n    seatObserver\?\.disconnect\(\);\n    clearControls\(\);/, 'seat 归还时必须摘掉监听器');
 });
 
 test('keeps the todo/queue input dock out of the composer chrome pass', () => {

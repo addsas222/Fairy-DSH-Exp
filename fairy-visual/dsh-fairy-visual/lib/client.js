@@ -3698,6 +3698,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				seat.querySelector("[data-dsh-fairy-composer-stack=\"true\"]")?.removeAttribute("data-dsh-fairy-model-menu-open");
 				MARKER_ATTRS.forEach((name) => clearMarkerTree(seat, name));
 				removeCardFocusHandler();
+				seatObserver?.disconnect();
 				clearControls();
 				if (previousSeatStyle) Object.entries(previousSeatStyle).forEach(([name, { value, priority }]) => {
 					if (value) seat.style.setProperty(name, value, priority);
@@ -3779,6 +3780,16 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
 				removeMascotScaleBase();
 				mascotScaleBase = createMascotScaleBase(card, controller);
+			};
+			let seatObserver = null;
+			const syncQuestionObserver = () => {
+				if (!seat || typeof ResizeObserver !== "function") return;
+				if (!questionElected(seat)) {
+					seatObserver?.disconnect();
+					return;
+				}
+				if (!seatObserver) seatObserver = new ResizeObserver(() => flushScrollInsets());
+				seatObserver.observe(seat);
 			};
 			const removeLegacyVoiceDensityMarker = (node = card) => {
 				node?.removeAttribute?.("data-dsh-fairy-composer-voice-density");
@@ -3905,6 +3916,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				}
 				syncMaterialLayer();
 				insetSynchronizer.flush();
+				syncQuestionObserver();
 				contentAnchor.flush();
 				toBottomPositioner.flush();
 				updateHandle();

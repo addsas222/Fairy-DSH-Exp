@@ -221,6 +221,7 @@ function mountComposerDock(controller) {
     // disposer, so clearing only the seat itself is insufficient.
     MARKER_ATTRS.forEach((name) => clearMarkerTree(seat, name));
     removeCardFocusHandler();
+    seatObserver?.disconnect();
     clearControls();
     if (previousSeatStyle) {
       Object.entries(previousSeatStyle).forEach(([name, { value, priority }]) => {
@@ -297,6 +298,20 @@ function mountComposerDock(controller) {
     if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
     removeMascotScaleBase();
     mascotScaleBase = createMascotScaleBase(card, controller);
+  };
+  // While a question card is elected the seat is auto-height and the card can
+  // resize with its own content (multiple questions, expanding options). The
+  // structural observer only fires on tree changes, so the inset follows the
+  // box directly for as long as that card owns the seat.
+  let seatObserver = null;
+  const syncQuestionObserver = () => {
+    if (!seat || typeof ResizeObserver !== 'function') return;
+    if (!questionElected(seat)) {
+      seatObserver?.disconnect();
+      return;
+    }
+    if (!seatObserver) seatObserver = new ResizeObserver(() => flushScrollInsets());
+    seatObserver.observe(seat);
   };
   const removeLegacyVoiceDensityMarker = (node = card) => {
     node?.removeAttribute?.('data-dsh-fairy-composer-voice-density');
@@ -440,6 +455,7 @@ function mountComposerDock(controller) {
     }
     syncMaterialLayer();
     insetSynchronizer.flush();
+    syncQuestionObserver();
     contentAnchor.flush();
     toBottomPositioner.flush();
     updateHandle();
