@@ -578,8 +578,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         setInstallBusy(true);
         try {
           await memoryClient.install(id);
-          setInstallNote({ ok: true, text: id ? `已请求安装「${candidateName(id)}」：会话里的 Agent 会在下一轮按计划执行。` : '已清除安装请求。' });
           setCandidateId('');
+          // 安装成功不需要再报一遍：复读后的待办行就是回执；清除后没有别的回执，才留一句。
+          setInstallNote(id ? null : { ok: true, text: '已清除安装请求。' });
           await loadCatalog();
         } catch (installFailure) {
           setInstallNote({ ok: false, text: describeError(installFailure) });

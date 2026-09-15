@@ -138,7 +138,7 @@ function sameDeps(previous, next) {
 /** A minimal reconciling hook harness. Hooks are called in a stable order, so an
  * index-addressed slot list plus a re-render loop reproduces the state updates
  * the card performs once the host answers its two routes. */
-async function mount({ config = CONFIG, state = STATE, stateFails = false, installFails = false, candidates = CANDIDATES } = {}) {
+async function mount({ config = CONFIG, state = STATE, stateFails = false, installFails = false, candidatesFails = false, candidates = CANDIDATES } = {}) {
   const vm = await import('node:vm');
   let moduleDefinition;
   const slots = new Map();
@@ -199,6 +199,9 @@ async function mount({ config = CONFIG, state = STATE, stateFails = false, insta
       return { ok: true, status: 200, async json() { return structuredClone(config); } };
     }
     if (String(url) === '/fairy-memory/candidates') {
+      if (candidatesFails) {
+        return { ok: false, status: 503, async json() { return { error: { code: 'provider-unavailable', message: '候选清单暂不可用。' } }; } };
+      }
       return { ok: true, status: 200, async json() { return structuredClone(candidateState); } };
     }
     if (String(url) === '/fairy-memory/install') {
@@ -468,6 +471,12 @@ test('renders a failed install request as an error row, not a success', async ()
   await install.props.onClick();
   await session.settle();
   assert.equal(resultDot(session.tree, '写入安装请求失败（测试）。').props.state, 'error', '失败必须是 error 点，不能冒充成功');
+});
+
+test('surfaces a catalog read failure as an error row and hides the select', async () => {
+  const { tree } = await mount({ candidatesFails: true });
+  assert.equal(resultDot(tree, '候选清单暂不可用。').props.state, 'error');
+  assert.equal(findNodes(tree, (node) => node.type === 'select' && node.props.id === 'fairy-memory-candidate').length, 0);
 });
 
 test('surfaces the host failure message when the state route fails', async () => {

@@ -130,7 +130,7 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify({ ok: true, provider: id, id: answer?.id ?? null })}\n`);
     return 0;
   }
-  process.stderr.write('用法：memory-cli.js <recall|remember|count|doctor|evomap> ...\n');
+  process.stderr.write('用法：memory-cli.js <recall|remember|count|doctor|candidates|evomap> ...\n');
   return 2;
 }
 

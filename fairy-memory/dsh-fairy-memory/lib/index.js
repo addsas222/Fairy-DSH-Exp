@@ -199,6 +199,7 @@ const STATUS_BY_CODE = {
   'empty-text': 400,
   'provider-config-invalid': 400,
   'unknown-candidate': 400,
+  'candidate-request-invalid': 400,
   'text-too-large': 413,
   'payload-too-large': 413,
   'client-aborted': 499,
@@ -219,6 +220,7 @@ function publicError(code, detail) {
     'payload-too-large': '请求体超过大小上限。',
     'provider-config-invalid': '记忆服务配置无效。',
     'unknown-candidate': '该候选不在已审核的清单里。',
+    'candidate-request-invalid': '安装请求必须带字符串 id（空串表示清除）。',
     'client-aborted': '请求已取消。',
     'provider-unavailable': '记忆服务不可用或未配置。',
     'provider-failed': '记忆服务未能完成操作。',
@@ -246,6 +248,14 @@ export function createFairyMemoryHandlers({ settings = createMemorySettingsBound
     } finally {
       clearTimeout(timer);
     }
+  };
+
+  /** 落盘 → 镜像 → 回读掩码：两条写路由（config / install）共用同一条链。 */
+  const persist = async (patch) => {
+    await settings.write(patch);
+    const next = settings.read();
+    await writeConfigMirror(next);
+    return sanitize(next);
   };
 
   return {
@@ -282,10 +292,7 @@ export function createFairyMemoryHandlers({ settings = createMemorySettingsBound
           return;
         }
         const body = await readJson(req, MAX_BODY_BYTES);
-        await settings.write(buildPatch(body));
-        const next = settings.read();
-        await writeConfigMirror(next);
-        sendJson(res, 200, sanitize(next));
+        sendJson(res, 200, await persist(buildPatch(body)));
       } catch (error) {
         const code = error?.code || 'provider-config-invalid';
         diagnostics.warn('memory.config', { code }, error);
@@ -308,15 +315,16 @@ export function createFairyMemoryHandlers({ settings = createMemorySettingsBound
     install: async (req, res) => {
       try {
         const body = await readJson(req, MAX_BODY_BYTES);
-        const id = typeof body?.id === 'string' ? body.id.trim() : '';
-        // ''=清除请求；其它值必须是已审核候选，避免把任意字符串写进设置。
+        // 只有显式的字符串 id 才合法（'' = 清除）；缺 key / null / 数字一律 400，
+        // 否则一个空 body 会被当成"清除"，把待安装请求静默丢掉。
+        const raw = body?.id;
+        if (typeof raw !== 'string') throw Object.assign(new Error('candidate-request-invalid'), { code: 'candidate-request-invalid' });
+        const id = raw.trim();
+        // 非空 id 必须是已审核候选，避免把任意字符串写进设置。
         if (id && !findCandidate(id)) throw Object.assign(new Error('unknown-candidate'), { code: 'unknown-candidate' });
-        await settings.write({ installRequest: id });
-        const next = settings.read();
-        await writeConfigMirror(next);
-        sendJson(res, 200, sanitize(next));
+        sendJson(res, 200, await persist({ installRequest: id }));
       } catch (error) {
-        const code = error?.code || 'unknown-candidate';
+        const code = error?.code || 'candidate-request-invalid';
         diagnostics.warn('memory.install', { code }, error);
         sendJson(res, statusFor(code), { error: publicError(code) });
       }

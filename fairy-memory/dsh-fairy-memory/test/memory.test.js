@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { createFairyMemoryHandlers, createMemorySettingsBoundary } from '../lib/index.js';
 import { createMemoryRegistry } from '../lib/providers/index.js';
 import { createGbrainProvider } from '../lib/providers/gbrain.js';
 import { createMem0Provider } from '../lib/providers/mem0.js';
 import { createCustomHttpProvider, parseHeaders } from '../lib/providers/custom-http.js';
 import { createLocalMarkdownProvider } from '../lib/providers/local-markdown.js';
-import { buildMemoryRecallText, createMemoryRecallTool, createMemoryRememberTool } from '../lib/engine.js';
+import { apply, buildMemoryRecallText, createMemoryRecallTool, createMemoryRememberTool } from '../lib/engine.js';
 import { MEMORY_CANDIDATES, buildInstallPlan, buildMemorySetupText, findCandidate, renderInstallPlan } from '../lib/candidates.js';
+
+const execFileAsync = promisify(execFile);
 
 async function withTempDir(prefix, body) {
   const directory = await mkdtemp(join(tmpdir(), prefix));
@@ -269,6 +274,53 @@ test('the setup section only directs the agent when a request is pending', () =>
   assert.match(buildMemorySetupText({ installRequest: 'ghost-candidate' }), /不在已审核清单/);
 });
 
+test('the engine registers both instruction sections with the agreed names and orders', () => {
+  const sections = [];
+  const events = [];
+  const fakeCtx = {
+    inject(deps, callback) {
+      events.push(`inject:${deps.join(',')}`);
+      if (deps.includes('tools')) {
+        callback({ tools: { register(tool) { events.push(`tool:${tool.name}`); } } });
+      }
+    },
+    systemPrompt: {
+      getSectionOrder(anchor) { assert.equal(anchor, 'PLAN_POLICY'); return 50; },
+      section(definition) { sections.push(definition); },
+    },
+    on(name) { events.push(`on:${name}`); },
+  };
+  apply(fakeCtx);
+  assert.deepEqual(sections.map((section) => [section.name, section.order]), [
+    ['fairy:memory-recall', 52],
+    ['fairy:memory-setup', 54],
+  ]);
+  assert.ok(events.includes('tool:memory_recall') && events.includes('tool:memory_remember'));
+  assert.ok(events.includes('on:agent/pre-step'), '缓存要靠 pre-step 刷新');
+  assert.equal(typeof sections[0].text(), 'string');
+  assert.match(sections[1].text(), /无待办/, '无请求时只回一行状态');
+});
+
+test('the audit doc keeps every candidate it approves', async () => {
+  const doc = await readFile(new URL('../CANDIDATES.md', import.meta.url), 'utf8');
+  for (const entry of MEMORY_CANDIDATES) {
+    assert.ok(doc.includes(`| \`${entry.id}\` |`), `${entry.id} 必须在 CANDIDATES.md 的通过清单里有行`);
+    assert.ok(doc.includes(entry.install), `${entry.id} 的安装命令必须与文档一致`);
+    assert.ok(doc.includes(entry.license), `${entry.id} 的许可必须与文档一致`);
+  }
+});
+
+test('the CLI prints the candidate catalog and a single plan', async () => {
+  const cli = fileURLToPath(new URL('../lib/memory-cli.js', import.meta.url));
+  const all = await execFileAsync(process.execPath, [cli, 'candidates']);
+  assert.equal(JSON.parse(all.stdout).candidates.length, MEMORY_CANDIDATES.length);
+  const one = await execFileAsync(process.execPath, [cli, 'candidates', 'mneme']);
+  assert.match(one.stdout, /@modusensus\/dsh-mneme/);
+  assert.match(one.stdout, /不要自行重启实例/);
+  const unknown = await execFileAsync(process.execPath, [cli, 'candidates', 'nope']).catch((error) => error);
+  assert.equal(unknown.code, 2, '未知候选是用法错误（退出码 2）');
+});
+
 test('the host routes report state, mask secrets, and map failures', async () => {
   await withTempDir('fairy-memory-routes-', async (directory) => {
     const previous = process.env.DSH_HOME;
@@ -365,6 +417,26 @@ test('the candidates route serves the catalog and the install route round-trips 
       await handlers.install(requestWithJson({ id: 'not-a-candidate' }), unknown);
       assert.equal(unknown.statusCode, 400);
       assert.equal(JSON.parse(unknown.payload).error.code, 'unknown-candidate');
+      assert.equal(settings.read().installRequest, 'engramory');
+
+      // 畸形请求（id 不是字符串）是 400，不得被当成"清除"。
+      const malformed = responseDouble();
+      await handlers.install(requestWithJson({ id: 42 }), malformed);
+      assert.equal(malformed.statusCode, 400);
+      assert.equal(JSON.parse(malformed.payload).error.code, 'candidate-request-invalid');
+      assert.equal(settings.read().installRequest, 'engramory');
+
+      // 空 body（缺 id）同样是 400：静默清掉待安装请求比报错更糟。
+      const missing = responseDouble();
+      await handlers.install(requestWithJson({}), missing);
+      assert.equal(missing.statusCode, 400);
+      assert.equal(JSON.parse(missing.payload).error.code, 'candidate-request-invalid');
+      assert.equal(settings.read().installRequest, 'engramory');
+
+      // 保存其它设置不得动到待安装请求（buildPatch 不产出该字段）。
+      const saved = responseDouble();
+      await handlers.config(requestWithJson({ provider: 'local-markdown' }), saved);
+      assert.equal(saved.statusCode, 200);
       assert.equal(settings.read().installRequest, 'engramory');
 
       const cleared = responseDouble();
