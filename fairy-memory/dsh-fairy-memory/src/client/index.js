@@ -225,7 +225,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const [catalogError, setCatalogError] = React.useState('');
       const [candidateId, setCandidateId] = React.useState('');
       const [installBusy, setInstallBusy] = React.useState(false);
-      const [installNote, setInstallNote] = React.useState('');
+      const [installNote, setInstallNote] = React.useState(null);
 
       // 读取/保存/忙/状态只在 useAskForm 里：挂载读一次、保存成功后复读一次、不轮询。
       const form = useAskForm({
@@ -307,16 +307,17 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       const selected = candidates.find((entry) => entry.id === (candidateId || pendingId)) || null;
       const candidateName = (id) => candidates.find((entry) => entry.id === id)?.name || String(id);
 
-      /** 写/清安装请求；写完后复读清单，pending 状态立刻可见。 */
+      /** 写/清安装请求；写完后复读清单，pending 状态立刻可见。
+       *  成功/失败分开标记：失败也走套件结果行的错误样式，不冒充成功。 */
       const requestInstall = async (id) => {
         setInstallBusy(true);
         try {
           await memoryClient.install(id);
-          setInstallNote(id ? `已请求安装「${candidateName(id)}」：会话里的 Agent 会在下一轮按计划执行。` : '已清除安装请求。');
+          setInstallNote({ ok: true, text: id ? `已请求安装「${candidateName(id)}」：会话里的 Agent 会在下一轮按计划执行。` : '已清除安装请求。' });
           setCandidateId('');
           await loadCatalog();
         } catch (installFailure) {
-          setInstallNote(describeError(installFailure));
+          setInstallNote({ ok: false, text: describeError(installFailure) });
         } finally {
           setInstallBusy(false);
         }
@@ -396,7 +397,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
                     value: selected?.id || '',
                     options: [{ value: '', label: '（不选择）' }, ...candidates.map((entry) => ({ value: entry.id, label: `${entry.name} · ${entry.kind} · ${entry.stars}★ · ${entry.license}` }))],
                     disabled: form.busy !== null || installBusy,
-                    onChange: (id) => { setCandidateId(id); setInstallNote(''); },
+                    onChange: (id) => { setCandidateId(id); setInstallNote(null); },
                   }),
                 }),
             selected ? jsx.jsxs(AskRow, {
@@ -409,7 +410,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
               ],
             }) : null,
             pendingId ? jsx.jsx(AskResult, { ok: true, text: `已请求安装：${candidateName(pendingId)}（等待 Agent 执行）` }, 'install-pending') : null,
-            installNote ? jsx.jsx(AskResult, { ok: true, text: installNote }, 'install-note') : null,
+            installNote ? jsx.jsx(AskResult, { ok: installNote.ok, text: installNote.text }, 'install-note') : null,
             (candidates.length > 0 || pendingId) ? jsx.jsx(AskActions, {
               busy: installBusy ? 'install' : null,
               status: '',

@@ -138,7 +138,7 @@ function sameDeps(previous, next) {
 /** A minimal reconciling hook harness. Hooks are called in a stable order, so an
  * index-addressed slot list plus a re-render loop reproduces the state updates
  * the card performs once the host answers its two routes. */
-async function mount({ config = CONFIG, state = STATE, stateFails = false, candidates = CANDIDATES } = {}) {
+async function mount({ config = CONFIG, state = STATE, stateFails = false, installFails = false, candidates = CANDIDATES } = {}) {
   const vm = await import('node:vm');
   let moduleDefinition;
   const slots = new Map();
@@ -202,6 +202,9 @@ async function mount({ config = CONFIG, state = STATE, stateFails = false, candi
       return { ok: true, status: 200, async json() { return structuredClone(candidateState); } };
     }
     if (String(url) === '/fairy-memory/install') {
+      if (installFails) {
+        return { ok: false, status: 503, async json() { return { error: { code: 'provider-unavailable', message: '写入安装请求失败（测试）。' } }; } };
+      }
       const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
       candidateState = { ...candidateState, installRequest: typeof body.id === 'string' ? body.id : '' };
       return { ok: true, status: 200, async json() { return { installRequest: candidateState.installRequest }; } };
@@ -454,6 +457,17 @@ test('lists the vetted candidate catalog and writes/clears the install request',
   await session.settle();
   assert.deepEqual(session.fetches.filter((call) => call.url === '/fairy-memory/install').at(-1).body, { id: '' });
   assert.match(JSON.stringify(session.tree), /已清除安装请求。/);
+});
+
+test('renders a failed install request as an error row, not a success', async () => {
+  const session = await mount({ installFails: true });
+  const select = findNode(session.tree, (node) => node.type === 'select' && node.props.id === 'fairy-memory-candidate');
+  select.props.onChange({ target: { value: 'mneme' } });
+  await session.settle();
+  const install = findNode(session.tree, (node) => node.type === 'button-atom' && node.props.children === '让 Agent 安装');
+  await install.props.onClick();
+  await session.settle();
+  assert.equal(resultDot(session.tree, '写入安装请求失败（测试）。').props.state, 'error', '失败必须是 error 点，不能冒充成功');
 });
 
 test('surfaces the host failure message when the state route fails', async () => {
