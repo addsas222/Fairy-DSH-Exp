@@ -10,6 +10,7 @@
  *   node lib/memory-cli.js remember "text" [--tag a --tag b] [--source note]
  *   node lib/memory-cli.js count
  *   node lib/memory-cli.js doctor
+ *   node lib/memory-cli.js candidates [id]
  *   node lib/memory-cli.js evomap status
  *   node lib/memory-cli.js evomap join [--name "My Agent"] [--model <model-id>]
  *
@@ -20,6 +21,7 @@
  */
 import { createMemoryRegistry } from './providers/index.js';
 import { readMemorySettings } from './engine.js';
+import { MEMORY_CANDIDATES, buildInstallPlan, findCandidate, renderInstallPlan } from './candidates.js';
 import { evoMapStatus, joinEvoMap, withTimeout } from './evomap.js';
 
 function parseArgs(argv) {
@@ -52,6 +54,20 @@ async function main(argv) {
     return 2;
   }
   const [argument] = parsed.positionals;
+  // 候选目录不需要运行中的实例、也不碰配置：先把这条命令摘出来。
+  if (command === 'candidates') {
+    if (argument) {
+      const plan = buildInstallPlan(findCandidate(argument));
+      if (!plan) {
+        process.stderr.write(`未知候选：${argument}（用不带参数的 candidates 看全部）\n`);
+        return 2;
+      }
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n\n${renderInstallPlan(plan)}\n`);
+      return 0;
+    }
+    process.stdout.write(`${JSON.stringify({ candidates: MEMORY_CANDIDATES }, null, 2)}\n`);
+    return 0;
+  }
   const registry = createMemoryRegistry({});
   const settings = await readMemorySettings();
   const { id, provider, config, fallback } = registry.resolve(settings);

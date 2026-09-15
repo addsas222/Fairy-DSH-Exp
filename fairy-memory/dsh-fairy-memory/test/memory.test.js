@@ -11,6 +11,7 @@ import { createMem0Provider } from '../lib/providers/mem0.js';
 import { createCustomHttpProvider, parseHeaders } from '../lib/providers/custom-http.js';
 import { createLocalMarkdownProvider } from '../lib/providers/local-markdown.js';
 import { buildMemoryRecallText, createMemoryRecallTool, createMemoryRememberTool } from '../lib/engine.js';
+import { MEMORY_CANDIDATES, buildInstallPlan, buildMemorySetupText, findCandidate, renderInstallPlan } from '../lib/candidates.js';
 
 async function withTempDir(prefix, body) {
   const directory = await mkdtemp(join(tmpdir(), prefix));
@@ -237,6 +238,37 @@ test('the auto-recall switch renders both prompt states', () => {
   assert.match(buildMemoryRecallText(undefined), /自动回忆未开启/, '缺配置时按默认关闭处理');
 });
 
+test('the vetted candidate list is complete, unique, and installable as written', () => {
+  const ids = MEMORY_CANDIDATES.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length, '候选 id 不能重复');
+  for (const entry of MEMORY_CANDIDATES) {
+    for (const field of ['name', 'kind', 'summary', 'repo', 'listing', 'stars', 'license', 'language', 'lastPush', 'install', 'requires', 'verify', 'wire']) {
+      assert.ok(typeof entry[field] === 'string' && entry[field].length > 0, `${entry.id}.${field} 必填`);
+    }
+    assert.match(entry.install, /^dsh plugin --profile web add /, `${entry.id} 的安装命令必须是可直接执行的一条`);
+    assert.match(entry.repo, /^https:\/\/github\.com\//);
+  }
+});
+
+test('the install plan states the steps and guards the shared runtime', () => {
+  const plan = buildInstallPlan(findCandidate('mneme'));
+  assert.equal(plan.id, 'mneme');
+  const text = renderInstallPlan(plan);
+  assert.match(text, /@modusensus\/dsh-mneme/);
+  assert.match(text, /fairy-memory\/install/, '收尾步骤要教它清掉请求');
+  assert.match(text, /不要自行重启实例/, '重启会掐断它自己的会话，必须交给用户');
+  assert.equal(buildInstallPlan(findCandidate('nothing-here')), null);
+});
+
+test('the setup section only directs the agent when a request is pending', () => {
+  assert.match(buildMemorySetupText({ installRequest: '' }), /无待办/);
+  const text = buildMemorySetupText({ installRequest: 'hindsight' });
+  assert.match(text, /Hindsight/);
+  assert.match(text, /@vectorize-io\/hindsight-coding-agents/);
+  assert.match(text, /用户的明确授权/);
+  assert.match(buildMemorySetupText({ installRequest: 'ghost-candidate' }), /不在已审核清单/);
+});
+
 test('the host routes report state, mask secrets, and map failures', async () => {
   await withTempDir('fairy-memory-routes-', async (directory) => {
     const previous = process.env.DSH_HOME;
@@ -300,6 +332,47 @@ test('the host routes report state, mask secrets, and map failures', async () =>
       await handlers.remember(requestWithJson({ text: 'ok', padding: 'x'.repeat(70 * 1024) }), hugeBody);
       assert.equal(hugeBody.statusCode, 413);
       assert.equal(JSON.parse(hugeBody.payload).error.code, 'payload-too-large');
+    } finally {
+      if (previous === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = previous;
+    }
+  });
+});
+
+test('the candidates route serves the catalog and the install route round-trips the request', async () => {
+  await withTempDir('fairy-memory-candidates-', async (directory) => {
+    const previous = process.env.DSH_HOME;
+    process.env.DSH_HOME = directory;
+    try {
+      const settings = createMemorySettingsBoundary();
+      const handlers = createFairyMemoryHandlers({ settings });
+
+      const listing = responseDouble();
+      await handlers.candidates({ method: 'GET' }, listing);
+      assert.equal(listing.statusCode, 200);
+      assert.equal(JSON.parse(listing.payload).candidates.length, MEMORY_CANDIDATES.length);
+      assert.equal(JSON.parse(listing.payload).installRequest, '');
+
+      const set = responseDouble();
+      await handlers.install(requestWithJson({ id: 'engramory' }), set);
+      assert.equal(set.statusCode, 200);
+      assert.equal(JSON.parse(set.payload).installRequest, 'engramory');
+      const mirror = JSON.parse(await readFile(join(directory, 'fairy-memory', 'config.json'), 'utf8'));
+      assert.equal(mirror.installRequest, 'engramory', '请求必须随镜像到达 agent 面');
+
+      // 未知 id 是 400，且不得覆盖已有请求。
+      const unknown = responseDouble();
+      await handlers.install(requestWithJson({ id: 'not-a-candidate' }), unknown);
+      assert.equal(unknown.statusCode, 400);
+      assert.equal(JSON.parse(unknown.payload).error.code, 'unknown-candidate');
+      assert.equal(settings.read().installRequest, 'engramory');
+
+      const cleared = responseDouble();
+      await handlers.install(requestWithJson({ id: '' }), cleared);
+      assert.equal(cleared.statusCode, 200);
+      assert.equal(settings.read().installRequest, '');
+      const mirrorAfter = JSON.parse(await readFile(join(directory, 'fairy-memory', 'config.json'), 'utf8'));
+      assert.equal(mirrorAfter.installRequest, '');
     } finally {
       if (previous === undefined) delete process.env.DSH_HOME;
       else process.env.DSH_HOME = previous;

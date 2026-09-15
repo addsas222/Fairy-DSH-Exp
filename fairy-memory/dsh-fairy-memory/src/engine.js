@@ -9,6 +9,7 @@
 import { readFile } from 'node:fs/promises';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
 import { FAIRY_MEMORY_DEFAULTS, memoryConfigPath } from './index.js';
+import { buildMemorySetupText } from './candidates.js';
 import { createMemoryRegistry } from './providers/index.js';
 
 const diagnostics = createFairyDiagnostics('dsh-fairy-memory');
@@ -161,7 +162,7 @@ export function buildMemoryRecallText(settings) {
     : '自动回忆未开启：只在用户明确要求、或确有必要时使用 `memory_recall`。';
 }
 
-/** Mount the agent half: both tools plus the auto-recall instruction section. */
+/** Mount the agent half: both tools plus the two instruction sections. */
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {
     ctx.inject(['tools'], (toolCtx) => {
@@ -169,20 +170,30 @@ export function apply(ctx) {
       toolCtx.tools.register(createMemoryRememberTool({}));
     });
     /* 动态段落：与 roleplay 引擎同款（函数式 text + 1s 读缓存 + pre-step 刷新）。
-     * 顺序排在模式段(51)与 roleplay 偏好段(53)之间。 */
-    let cached = buildMemoryRecallText(FAIRY_MEMORY_DEFAULTS);
+     * 顺序排在模式段(51)、自动回忆段(52)与 roleplay 偏好段(53)之后。 */
+    let recallText = buildMemoryRecallText(FAIRY_MEMORY_DEFAULTS);
+    let setupText = buildMemorySetupText(FAIRY_MEMORY_DEFAULTS);
     let cachedAt = 0;
     const refresh = () => {
       if (Date.now() - cachedAt < 1_000) return;
       cachedAt = Date.now();
       void readMemorySettings()
-        .then((settings) => { cached = buildMemoryRecallText(settings); })
+        .then((settings) => {
+          recallText = buildMemoryRecallText(settings);
+          setupText = buildMemorySetupText(settings);
+        })
         .catch(() => {});
     };
     ctx.systemPrompt.section({
       name: 'fairy:memory-recall',
       order: typeof ctx.systemPrompt.getSectionOrder === 'function' ? ctx.systemPrompt.getSectionOrder('PLAN_POLICY') + 2 : 52,
-      text: () => cached,
+      text: () => recallText,
+    });
+    // 安装请求来自设置卡的候选清单：待办时把"用户已授权"的执行计划直接交给模型。
+    ctx.systemPrompt.section({
+      name: 'fairy:memory-setup',
+      order: typeof ctx.systemPrompt.getSectionOrder === 'function' ? ctx.systemPrompt.getSectionOrder('PLAN_POLICY') + 4 : 54,
+      text: () => setupText,
     });
     ctx.on?.('agent/pre-step', async (_payload, next) => {
       refresh();

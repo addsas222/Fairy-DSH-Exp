@@ -110,6 +110,25 @@ const STATE = {
     { id: 'local-markdown', available: true, reason: '' },
   ],
 };
+const CANDIDATES = {
+  candidates: [
+    {
+      id: 'mneme', name: 'dsh-mneme', kind: 'dsh-plugin', summary: '会做梦的记忆。',
+      repo: 'https://github.com/modusensus/dsh-mneme', listing: 'https://dshget.com/plugins/modusensus/dsh-mneme',
+      stars: '30', license: 'MIT', language: 'JavaScript', lastPush: '2026-08-20',
+      install: 'dsh plugin --profile web add @modusensus/dsh-mneme', requires: 'Node ≥20',
+      verify: 'dsh plugin --profile web list', wire: '自带外部 API/CLI。', caveats: '',
+    },
+    {
+      id: 'hindsight', name: 'Hindsight', kind: 'dsh-plugin', summary: '会学习的项目记忆。',
+      repo: 'https://github.com/vectorize-io/hindsight', listing: 'https://dshget.com/plugins/vectorize-io/hindsight~h~coding-agents',
+      stars: '20.8K', license: 'MIT', language: 'Python', lastPush: '2026-08-21',
+      install: 'dsh plugin --profile web add @vectorize-io/hindsight-coding-agents', requires: 'Python 3.10+',
+      verify: 'dsh plugin --profile web list', wire: '自带 agent 面。', caveats: '与 fairy-memory 并行时注意双写。',
+    },
+  ],
+  installRequest: '',
+};
 
 function sameDeps(previous, next) {
   if (!previous || !next || previous.length !== next.length) return false;
@@ -119,11 +138,12 @@ function sameDeps(previous, next) {
 /** A minimal reconciling hook harness. Hooks are called in a stable order, so an
  * index-addressed slot list plus a re-render loop reproduces the state updates
  * the card performs once the host answers its two routes. */
-async function mount({ config = CONFIG, state = STATE, stateFails = false } = {}) {
+async function mount({ config = CONFIG, state = STATE, stateFails = false, candidates = CANDIDATES } = {}) {
   const vm = await import('node:vm');
   let moduleDefinition;
   const slots = new Map();
   const fetches = [];
+  let candidateState = structuredClone(candidates);
   const disposers = [];
   const hooks = [];
   let cursor = 0;
@@ -177,6 +197,14 @@ async function mount({ config = CONFIG, state = STATE, stateFails = false } = {}
     // 依赖它的重探才看得见。
     if (String(url) === '/fairy-memory/config') {
       return { ok: true, status: 200, async json() { return structuredClone(config); } };
+    }
+    if (String(url) === '/fairy-memory/candidates') {
+      return { ok: true, status: 200, async json() { return structuredClone(candidateState); } };
+    }
+    if (String(url) === '/fairy-memory/install') {
+      const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
+      candidateState = { ...candidateState, installRequest: typeof body.id === 'string' ? body.id : '' };
+      return { ok: true, status: 200, async json() { return { installRequest: candidateState.installRequest }; } };
     }
     if (stateFails) {
       return {
@@ -339,10 +367,9 @@ test('renders providers, key fields, availability reasons, and the stored count'
 
 test('reads config then state on mount and re-probes on demand', async () => {
   const { tree, fetches } = await mount();
-  assert.deepEqual(fetches.map((call) => [call.method || 'GET', call.url]), [
-    ['GET', '/fairy-memory/config'],
-    ['GET', '/fairy-memory/state'],
-  ]);
+  const urls = fetches.map((call) => call.url);
+  assert.deepEqual([...urls].sort(), ['/fairy-memory/candidates', '/fairy-memory/config', '/fairy-memory/state']);
+  assert.ok(urls.indexOf('/fairy-memory/config') < urls.indexOf('/fairy-memory/state'), '状态在配置之后读');
   const refresh = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === '刷新可用性');
   await refresh.props.onClick();
   assert.equal(fetches.filter((call) => call.url === '/fairy-memory/state').length, 2);
@@ -398,6 +425,35 @@ test('posts a dashed provider id under its camelCase settings key', async () => 
     autoRecall: false,
     providers: { customHttp: { url: 'http://127.0.0.1:9400/recall', headersJson: '{}', queryPath: 'results', textPath: 'text' } },
   });
+});
+
+test('lists the vetted candidate catalog and writes/clears the install request', async () => {
+  const session = await mount();
+  const select = findNode(session.tree, (node) => node.type === 'select' && node.props.id === 'fairy-memory-candidate');
+  assert.deepEqual([...select.props.children.map((option) => option.props.value)], ['', 'mneme', 'hindsight']);
+  assert.equal(select.props.value, '', '无请求时停在「不选择」');
+
+  // 选中候选 → 详情行给出摘要、安装命令与注意事项。
+  select.props.onChange({ target: { value: 'hindsight' } });
+  await session.settle();
+  const detail = JSON.stringify(session.tree);
+  assert.match(detail, /@vectorize-io\/hindsight-coding-agents/);
+  assert.match(detail, /注意：与 fairy-memory 并行时注意双写。/);
+
+  // 「让 Agent 安装」→ POST 候选 id，随后清单复读并出现待办行。
+  const install = findNode(session.tree, (node) => node.type === 'button-atom' && node.props.children === '让 Agent 安装');
+  await install.props.onClick();
+  await session.settle();
+  assert.deepEqual(session.fetches.find((call) => call.url === '/fairy-memory/install').body, { id: 'hindsight' });
+  assert.match(JSON.stringify(session.tree), /已请求安装：Hindsight（等待 Agent 执行）/);
+  assert.equal(session.fetches.filter((call) => call.url === '/fairy-memory/candidates').length, 2, '写请求后复读一次清单');
+
+  // 待办时同一按钮变成「取消安装请求」→ POST 空 id 清空。
+  const cancel = findNode(session.tree, (node) => node.type === 'button-atom' && node.props.children === '取消安装请求');
+  await cancel.props.onClick();
+  await session.settle();
+  assert.deepEqual(session.fetches.filter((call) => call.url === '/fairy-memory/install').at(-1).body, { id: '' });
+  assert.match(JSON.stringify(session.tree), /已清除安装请求。/);
 });
 
 test('surfaces the host failure message when the state route fails', async () => {

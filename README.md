@@ -17,7 +17,7 @@
 | `fairy-persona/` | 人格包引擎：人格文档 + 调色属性 + TTS 绑定热切换 |
 | `fairy-modes/` | 五模式引擎（极简 Explore&Check / 探查只读 / PTC Build&Work / 创造 Memory&Dream / 角色扮演）+ `mode_pipeline` 四站流水线 |
 | `fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成 |
-| `fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`）；mem0 / 自定义 HTTP / 本地 Markdown 备选 |
+| `fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`）；mem0 / 自定义 HTTP / 本地 Markdown 备选；**外部记忆候选目录**（dshget 生态抽审，设置页可一键请求 Agent 安装）见 `fairy-memory/dsh-fairy-memory/CANDIDATES.md` |
 | `fairy-roleplay/` | 角色扮演：去AI味检查器（L1 词表 → L4 通读）+ 风格库 + 规划/时机/回复规则 |
 | `fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT 路线 |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |

@@ -78,6 +78,9 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 
     const STATE_PATH = '/fairy-memory/state';
     const CONFIG_PATH = '/fairy-memory/config';
+    /** 候选记忆目录与安装请求：宿主只读清单，Agent 面负责执行安装。 */
+    const CANDIDATES_PATH = '/fairy-memory/candidates';
+    const INSTALL_PATH = '/fairy-memory/install';
     /** The host never echoes a stored secret: it sends this sentinel instead, and
      * writing the sentinel back means "keep the stored value", so saving with an
      * untouched key field never clears it. */
@@ -202,6 +205,14 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store',
           }, '保存长期记忆配置失败。');
         },
+        candidates(signal) {
+          return read('candidates.request', CANDIDATES_PATH, { cache: 'no-store', signal }, '无法读取候选记忆清单。');
+        },
+        install(id) {
+          return read('install.request', INSTALL_PATH, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), cache: 'no-store',
+          }, '写入安装请求失败。');
+        },
       };
     }
 
@@ -210,6 +221,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     function MemorySection() {
       const [availability, setAvailability] = React.useState(null);
       const [probeError, setProbeError] = React.useState('');
+      const [catalog, setCatalog] = React.useState(null);
+      const [catalogError, setCatalogError] = React.useState('');
+      const [candidateId, setCandidateId] = React.useState('');
+      const [installBusy, setInstallBusy] = React.useState(false);
+      const [installNote, setInstallNote] = React.useState('');
 
       // 读取/保存/忙/状态只在 useAskForm 里：挂载读一次、保存成功后复读一次、不轮询。
       const form = useAskForm({
@@ -258,6 +274,21 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         probeAvailability();
       }, [form.stored, form.error]);
 
+      /** 候选清单是只读目录：挂载读一次，写/清安装请求后再读一次。 */
+      const loadCatalog = async () => {
+        try {
+          setCatalog(await memoryClient.candidates());
+          setCatalogError('');
+        } catch (catalogFailure) {
+          setCatalog(null);
+          setCatalogError(describeError(catalogFailure));
+        }
+      };
+
+      React.useEffect(() => {
+        loadCatalog();
+      }, []);
+
       const submit = () => {
         // useAskForm 已经把失败原因写进 status，这里只吞掉它有意抛出的 rejection。
         form.submit().catch(() => {});
@@ -269,6 +300,27 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         ...(form.draft.fields || {}),
         [owner]: { ...((form.draft.fields || {})[owner] || {}), [name]: value },
       });
+
+      /** 候选目录的三个派生值：渲染用，pending 决定按钮是"安装"还是"取消"。 */
+      const candidates = Array.isArray(catalog?.candidates) ? catalog.candidates : [];
+      const pendingId = typeof catalog?.installRequest === 'string' ? catalog.installRequest : '';
+      const selected = candidates.find((entry) => entry.id === (candidateId || pendingId)) || null;
+      const candidateName = (id) => candidates.find((entry) => entry.id === id)?.name || String(id);
+
+      /** 写/清安装请求；写完后复读清单，pending 状态立刻可见。 */
+      const requestInstall = async (id) => {
+        setInstallBusy(true);
+        try {
+          await memoryClient.install(id);
+          setInstallNote(id ? `已请求安装「${candidateName(id)}」：会话里的 Agent 会在下一轮按计划执行。` : '已清除安装请求。');
+          setCandidateId('');
+          await loadCatalog();
+        } catch (installFailure) {
+          setInstallNote(describeError(installFailure));
+        } finally {
+          setInstallBusy(false);
+        }
+      };
 
       const { provider, option, values, autoRecall } = effective(form.stored, form.draft);
       const availabilityRows = Array.isArray(availability?.providers) ? availability.providers : [];
@@ -331,6 +383,40 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
               text: `当前提供方：${providerLabel(activeId)} · ${availability?.available === true ? '可用' : `不可用 · ${availability?.reason || '未检查'}`}`,
             }, 'active-provider'),
             jsx.jsx('p', { style: ASK_STYLE.status, 'data-dsh-fairy-memory-count': 'true', children: countLine }),
+            jsx.jsx('p', { style: ASK_STYLE.status, children: '候选记忆（外部生态，已审核；由 Agent 按请求安装）' }, 'candidates-title'),
+            catalogError
+              ? jsx.jsx(AskResult, { ok: false, text: catalogError }, 'catalog-error')
+              : candidates.length === 0
+                ? jsx.jsx('p', { style: ASK_STYLE.status, children: catalog === null ? ASK_TEXT.loading : '候选清单为空。' }, 'candidates-empty')
+                : jsx.jsx(AskRow, {
+                  id: 'fairy-memory-candidate',
+                  label: '选择候选',
+                  children: jsx.jsx(AskSelect, {
+                    id: 'fairy-memory-candidate',
+                    value: selected?.id || '',
+                    options: [{ value: '', label: '（不选择）' }, ...candidates.map((entry) => ({ value: entry.id, label: `${entry.name} · ${entry.kind} · ${entry.stars}★ · ${entry.license}` }))],
+                    disabled: form.busy !== null || installBusy,
+                    onChange: (id) => { setCandidateId(id); setInstallNote(''); },
+                  }),
+                }),
+            selected ? jsx.jsxs(AskRow, {
+              id: 'fairy-memory-candidate-detail',
+              label: '候选详情',
+              children: [
+                jsx.jsx('p', { style: ASK_STYLE.status, children: `${selected.summary}（${selected.language} · 最近推送 ${selected.lastPush}）` }),
+                jsx.jsx('p', { style: ASK_STYLE.status, children: `安装：${selected.install}` }),
+                selected.caveats ? jsx.jsx('p', { style: ASK_STYLE.status, children: `注意：${selected.caveats}` }) : null,
+              ],
+            }) : null,
+            pendingId ? jsx.jsx(AskResult, { ok: true, text: `已请求安装：${candidateName(pendingId)}（等待 Agent 执行）` }, 'install-pending') : null,
+            installNote ? jsx.jsx(AskResult, { ok: true, text: installNote }, 'install-note') : null,
+            (candidates.length > 0 || pendingId) ? jsx.jsx(AskActions, {
+              busy: installBusy ? 'install' : null,
+              status: '',
+              primary: pendingId && selected?.id === pendingId ? '取消安装请求' : '让 Agent 安装',
+              onPrimary: () => requestInstall(pendingId && selected?.id === pendingId ? '' : (selected?.id || '')),
+              writable: Boolean(selected) || Boolean(pendingId),
+            }) : null,
             jsx.jsx(AskActions, {
               busy: form.busy,
               status: form.status,

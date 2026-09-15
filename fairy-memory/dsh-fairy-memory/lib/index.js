@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import z from '@deepseek-ai/schemastery';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
+import { MEMORY_CANDIDATES, findCandidate } from './candidates.js';
 import {
   MEMORY_PROVIDER_DEFAULTS,
   MEMORY_PROVIDER_FIELDS,
@@ -37,6 +38,8 @@ export const FAIRY_MEMORY_DEFAULTS = Object.freeze({
   // store instead of failing the namespace registration on host startup.
   provider: 'gbrain',
   autoRecall: false,
+  // 待安装候选的 id（''=无）：设置卡写，镜像带到 agent 面，由 Agent 按计划执行。
+  installRequest: '',
   providers: Object.freeze({
     gbrain: Object.freeze({ ...MEMORY_PROVIDER_DEFAULTS.gbrain }),
     mem0: Object.freeze({ ...MEMORY_PROVIDER_DEFAULTS.mem0 }),
@@ -51,6 +54,7 @@ export const FairyMemorySettings = z.object({
   version: z.number().step(1).default(1),
   provider: z.string().default(FAIRY_MEMORY_DEFAULTS.provider),
   autoRecall: z.boolean().default(false),
+  installRequest: z.string().default(''),
   providers: z.object({
     gbrain: section(MEMORY_PROVIDER_FIELDS.gbrain),
     mem0: section(MEMORY_PROVIDER_FIELDS.mem0),
@@ -112,6 +116,7 @@ function sanitize(value) {
     version: value.version,
     provider: value.provider,
     autoRecall: value.autoRecall === true,
+    installRequest: typeof value.installRequest === 'string' ? value.installRequest : '',
     providers: maskProviderSections(value.providers),
   };
 }
@@ -148,7 +153,7 @@ async function writeConfigMirror(value) {
   try {
     const file = memoryConfigPath();
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify({ provider: value.provider, autoRecall: value.autoRecall === true, providers: value.providers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await writeFile(file, `${JSON.stringify({ provider: value.provider, autoRecall: value.autoRecall === true, installRequest: typeof value.installRequest === 'string' ? value.installRequest : '', providers: value.providers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   } catch (error) {
     diagnostics.warn('memory.mirror', {}, error);
   }
@@ -193,6 +198,7 @@ const STATUS_BY_CODE = {
   'invalid-json': 400,
   'empty-text': 400,
   'provider-config-invalid': 400,
+  'unknown-candidate': 400,
   'text-too-large': 413,
   'payload-too-large': 413,
   'client-aborted': 499,
@@ -212,6 +218,7 @@ function publicError(code, detail) {
     'text-too-large': `单条记忆不能超过 ${MAX_REMEMBER_CHARS} 字符。`,
     'payload-too-large': '请求体超过大小上限。',
     'provider-config-invalid': '记忆服务配置无效。',
+    'unknown-candidate': '该候选不在已审核的清单里。',
     'client-aborted': '请求已取消。',
     'provider-unavailable': '记忆服务不可用或未配置。',
     'provider-failed': '记忆服务未能完成操作。',
@@ -226,8 +233,9 @@ function publicError(code, detail) {
 }
 
 /**
- * The four routes. `state` doubles as the availability view, so the card can
- * refresh it without a second round trip.
+ * The six routes. `state` doubles as the availability view, so the card can
+ * refresh it without a second round trip. `candidates`/`install` are the
+ * vetted external-memory catalog：卡片写请求，Agent 面按请求执行安装。
  */
 export function createFairyMemoryHandlers({ settings = createMemorySettingsBoundary(), registry = createMemoryRegistry({}), timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const withScope = async (task) => {
@@ -281,6 +289,35 @@ export function createFairyMemoryHandlers({ settings = createMemorySettingsBound
       } catch (error) {
         const code = error?.code || 'provider-config-invalid';
         diagnostics.warn('memory.config', { code }, error);
+        sendJson(res, statusFor(code), { error: publicError(code) });
+      }
+    },
+    candidates: async (_req, res) => {
+      try {
+        const value = settings.read();
+        // 全量清单很小（9 条数据），一次给完：客户端不需要第二趟请求。
+        sendJson(res, 200, {
+          candidates: MEMORY_CANDIDATES.map((entry) => ({ ...entry })),
+          installRequest: typeof value.installRequest === 'string' ? value.installRequest : '',
+        });
+      } catch (error) {
+        diagnostics.warn('memory.candidates', {}, error);
+        sendJson(res, 200, { candidates: [], installRequest: '' });
+      }
+    },
+    install: async (req, res) => {
+      try {
+        const body = await readJson(req, MAX_BODY_BYTES);
+        const id = typeof body?.id === 'string' ? body.id.trim() : '';
+        // ''=清除请求；其它值必须是已审核候选，避免把任意字符串写进设置。
+        if (id && !findCandidate(id)) throw Object.assign(new Error('unknown-candidate'), { code: 'unknown-candidate' });
+        await settings.write({ installRequest: id });
+        const next = settings.read();
+        await writeConfigMirror(next);
+        sendJson(res, 200, sanitize(next));
+      } catch (error) {
+        const code = error?.code || 'unknown-candidate';
+        diagnostics.warn('memory.install', { code }, error);
         sendJson(res, statusFor(code), { error: publicError(code) });
       }
     },
@@ -344,6 +381,8 @@ export function apply(ctx) {
     ctx.inject(['webServer'], (ws) => {
       ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/state', handler: handlers.state }), 'dsh-fairy-memory: state');
       ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/config', handler: handlers.config }), 'dsh-fairy-memory: config');
+      ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/candidates', handler: handlers.candidates }), 'dsh-fairy-memory: candidates');
+      ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/install', handler: handlers.install }), 'dsh-fairy-memory: install');
       ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/recall', handler: handlers.recall }), 'dsh-fairy-memory: recall');
       ws.effect(() => ws.webServer.register({ kind: 'exact', path: '/fairy-memory/remember', handler: handlers.remember }), 'dsh-fairy-memory: remember');
     }, { surface: 'host' });
