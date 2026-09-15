@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+/** 卡片的状态文案必须是真源那一份：测试不另抄一份字面量。 */
+const { ASK_TEXT } = createRequire(import.meta.url)('../../../fairy-contracts/client-ask-kit.cjs');
 
 const DEFAULT_KEY = 'dsh.fairyModes.default.v1';
 const APPLIED = (sessionId) => `dsh.fairyModes.applied.${sessionId}`;
@@ -16,6 +19,13 @@ function texts(node) {
   return texts(node.props?.children);
 }
 
+/** React children are a node, an array, or nothing — never a bare iterable. */
+function childrenOf(node) {
+  const children = node.props?.children;
+  if (children === null || children === undefined || typeof children === 'boolean') return [];
+  return Array.isArray(children) ? children : [children];
+}
+
 function nodes(node, found = []) {
   if (Array.isArray(node)) {
     for (const child of node) nodes(child, found);
@@ -23,7 +33,7 @@ function nodes(node, found = []) {
   }
   if (node === null || typeof node !== 'object') return found;
   if (typeof node.type !== 'undefined') found.push(node);
-  for (const child of node.props?.children ?? []) nodes(child, found);
+  for (const child of childrenOf(node)) nodes(child, found);
   return found;
 }
 
@@ -33,6 +43,21 @@ function nodeWith(tree, predicate, label) {
   return hit;
 }
 
+/**
+ * Render function components the way React would: the card returns ask-kit
+ * elements (`AskSection`/`AskRow`/`AskSelect`/`AskActions`), and only invoking
+ * them reaches the markup the kit renders. Every hook in the card belongs to the
+ * root component, so expanding runs after its hooks are read.
+ */
+function expand(node) {
+  if (Array.isArray(node)) return node.map(expand);
+  if (node === null || typeof node !== 'object') return node;
+  const props = node.props ?? {};
+  const children = expand(props.children);
+  if (typeof node.type === 'function') return expand(node.type({ ...props, children }));
+  return { ...node, props: { ...props, children } };
+}
+
 /** Minimal hook runtime: state, refs, and once-per-dependency effects. */
 function hookDriver() {
   let hooks = [];
@@ -40,6 +65,7 @@ function hookDriver() {
   let current = null;
   let tree = null;
   const React = {
+    useCallback: (callback) => callback,
     useState(initial) {
       const at = index++;
       if (!(at in hooks)) hooks[at] = typeof initial === 'function' ? initial() : initial;
@@ -58,12 +84,16 @@ function hookDriver() {
       const previous = hooks[at];
       if (previous !== undefined && previous.deps.every((value, position) => value === deps?.[position])) return;
       previous?.cleanup?.();
-      hooks[at] = { deps: deps ?? [], cleanup: callback() };
+      // Record the deps before running: a callback that sets state re-renders
+      // synchronously here, and that nested render must see them.
+      const entry = { deps: deps ?? [], cleanup: undefined };
+      hooks[at] = entry;
+      entry.cleanup = callback();
     },
   };
   const render = () => {
     index = 0;
-    tree = current.component(current.props);
+    tree = expand(current.component(current.props));
     return tree;
   };
   return {
@@ -115,9 +145,18 @@ function loadBundle() {
   vm.runInContext(source, sandbox);
   assert.equal(entries.length, 1);
   const driver = hookDriver();
+  const element = (type, props) => ({ type, props: props ?? {} });
+  /** 官方原语替身：只保留实证存在的名字，并记下卡片实际传了什么。 */
+  const primitiveCalls = [];
+  const named = (name, tag) => (props) => {
+    primitiveCalls.push({ name, props });
+    return element(tag, props);
+  };
+  const primitives = { Input: named('Input', 'input'), Button: named('Button', 'button'), StateDot: named('StateDot', 'span') };
   const exported = entries[0].factory((id) => {
     if (id === 'react') return driver.React;
-    if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props ?? {} }) };
+    if (id === 'react/jsx-runtime') return { jsx: element, jsxs: element };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives;
     throw new Error(`unexpected require(${id})`);
   });
   return {
@@ -126,6 +165,7 @@ function loadBundle() {
     driver,
     requests,
     events,
+    primitiveCalls,
     localStorage,
     sessionStorage,
     onFetch(impl) { fetchImpl = impl; },
@@ -169,36 +209,91 @@ test('registers the 模式 settings section and keeps the header chip', () => {
   assert.equal(chip.definition.order, 20);
 });
 
-test('the settings card explains the modes and persists the new-session default', () => {
+test('the settings card explains the modes and persists the new-session default through the ask kit', async () => {
   const bundle = loadBundle();
   const slots = register(bundle);
   const render = () => bundle.driver.render(slots.get('fairy-modes').component, {});
+  const tree = () => bundle.driver.tree();
+  const select = () => nodeWith(tree(), (node) => node.type === 'select', 'the default-mode select');
+  const saveButton = () => nodeWith(
+    tree(),
+    (node) => node.type === 'button' && node.props.variant === 'primary',
+    'the save button',
+  );
 
-  const tree = render();
-  const rendered = JSON.stringify(tree);
+  render();
+  await bundle.settle(8);
+  const rendered = JSON.stringify(tree());
   for (const term of ['极简', '官方 plan-mode', '/plan', '探查·只读', '建造·PTC', 'run_code', '创造·回忆', 'session_recall', 'SKILL.md', 'scaffold-plugin.js']) {
     assert.ok(rendered.includes(term), `the card should explain ${term}`);
   }
 
-  const select = nodeWith(tree, (node) => node.type === 'select', 'the default-mode select');
-  assert.equal(select.props['data-dsh-fairy-modes-default'], 'true');
+  // 归一化：卡里没有裸提问件，下拉是套件自带的那个（data-ask 是它的自证标记）。
+  const control = (node) => typeof node.type === 'string' && ['input', 'select', 'textarea'].includes(node.type);
   assert.deepEqual(
-    Array.from(select.props.children, option => option.props.value),
+    nodes(tree()).filter(node => control(node) && node.props['data-ask'] === undefined).map(node => node.type),
+    [],
+    '卡里不该再出现裸 input/select/textarea',
+  );
+  assert.ok(
+    nodes(tree()).some(node => control(node) && node.props['data-ask'] === 'select'),
+    '下拉来自归一化套件（带 data-ask 标记）',
+  );
+
+  // 归一化：下拉由 AskSelect 渲染，选项与 id 由卡片给定。
+  const dropdown = select();
+  assert.equal(dropdown.props.id, 'dsh-fairy-modes-default');
+  assert.deepEqual(
+    Array.from(dropdown.props.children, option => option.props.value),
     ['', 'explore', 'ptc', 'roleplay', 'create', 'off'],
     'the dropdown offers 不设置/建造/创造/关闭',
   );
-  assert.deepEqual(Array.from(texts(select.props.children[0])), ['不设置（新会话保持 off）']);
-  assert.equal(select.props.value, '', 'with no preference stored the dropdown shows 不设置');
+  assert.deepEqual(Array.from(texts(dropdown.props.children[0])), ['不设置（新会话保持 off）']);
+  assert.equal(dropdown.props.value, '', 'with no preference stored the dropdown shows 不设置');
   assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), null, '不设置 writes nothing');
 
-  select.props.onChange({ target: { value: 'create' } });
-  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), 'create');
-  const mirrored = nodeWith(render(), (node) => node.type === 'select', 'the default-mode select');
-  assert.equal(mirrored.props.value, 'create', 'the dropdown mirrors the stored preference');
+  // 选择只改草稿：落盘要经过归一化的保存按钮，不再在 onChange 里直接写。
+  dropdown.props.onChange({ target: { value: 'create' } });
+  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), null, 'a selection is a draft, not a write');
+  assert.equal(select().props.value, 'create', 'the dropdown mirrors the draft');
 
-  const stored = nodeWith(bundle.driver.tree(), (node) => node.type === 'select', 'the default-mode select');
-  stored.props.onChange({ target: { value: '' } });
-  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), null, '回到不设置 removes the key');
+  // 动作行是官方 Button 原语，主按钮就是归一化那句「保存」。
+  assert.ok(
+    bundle.primitiveCalls.some(call => call.name === 'Button' && call.props.variant === 'primary' && call.props.size === 'sm'),
+    'the actions row goes through the official Button',
+  );
+  assert.deepEqual(Array.from(texts(saveButton())), [ASK_TEXT.save]);
+  assert.equal(saveButton().props.disabled, false);
+
+  saveButton().props.onClick();
+  // 忙态：同一个按钮换成「保存中…」并禁用，下拉也锁住。
+  assert.deepEqual(Array.from(texts(saveButton())), [ASK_TEXT.saving]);
+  assert.equal(saveButton().props.disabled, true, '保存期间按钮禁用');
+  assert.equal(select().props.disabled, true, '保存期间下拉锁定');
+  await bundle.settle(8);
+  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), 'create', '保存落盘');
+  assert.equal(select().props.value, 'create', 'the dropdown reads the saved preference back');
+
+  // 没有改动就不写盘，状态行用的是归一化那句「没有需要保存的改动。」
+  select().props.onChange({ target: { value: 'create' } });
+  saveButton().props.onClick();
+  await bundle.settle(8);
+  assert.ok(texts(tree()).includes(ASK_TEXT.unchanged), ASK_TEXT.unchanged);
+
+  // 回到不设置会删掉这个键。
+  select().props.onChange({ target: { value: '' } });
+  saveButton().props.onClick();
+  await bundle.settle(8);
+  assert.equal(bundle.localStorage.getItem(DEFAULT_KEY), null, '不设置 removes the key');
+
+  // 浏览器拒绝写入时说 saveFailed，而不是假装已保存。
+  select().props.onChange({ target: { value: 'ptc' } });
+  bundle.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+  saveButton().props.onClick();
+  await bundle.settle(8);
+  const spoken = texts(tree());
+  assert.ok(spoken.some(text => text.startsWith('保存失败：')), 'a rejected write is reported');
+  assert.equal(spoken.includes(ASK_TEXT.saved), false, 'a rejected write is not reported as saved');
 });
 
 test('a fresh session takes the configured default exactly once', async () => {

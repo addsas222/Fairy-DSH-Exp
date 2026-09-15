@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
 // Source patterns stay line-ending agnostic; nothing here compares bytes.
 const code = source.replace(/\r\n/g, '\n');
+
+/** The one source of the ask-kit copy: every status sentence the card says. */
+const { ASK_TEXT } = createRequire(import.meta.url)('dsh-fairy-contracts/client-ask-kit');
 
 /** The bundle's own view of a rendered element tree. */
 function texts(node) {
@@ -33,9 +37,51 @@ function findNode(node, predicate) {
   return first;
 }
 
+/**
+ * The frozen primitives the shell hands the bundle, as inert components.
+ * Expanding the tree turns each one into `#Input` / `#Button` / `#StateDot`, so
+ * the tests can pin "the card asked through the official primitive" instead of
+ * pinning a hand-rolled element.
+ */
+const Primitives = (() => {
+  const make = name => function Primitive(properties) {
+    return { type: `#${name}`, props: properties, __isElement: true };
+  };
+  return { Input: make('Input'), Button: make('Button'), StateDot: make('StateDot'), Tooltip: ({ children }) => children };
+})();
+
+/** 套件自带的提问件：原生件会带 data-ask，裸件不会。 */
+const askControl = (tree, kind) => findNode(tree, node => node.props?.['data-ask'] === kind);
+
 function buttons(node) {
-  return findNodes(node, candidate => candidate.type === 'button');
+  return findNodes(node, candidate => candidate.type === '#Button' || candidate.type === 'button');
 }
+
+/**
+ * Expand function components, exactly like the shell's renderer would: the
+ * kit's controls are hook-free, so calling them is safe, and without this step
+ * the tree only ever shows `type: <AskText>` instead of what it asked for.
+ */
+function expand(node) {
+  if (node === null || node === undefined || typeof node !== 'object') return node;
+  if (Array.isArray(node)) return node.map(expand);
+  if (!node.__isElement) return node;
+  const { type, props } = node;
+  const children = expand(props?.children);
+  if (typeof type === 'function') return expand(type({ ...props, children }));
+  return { type, props: { ...props, children }, __isElement: true };
+}
+
+/**
+ * The kit's action row: one official Button plus the status line beside it.
+ * Labelled by the button, because a busy row renames its own button.
+ */
+function actionsRow(tree, label) {
+  return findNode(tree, node => Array.isArray(node.props?.children)
+    && node.props.children.some(child => (child?.type === '#Button' || child?.type === 'button') && texts(child).includes(label)));
+}
+
+const actionStatus = (tree, label) => findNode(actionsRow(tree, label), node => node.type === 'p').props.children;
 
 function buttonWith(tree, needle) {
   const hit = buttons(tree).find(candidate => texts(candidate).some(text => text.includes(needle)));
@@ -75,6 +121,8 @@ function hookDriver() {
       if (!(i in hooks)) hooks[i] = { current: initial };
       return hooks[i];
     },
+    // The ask kit memoizes its handlers; identity is irrelevant to these tests.
+    useCallback(callback) { return callback; },
     useEffect(callback, deps) {
       const i = index++;
       const previous = hooks[i];
@@ -94,7 +142,7 @@ function hookDriver() {
   };
   const render = () => {
     index = 0;
-    tree = current.component(current.props);
+    tree = expand(current.component(current.props));
     return tree;
   };
   return {
@@ -143,8 +191,8 @@ function loadBundle() {
   const driver = hookDriver();
   const exported = entries[0].factory((id) => {
     if (id === 'react') return driver.React;
-    if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props ?? {} }), jsxs: (type, props) => ({ type, props: props ?? {} }) };
-    if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Tooltip: ({ children }) => children };
+    if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props ?? {}, __isElement: true }), jsxs: (type, props) => ({ type, props: props ?? {}, __isElement: true }) };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return Primitives;
     throw new Error(`unexpected require(${id})`);
   });
   return {
@@ -241,9 +289,10 @@ test('the persona card lists the scan roots and creates a pack from the id input
   // Children arrays cross the vm realm, so copy before comparing structures.
   assert.deepEqual(Array.from(texts(roots).filter(text => text.startsWith('C:/'))), ['C:/home/.dsh/personas', 'C:/repo/persona-packs']);
 
-  // The creation controls exist and start idle.
-  const input = findNode(tree, node => 'data-dsh-fairy-persona-scaffold-input' in (node.props ?? {}));
-  assert.equal(input.type, 'input');
+  // The creation controls exist and start idle. The text field is the kit's
+  // AskText (the official Input primitive, since the shell exports one).
+  const scaffoldField = node => node.type === '#Input' && node.props?.id === 'dsh-fairy-persona-scaffold';
+  const input = findNode(tree, scaffoldField);
   assert.equal(input.props.value, '');
   const resultLine = () => findNode(bundle.driver.tree(), node => 'data-dsh-fairy-persona-scaffold-result' in (node.props ?? {}));
   assert.equal(resultLine().props['data-ok'], '');
@@ -268,8 +317,10 @@ test('the persona card lists the scan roots and creates a pack from the id input
   tree = bundle.driver.tree();
   assert.equal(resultLine().props['data-ok'], 'true');
   assert.equal(resultLine().props['data-dsh-fairy-persona-scaffold-result'], '已创建：C:/home/.dsh/personas/new-pack');
+  // The outcome is drawn by the kit's result row, not by a hand-rolled line.
+  assert.equal(String(texts(resultLine()).join('')), '已创建：C:/home/.dsh/personas/new-pack');
   // The input is cleared and the catalog re-read, so the new pack shows up.
-  assert.equal(findNode(tree, node => 'data-dsh-fairy-persona-scaffold-input' in (node.props ?? {})).props.value, '');
+  assert.equal(findNode(tree, scaffoldField).props.value, '');
   assert.equal(bundle.requests.filter(request => request.url === '/fairy-persona/list').length, 2);
 });
 
@@ -286,7 +337,7 @@ test('a rejected creation reports the host message instead of silently failing',
 
   bundle.driver.render(bundle.registrations[0].component, {});
   await settle(bundle);
-  const input = findNode(bundle.driver.tree(), node => 'data-dsh-fairy-persona-scaffold-input' in (node.props ?? {}));
+  const input = findNode(bundle.driver.tree(), node => node.type === '#Input' && node.props?.id === 'dsh-fairy-persona-scaffold');
   input.props.onChange({ target: { value: 'Bad_ID' } });
   buttonWith(bundle.driver.tree(), '创建').props.onClick();
   await settle(bundle);
@@ -294,8 +345,62 @@ test('a rejected creation reports the host message instead of silently failing',
   const result = findNode(bundle.driver.tree(), node => 'data-dsh-fairy-persona-scaffold-result' in (node.props ?? {}));
   assert.equal(result.props['data-ok'], 'false');
   assert.equal(result.props['data-dsh-fairy-persona-scaffold-result'], '人格包 id 只能包含小写字母、数字和连字符。');
+  // The host's message reaches the kit's result row with its failure dot.
+  assert.equal(String(texts(result).join('')), '人格包 id 只能包含小写字母、数字和连字符。');
   // A failure never pretends to have created anything.
   assert.equal(bundle.requests.filter(request => request.url === '/fairy-persona/list').length, 1);
+});
+
+test('the persona card asks through the normalized kit and speaks with ASK_TEXT', async () => {
+  const bundle = register();
+  // The host remembers the selection, so a post-save re-read sees the new pack.
+  let active = 'fairy';
+  bundle.onFetch(async (url, options) => {
+    if (url === '/fairy-persona/list') return json({ packs: [{ id: 'fairy', name: 'Fairy' }, { id: 'greet', name: 'Greeting' }], active });
+    if (url === '/fairy-persona/roots') return json({ roots: [] });
+    if (url === '/fairy-persona/preview') return json({ promptHead: '人格文档开头', tone: { formality: 'formal' } });
+    if (url === '/fairy-persona/select') { active = JSON.parse(options.body).id; return json({ ok: true, active }); }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+
+  bundle.driver.render(bundle.registrations[0].component, {});
+  // Before the read lands the card says the kit's one loading line.
+  assert.equal(actionStatus(bundle.driver.tree(), '切换人格'), ASK_TEXT.loading);
+  await settle(bundle);
+
+  // The picker is the kit's own select: native, marked, and fed by the host.
+  const select = askControl(bundle.driver.tree(), 'select');
+  assert.equal(select.type, 'select');
+  assert.equal(select.props.id, 'dsh-fairy-persona-pack');
+  assert.equal(select.props.value, 'fairy');
+  assert.deepEqual(Array.from(select.props.children).map(option => option.props.value), ['', 'fairy', 'greet']);
+  assert.deepEqual(Array.from(select.props.children).map(option => texts(option).join('')), ['不使用人格包（部署默认）', 'Fairy', 'Greeting']);
+  // The text field is the official Input primitive, and nothing is hand-rolled.
+  assert.ok(findNodes(bundle.driver.tree(), node => node.type === '#Input' && node.props?.id === 'dsh-fairy-persona-scaffold').length > 0);
+  assert.deepEqual(findNodes(bundle.driver.tree(), node => ['input', 'select', 'textarea'].includes(node.type) && node.props?.['data-ask'] === undefined), []);
+  // With nothing to report, the action row falls back to the active-persona line.
+  assert.equal(actionStatus(bundle.driver.tree(), '切换人格'), '已启用：Fairy');
+
+  // Switching to the pack that is already active writes nothing and says so.
+  buttonWith(bundle.driver.tree(), '切换人格').props.onClick();
+  await settle(bundle);
+  assert.equal(bundle.requests.filter(request => request.url === '/fairy-persona/select').length, 0);
+  assert.equal(actionStatus(bundle.driver.tree(), '切换人格'), ASK_TEXT.unchanged);
+
+  // A real switch: busy disables the primary and says saving, then one re-read.
+  select.props.onChange({ target: { value: 'greet' } });
+  assert.equal(askControl(bundle.driver.tree(), 'select').props.value, 'greet');
+  buttonWith(bundle.driver.tree(), '切换人格').props.onClick();
+  assert.equal(actionsRow(bundle.driver.tree(), ASK_TEXT.saving).props.children[0].props.disabled, true);
+  await settle(bundle);
+
+  const posted = bundle.requests.filter(request => request.url === '/fairy-persona/select');
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].options.body, JSON.stringify({ id: 'greet' }));
+  // Mount read once, save re-read once: the picker now shows the host's value.
+  assert.equal(bundle.requests.filter(request => request.url === '/fairy-persona/list').length, 2);
+  assert.equal(askControl(bundle.driver.tree(), 'select').props.value, 'greet');
+  assert.equal(actionStatus(bundle.driver.tree(), '切换人格'), '已启用：Greeting');
 });
 
 test('the header chip opens a pack menu, marks the active pack, and switches through select', async () => {

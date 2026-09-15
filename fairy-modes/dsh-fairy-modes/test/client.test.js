@@ -105,9 +105,13 @@ function loadBundle() {
   vm.runInContext(source, sandbox);
   assert.equal(entries.length, 1);
   const driver = hookDriver();
+  const element = (type, props) => ({ type, props: props ?? {} });
+  /** 官方原语替身：只保留实证存在的名字（bundle 的冻结模块表就这三样 + react）。 */
+  const primitives = { Input: (props) => element('input', props), Button: (props) => element('button', props), StateDot: (props) => element('span', props) };
   const exported = entries[0].factory((id) => {
     if (id === 'react') return driver.React;
-    if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props ?? {} }) };
+    if (id === 'react/jsx-runtime') return { jsx: element, jsxs: element };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives;
     throw new Error(`unexpected require(${id})`);
   });
   return {

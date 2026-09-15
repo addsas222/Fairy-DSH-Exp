@@ -4,7 +4,8 @@ window.__ModuleLoader__.load({
     const module = { exports: {} };
     const exports = module.exports;
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-    const React = require('react');
+    
+const React = require('react');
     const jsxRuntime = require('react/jsx-runtime');
     const inject = ['slots', 'connection', 'sessions'];
     const BALANCE_UNAVAILABLE_TEXT = 'unavailable';

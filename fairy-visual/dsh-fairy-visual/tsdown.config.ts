@@ -5,7 +5,7 @@ export default defineConfig({
   format: ['iife'],
   platform: 'browser',
   target: 'es2020',
-  deps: { neverBundle: ['react', 'react/jsx-runtime'] },
+  deps: { neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'] },
   clean: false,
   suppressWarnings: [/MISSING_NAME_OPTION_FOR_IIFE_EXPORT/],
   dts: false,

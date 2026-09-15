@@ -75,7 +75,7 @@ voice:                 # 可选；切换人格时同步给 fairy-voice
 
 ### 客户端
 
-- 设置卡：`settings.section`，`id: 'fairy-persona'`，`order: 25`，label「人格」——包下拉（含「不使用人格包」）、切换按钮、调色与人格文档开头预览、当前人格指示。
+- 设置卡：`settings.section`，`id: 'fairy-persona'`，`order: 25`，label「人格」——卡体是归一化提问件（`AskSection` + `AskRow` + `AskSelect` + `AskText` + `AskActions` + `AskResult`，来源 `fairy-contracts/client-ask-kit.cjs`）：包下拉（含「不使用人格包」）、「切换人格」、调色与人格文档开头预览、当前人格指示，以及「新建人格包」（id 进官方 `Input`，结果进 `AskResult`）。加载/保存/忙由 `useAskForm` 管：只读一次、保存后复读一次、忙时按钮与下拉一起锁住、状态只用归一化那几句（`已保存。` / `没有需要保存的改动。` / `保存失败：…`）；下拉没动过就跟着主机当前值，点「切换人格」不会把 `undefined` 当成改动。
 - 会话头 chip：`conversation.session.header.utilities`，`id: 'fairy-persona-chip'`，`order: 30`——显示当前人格名；未启用人格包时不渲染。设置面板没有对外的打开句柄，因此 chip 只做提示（tooltip「在设置→人格中切换」）。
 - 两个面孔共用本包 `/fairy-persona/*` 作为唯一状态源，并用 window 事件 `fairy-persona-changed`（`detail: {packId, name}`）对外广播切换；`active` 是主机侧状态（对全部署生效），不是浏览器偏好，因此客户端不读写设置镜像。
 

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 
+// The ask-kit text constants are the single source of truth for card wording;
+// the render assertions below compare against them instead of the literals.
+const { ASK_TEXT } = createRequire(import.meta.url)('../../../fairy-contracts/client-ask-kit.cjs');
 const clientPath = new URL('../lib/client.js', import.meta.url);
 const source = await readFile(clientPath, 'utf8');
 // Source patterns stay line-ending agnostic; only the embedded diagnostics block
@@ -76,13 +80,44 @@ test('writes keys as path-addressed secrets and never binds a stored key into th
   assert.match(code, /await scope\.mutate\(ops\);/);
   // An untouched (empty) draft writes nothing, so saving never clears a stored secret.
   assert.match(code, /if \(drafts\.deepseekKey\.trim\(\)\) ops\.push/);
-  assert.match(code, /if \(fieldCount === 0\) \{\n\s+setSaveStatus\('没有需要保存的改动。'\);/);
-  // Password inputs are controlled by drafts only — never by the settings snapshot.
-  const passwordInputs = code.match(/type: 'password'[\s\S]{0,400}?value: drafts\.\w+/g) ?? [];
-  assert.equal(passwordInputs.length, 4);
+  // 「没有需要保存的改动。」由套件出：没有 op 就报 `changed: false`，文案只在 ASK_TEXT 里。
+  assert.match(code, /if \(ops\.length === 0\) return \{ changed: false \};/);
+  // Password rows are ask-kit AskText controlled by the draft only — never by the snapshot.
+  const passwordRows = code.match(/type: 'password'[\s\S]{0,600}?value: form\.draft\.\w+/g) ?? [];
+  assert.equal(passwordRows.length, 4);
   assert.doesNotMatch(code, /value: settings\.\w+\?\.apiKey/);
   // Availability comes from the host route; a configured engine reports 'done'.
   assert.match(code, /const state = configured \? 'done' : selected \? 'warning' : 'idle';/);
+});
+
+test('the settings card asks through the ask kit rather than hand-rolled controls', () => {
+  // 标记区保证 ASK_TEXT/ASK_STYLE 绑定在工厂作用域（解构名单由同步器决定，不锁死）；
+  // 组件用套件实例取，名字不重复声明，块形态再变也不会撞名。
+  assert.match(code, /^const \{[^}]*\bASK_TEXT\b[^}]*\bASK_STYLE\b[^}]*\} = fairyAskKit;$/m);
+  assert.match(code, /const askKit = fairyAskKit\.createAskKit\(\{\n\s+React,\n\s+jsx: jsx\.jsx,\n\s+jsxs: jsx\.jsxs,\n\s+primitives: \{ Input, Button, StateDot \},\n\s+\}\);/);
+  // 加载/保存/测试都走 useAskForm：state 端点读、测试包在 run('test', …) 里。
+  assert.match(code, /const form = askKit\.useAskForm\(\{\n\s+initial: EMPTY_DRAFTS,/);
+  assert.match(code, /fetch\(STATE_PATH, \{ headers: \{ accept: 'application\/json' \} \}\)/);
+  assert.match(code, /const runTest = \(\) => form\.run\('test', async \(\) => \{/);
+  // 五个文本提问 + 一个下拉 + 一行动作 + 一行结果，全部来自套件。
+  assert.equal((code.match(/jsx\.jsx\(askKit\.AskText, \{/g) ?? []).length, 5);
+  assert.equal((code.match(/jsx\.jsx\(askKit\.AskRow, \{/g) ?? []).length, 6);
+  assert.equal((code.match(/jsx\.jsx\(askKit\.AskSelect, \{/g) ?? []).length, 1);
+  assert.equal((code.match(/jsx\.jsx\(askKit\.AskActions, \{/g) ?? []).length, 1);
+  assert.equal((code.match(/jsx\.jsx\(askKit\.AskResult, \{/g) ?? []).length, 1);
+  assert.equal((code.match(/jsx\.jsxs\(askKit\.AskSection, \{/g) ?? []).length, 1);
+  // 卡里没有手搓的提问件：原生 input/select/textarea 只出现在标记区（套件自带）。
+  assert.doesNotMatch(code, /jsx\.jsx\('(input|select|textarea)'/);
+  // 状态文案只从 ASK_TEXT 取，只读会话用同一句。
+  assert.match(code, /const status = writable \? switchError \|\| form\.status : ASK_TEXT\.readOnly;/);
+  // 宿主生效引擎是**信息行**（ASK_STYLE.copy），不是状态文案、不进 ASK_TEXT。
+  assert.match(code, /jsx\.jsx\('p', \{ style: ASK_STYLE\.copy, children: `当前生效：\$\{providerLabel\(form\.stored\.provider \|\| provider\)\}。` \}\)/);
+  assert.match(code, /primary: ASK_TEXT\.save,/);
+  assert.match(code, /secondary: ASK_TEXT\.test,/);
+  assert.match(code, /setSwitchError\(ASK_TEXT\.saveFailed\(describeError\(error\)\)\);/);
+  // 与提问行重复的观感件已删，styles 只剩本卡自己的两处。
+  assert.match(code, /const styles = \{\n\s+engine: \{[\s\S]{0,240}?\n\s+pre: \{/);
+  assert.doesNotMatch(code, /styles\.(root|copy|panel|row|label|input|actions|status)\b/);
 });
 
 test('the settings card renders engines, secret inputs, probe actions, and the MCP note', async () => {
@@ -174,6 +209,11 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
     assert.match(rendered, new RegExp(`"value":"${provider}"`));
   }
   assert.equal(findNode(tree, (node) => node.type === 'select').props.value, 'exa', 'the dropdown mirrors the stored engine');
+  // 提问件都出自套件：原生回退路径自带 `data-ask` 自证标记，手搓件没有。
+  const textInputs = findNodes(tree, (node) => node.type === 'input');
+  assert.equal(textInputs.length, 5, '五条文本提问');
+  assert.equal(textInputs.every((input) => input.props['data-ask'] === 'text'), true, '文本提问都出自 AskText');
+  assert.equal(findNode(tree, (node) => node.type === 'select').props['data-ask'], 'select', '下拉出自 AskSelect');
   const passwordInputs = findNodes(tree, (node) => node.type === 'input' && node.props.type === 'password');
   assert.equal(passwordInputs.length, 4);
   assert.equal(passwordInputs.every((input) => input.props.value === ''), true, 'secret inputs start empty');
@@ -194,15 +234,38 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(fetches[0].url, '/fairy-search/state');
 
-  // The probe asks the host for exactly the selected engine.
-  const probeButton = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === '测试');
+  // The probe asks the host for exactly the selected engine; the labels are the
+  // kit's own ASK_TEXT words, not card-local copies.
+  const probeButton = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === ASK_TEXT.test);
   await probeButton.props.onClick();
   const probeCall = fetches.find((call) => call.url === '/fairy-search/test');
   assert.equal(probeCall.method, 'POST');
   assert.deepEqual(probeCall.body, { provider: 'exa' });
 
   // Saving with untouched fields issues no write at all.
-  const saveButton = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === '保存');
+  const saveButton = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === ASK_TEXT.save);
   await saveButton.props.onClick();
   assert.deepEqual(writes, []);
+
+  // 只读会话：按钮停用，状态用套件那句 ASK_TEXT.readOnly。
+  const readOnlyScope = {
+    ...scope,
+    getSnapshot: () => ({ status: 'ready', writable: false, value: scope.getSnapshot().value }),
+  };
+  plugin.apply({
+    effect() {},
+    settingsScope: { bind: () => readOnlyScope },
+    slots: {
+      inject(name, register) { register(); },
+      register(definition, component) { slots.set(definition.id, { definition, component }); },
+    },
+  });
+  const readOnlyElement = slots.get('fairy-search').component();
+  const readOnlyTree = renderTree(readOnlyElement.type(readOnlyElement.props));
+  assert.equal(JSON.stringify(readOnlyTree).includes(ASK_TEXT.readOnly), true, '只读会话给出套件那句说明');
+  const readOnlyButtons = findNodes(readOnlyTree, (node) => node.type === 'button-atom');
+  assert.equal(readOnlyButtons.length, 2);
+  assert.equal(readOnlyButtons.every((node) => node.props.disabled === true), true, '只读会话停用保存与测试');
+  const readOnlyInputs = findNodes(readOnlyTree, (node) => node.type === 'input');
+  assert.equal(readOnlyInputs.every((input) => input.props.disabled === true), true, '只读会话停用输入');
 });

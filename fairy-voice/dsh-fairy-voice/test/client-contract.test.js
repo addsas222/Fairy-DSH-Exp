@@ -30,6 +30,55 @@ function embeddedClientDom(value) {
   return value.slice(start, finish);
 }
 
+/** Flatten nested children arrays the way React does before rendering. */
+function flattenChildren(children) {
+  return (Array.isArray(children) ? children : [children]).flat(Infinity);
+}
+
+/** Render function components into a plain element tree, children only. */
+function renderTree(node) {
+  if (node === null || node === undefined || typeof node !== 'object') return node;
+  if (typeof node.type === 'function') return renderTree(node.type(node.props || {}));
+  const children = flattenChildren(node.props?.children);
+  const next = children.map(renderTree).filter((child) => child !== undefined);
+  return { ...node, props: { ...node.props, children: Array.isArray(node.props?.children) ? next : next[0] } };
+}
+
+function findNodes(node, predicate) {
+  const found = [];
+  const visit = (current) => {
+    if (current === null || current === undefined || typeof current !== 'object') return;
+    if (typeof current.type !== 'undefined' && predicate(current)) found.push(current);
+    for (const child of flattenChildren(current.props?.children)) visit(child);
+  };
+  visit(node);
+  return found;
+}
+
+function findNode(node, predicate) {
+  const [first] = findNodes(node, predicate);
+  assert.notEqual(first, undefined, 'expected a matching node in the rendered tree');
+  return first;
+}
+
+// 三张设置卡的源码切片：断言只落在卡里，别被播放/合成那半边蹭到。
+function brainCard(value) {
+  return value.slice(value.indexOf('function VoiceBrainSection()'), value.indexOf('const VOICE_ENGINE_PROVIDERS'));
+}
+
+function engineCard(value) {
+  return value.slice(value.indexOf('function VoiceEngineSection()'), value.indexOf('const VOICE_STT_PROVIDERS'));
+}
+
+function sttCard(value) {
+  return value.slice(value.indexOf('function VoiceSttSection()'), value.indexOf('function usePlayer('));
+}
+
+// 官方原语的替身：只认实证存在的名字，渲染成标记件，树里就能指认"用了官方件"。
+function InputAtom(props) { return { type: '#Input', props: props || {} }; }
+function ButtonAtom(props) { return { type: '#Button', props: props || {} }; }
+function StateDotAtom(props) { return { type: '#StateDot', props: props || {} }; }
+
 test('embeds the canonical client diagnostics byte for byte', () => {
   assert.equal(embeddedClientDiagnostics(source), canonicalClientDiagnostics);
 });
@@ -227,7 +276,7 @@ test('voice controller renders without unresolved hook-scope references', async 
     if (id === 'react') return React;
     if (id === 'react/jsx-runtime') return jsxRuntime;
     if (id === '@deepseek-ai/dsh-client-ui-primitives') {
-      return { Tooltip: 'Tooltip', IconPauseOutline16: 'Pause', IconPlayOutline16: 'Play', IconStopFill16: 'Stop' };
+      return { Tooltip: 'Tooltip', IconPauseOutline16: 'Pause', IconPlayOutline16: 'Play', IconStopFill16: 'Stop', Input: InputAtom, Button: ButtonAtom, StateDot: StateDotAtom };
     }
     throw new Error(`unexpected module: ${id}`);
   });
@@ -325,9 +374,10 @@ test('browser engines are pinned, single-threaded, and can be mirrored', () => {
   // KittenTTS-Nano：第二个浏览器内引擎（模型来自 HF，引擎自管 onnxruntime）。
   assert.match(source, /esm\.sh\/kitten-tts-js@0\.1\.2/);
   // 模型自行下载的显式入口：走同一条加载路径，失败可见可重试。
-  assert.match(source, /'data-dsh-fairy-model-download': 'true'/);
-  assert.match(source, /'data-dsh-fairy-model-state': model\.status/);
-  assert.match(source, /await openLocalEngine\(provider, localEngineConfig\(config, provider\)\)/);
+  // 归一化后这一行是 AskActions：标签跟着状态走，按钮与状态共用同一份忙通道。
+  assert.match(source, /onPrimary: downloadModel/);
+  assert.match(source, /primary: model\.status === 'working' \? '下载中…' : '下载模型（缓存到本机）'/);
+  assert.match(source, /await openLocalEngine\(provider, localEngineConfig\(form\.stored, provider\)\)/);
   assert.match(source, /KittenTTS\.from_pretrained\(config\.modelId\)/);
   assert.match(source, /handle\.kind === 'kokoro' \|\| handle\.kind === 'kitten'/);
   assert.match(source, /@realtimex\/piper-tts-web@1\.1\.1\/\+esm/);
@@ -511,19 +561,34 @@ test('the brief threshold reads the same value the card shows', () => {
 
 test('the 语音输入 settings card owns provider, fields, and availability', () => {
   assert.match(source, /id: 'fairy-voice-stt', order: 32, label: \(\) => '语音输入'/);
-  assert.match(source, /'data-dsh-fairy-stt-provider': 'true'/);
-  assert.match(source, /'data-dsh-fairy-stt-field': field\.name/);
-  assert.match(source, /'data-dsh-fairy-stt-available': entry\.id/);
-  assert.match(source, /localTtsTransport\.saveSttConfig\(\{ provider, providers: \{ \[option\.key\]: draft \} \}\)/);
+  // 提问行只有归一化件：提供方下拉是 AskSelect，字段是 AskText，键名一个都没改。
+  const card = sttCard(source);
+  assert.match(card, /askKit\.AskSelect/);
+  assert.match(card, /askKit\.AskText/);
+  assert.match(card, /'data-dsh-fairy-stt-available': entry\.id/);
+  assert.match(card, /localTtsTransport\.saveSttConfig\(\{ provider: target\.id, providers: \{ \[target\.key\]: values \} \}\)/);
+  assert.match(source, /localTtsTransport\.sttConfig\(\)/);
 });
 
 test('the engine card可以试听、可放行常驻控件，简报阈值可调', () => {
-  assert.match(source, /'data-dsh-fairy-audition': 'true'/);
+  const card = engineCard(source);
+  assert.match(card, /askKit\.AskSelect/);
+  assert.match(card, /askKit\.AskText/);
+  assert.match(card, /askKit\.AskToggle/);
+  assert.match(card, /askKit\.AskActions/);
+  // 试听是一次性动作，走状态机的测试通道；忙时保存与试听一起禁用。
+  assert.match(card, /secondary: '试听一句'/);
+  assert.match(card, /onSecondary: auditionOnce/);
+  assert.match(card, /busy: form\.busy/);
   assert.match(source, /await speakSampleWithSystem\(\)/);
   assert.match(source, /pcmBytesToSamples\(new Uint8Array\(await response\.arrayBuffer\(\)\)\), sampleRate\)/);
-  assert.match(source, /'data-dsh-fairy-always-controls': 'true'/);
-  assert.match(source, /'data-dsh-fairy-brief-threshold': 'true'/);
-  assert.match(source, /briefThreshold\.value = next;/);
+  const brain = brainCard(source);
+  assert.match(brain, /askKit\.AskText/);
+  assert.match(brain, /briefThreshold\.value = next;/);
+  // 三张卡里都不再有裸提问件：要用户输入的只有归一化套件。
+  for (const slice of [brain, card, sttCard(source)]) {
+    assert.doesNotMatch(slice, /jsx\.jsxs?\('(input|select|textarea)'/);
+  }
 });
 
 test('speech rate is user-controlled and drives every engine', () => {
@@ -655,7 +720,16 @@ async function bootPlaybackClient({ fetchDouble, onBuffer }) {
       }];
     },
     useRef(initial) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: { current: initial } }; return hooks[index].value; },
-    useCallback(callback) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: callback }; return hooks[index].value; },
+    // Deps are honoured the way React honours them: a frozen first-render
+    // callback would hand the ask form's submit a stale draft.
+    useCallback(callback, deps) {
+      const index = cursor; cursor += 1;
+      const previous = hooks[index];
+      const same = previous !== undefined && Array.isArray(deps) && Array.isArray(previous.deps)
+        && deps.length === previous.deps.length && deps.every((value, at) => Object.is(value, previous.deps[at]));
+      if (!same) hooks[index] = { value: callback, deps: Array.isArray(deps) ? deps.slice() : undefined };
+      return hooks[index].value;
+    },
     useEffect(callback) { const index = cursor; cursor += 1; if (!(index in hooks)) hooks[index] = { value: callback() }; },
     useLayoutEffect(callback) { this.useEffect(callback); },
     useMemo(callback) { return callback(); },
@@ -713,7 +787,7 @@ async function bootPlaybackClient({ fetchDouble, onBuffer }) {
   moduleDefinition.factory((id) => {
     if (id === 'react') return React;
     if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props: props || {} }), jsxs: (type, props) => ({ type, props: props || {} }) };
-    if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Tooltip: 'Tooltip', IconPauseOutline16: 'P', IconPlayOutline16: 'P', IconStopFill16: 'S' };
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') return { Tooltip: 'Tooltip', IconPauseOutline16: 'P', IconPlayOutline16: 'P', IconStopFill16: 'S', Input: InputAtom, Button: ButtonAtom, StateDot: StateDotAtom };
     throw new Error(`unexpected module: ${id}`);
   }).apply({
     effect() {},
@@ -864,37 +938,28 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
   });
   await settleVoiceClient();
 
-  const walk = (node, visit) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) { node.forEach((child) => walk(child, visit)); return; }
-    if (!node.props) return;
-    visit(node);
-    walk(node.props.children, visit);
-  };
-  const find = (tree, predicate) => {
-    let found = null;
-    walk(tree, (node) => { if (!found && predicate(node)) found = node; });
-    return found;
-  };
-
   const card = booted.mount(booted.slots.get('fairy-voice-engine'), {});
   await settleVoiceClient();
   await settleVoiceClient();
-  let tree = card.tree;
+  let tree = renderTree(card.tree);
+  // 字段只认归一化件：官方 Input 的替身，按 id 认领。
+  const field = (id) => findNode(tree, (node) => node.type === '#Input' && node.props.id === `fairy-voice-engine-${id}`);
 
-  const select = find(tree, (node) => node.type === 'select');
+  const select = findNode(tree, (node) => node.type === 'select');
+  assert.equal(select.props['data-ask'], 'select', 'the dropdown comes from the normalized kit');
   assert.equal(select.props.value, 'local-sovits');
-  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'baseURL').props.value, 'http://127.0.0.1:9880');
-  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'openai').props.children, '不可用 · 未配置 OpenAI API Key。');
-  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'browser').props.children, '可用');
+  assert.equal(field('baseURL').props.value, 'http://127.0.0.1:9880');
+  assert.equal(findNode(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'openai').props.children, '不可用 · 未配置 OpenAI API Key。');
+  assert.equal(findNode(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'browser').props.children, '可用');
 
   select.props.onChange({ target: { value: 'openai' } });
-  tree = card.tree;
-  const apiKeyField = find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'apiKey');
+  tree = renderTree(card.tree);
+  const apiKeyField = field('apiKey');
   assert.equal(apiKeyField.props.type, 'password');
   assert.equal(apiKeyField.props.value, '***', 'a stored key must come back masked');
-  find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'model').props.onChange({ target: { value: 'gpt-4o-mini-tts' } });
-  await find(card.tree, (node) => node.type === 'button' && node.props.children === '保存').props.onClick();
+  field('model').props.onChange({ target: { value: 'gpt-4o-mini-tts' } });
+  // 保存按钮就是归一化动作行里的官方 Button（默认标签来自 ASK_TEXT.save）。
+  await findNode(renderTree(card.tree), (node) => node.type === '#Button' && node.props.children === '保存').props.onClick();
   for (let tick = 0; tick < 4; tick += 1) await settleVoiceClient();
 
   const post = booted.calls.find((call) => call === 'POST /fairy-voice/provider-config');
@@ -907,19 +972,19 @@ test('the 语音引擎 settings card seeds drafts, switches provider, and saves 
   // availability for each without a round trip to the engine itself.
   select.props.onChange({ target: { value: 'kokoro-web' } });
   for (let tick = 0; tick < 2; tick += 1) await settleVoiceClient();
-  tree = card.tree;
-  const engineIds = find(tree, (node) => node.type === 'select');
+  tree = renderTree(card.tree);
+  const engineIds = findNode(tree, (node) => node.type === 'select');
   // Spread into this realm: the bundle runs in a vm, and cross-realm arrays
   // never compare equal to host arrays under deepStrictEqual.
   assert.deepEqual(
     [...engineIds.props.children.filter((child) => child?.props?.value).map((child) => child.props.value)],
     ['local-sovits', 'openai', 'custom-http', 'elevenlabs-ws', 'kitten-web', 'kokoro-web', 'piper-web', 'browser', 'pocket-tts'],
   );
-  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'kokoro-web').props.children, '可用');
-  assert.equal(find(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'elevenlabs-ws').props.children, '不可用 · 未配置 ElevenLabs API Key。');
-  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'moduleUrl').props.value, 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm');
+  assert.equal(findNode(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'kokoro-web').props.children, '可用');
+  assert.equal(findNode(tree, (node) => node.props['data-dsh-fairy-engine-available'] === 'elevenlabs-ws').props.children, '不可用 · 未配置 ElevenLabs API Key。');
+  assert.equal(field('moduleUrl').props.value, 'https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm');
   select.props.onChange({ target: { value: 'piper-web' } });
   for (let tick = 0; tick < 2; tick += 1) await settleVoiceClient();
-  tree = card.tree;
-  assert.equal(find(tree, (node) => node.type === 'input' && node.props['data-dsh-fairy-engine-field'] === 'voiceId').props.value, 'en_US-hfc_female-medium');
+  tree = renderTree(card.tree);
+  assert.equal(field('voiceId').props.value, 'en_US-hfc_female-medium');
 });

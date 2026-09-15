@@ -6,7 +6,282 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
     const React = require('react');
     const jsx = require('react/jsx-runtime');
-    const { Button, StateDot } = require('@deepseek-ai/dsh-client-ui-primitives');
+    const primitives = require('@deepseek-ai/dsh-client-ui-primitives');
+    // 提问件取自 `fairy-contracts/client-ask-kit.cjs`（唯一真源）：外观、读写逻辑、
+    // 状态文案都只那一份。构建时 `scripts/bundle.mjs` 把这份 require 内联进
+    // `lib/client.js` —— 客户端 bundle 不能跨 bundle require 别的文件。
+    const { createAskKit } = (() => {
+  const module = { exports: {} };
+// >>> fairy-contracts/client-ask-kit.cjs (inlined by scripts/bundle.mjs — 不要手改)
+/**
+ * 归一化"提问件"套件 —— 设置卡里向用户要输入的那些行。
+ *
+ * 为什么要它：六个包的设置卡原本各写一套 input/select/checkbox、
+ * 各写一套加载/保存/状态/禁用逻辑，文案与行为都不一致（"已保存。"
+ * vs "已保存，下一次…"、只有部分包处理只读会话）。这里收成一份：
+ *
+ *  - 外观：优先用官方冻结原语（`Input`/`Button`/`StateDot`），其余用官方
+ *    设计令牌（`var(--dsw-alias-*)`），与官方设置面同色同尺。
+ *  - 操作逻辑：一份 useAskForm 管住 draft → 保存 → 复读 → 状态文案，
+ *    忙时禁用、只读会话停用、Enter 提交、不轮询。
+ *
+ * 契约：本文件是**唯一真源**。手写 bundle 的包由
+ * `fairy-system/sync-ask-kit.js` 把 `createAskKit` 内联进 `lib/client.js`
+ * 的标记区，`verify-build` 校验不漂移；有 `src/` 的包直接 require。
+ *
+ * @module dsh-fairy-contracts/client-ask-kit
+ */
+
+/** 归一化状态文案：全仓只此一份，改文案就改这里。 */
+const ASK_TEXT = {
+  loading: '正在读取…',
+  saved: '已保存。',
+  unchanged: '没有需要保存的改动。',
+  saving: '保存中…',
+  testing: '测试中…',
+  save: '保存',
+  test: '测试',
+  readOnly: '当前会话不可写入主机设置，保存已停用。',
+  saveFailed: (why) => `保存失败：${why}`,
+};
+
+/** 官方设计令牌（与设置面同一套变量，缺变量时回落到中性色）。 */
+const ASK_STYLE = {
+  root: { display: 'grid', gap: 12, padding: 16 },
+  copy: { margin: 0, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))', fontSize: 12, lineHeight: '18px' },
+  panel: {
+    display: 'grid',
+    gap: 10,
+    padding: 12,
+    borderRadius: 8,
+    border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))',
+    background: 'var(--dsw-alias-bg-layer-2, rgba(130,130,130,0.09))',
+  },
+  row: { display: 'grid', gap: 4 },
+  label: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
+  input: {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '6px 8px',
+    borderRadius: 6,
+    border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))',
+    background: 'var(--dsw-alias-bg-layer-1, transparent)',
+    color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+    fontSize: 13,
+  },
+  actions: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
+  status: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
+  line: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 },
+  pre: {
+    margin: 0,
+    padding: 10,
+    borderRadius: 6,
+    overflowX: 'auto',
+    background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.24))',
+    color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+    fontSize: 12,
+    lineHeight: '18px',
+  },
+};
+
+/** 错误文案：长栈与 HTML 不进界面。 */
+function describeError(error) {
+  const message = typeof error?.message === 'string' ? error.message : String(error);
+  return message.length > 320 ? `${message.slice(0, 320)}…` : message;
+}
+
+/**
+ * 造一套归一化提问件。
+ *
+ * @param spec - `{ React, jsx, jsxs, primitives }`：`primitives` 即
+ *   `require('@deepseek-ai/dsh-client-ui-primitives')`，只认官方确实导出的
+ *   那些名字（`Input`/`Button`/`StateDot`），其余留空则退化为同色令牌的原生件。
+ * @returns 归一化组件与一份统一的读写逻辑。
+ */
+function createAskKit({ React, jsx, jsxs, primitives = {} }) {
+  const { Input, Button, StateDot } = primitives;
+  const { useState, useCallback, useEffect, useRef } = React;
+
+  function AskSection({ title, description, ariaLabel, children }) {
+    return jsxs('section', {
+      style: ASK_STYLE.root,
+      'aria-label': ariaLabel ?? title,
+      children: [
+        jsxs('div', { style: ASK_STYLE.row, children: [
+          jsx('h2', { style: { margin: 0, fontSize: 14 }, children: title }),
+          ...(description ?? []).map((line, index) => jsx('p', { style: ASK_STYLE.copy, children: line }, `${index}:${line}`)),
+        ] }),
+        children,
+      ],
+    });
+  }
+
+  /** 一行提问：标签 + 控件 + 可选补充说明。 */
+  function AskRow({ id, label, hint, children }) {
+    return jsxs('div', { style: ASK_STYLE.row, children: [
+      jsx('label', { style: ASK_STYLE.label, htmlFor: id, children: label }),
+      children,
+      hint ? jsx('p', { style: ASK_STYLE.copy, children: hint }) : null,
+    ] });
+  }
+
+  /**
+   * 文本类提问（text/password/url/搜索框…）。官方 `Input` 有就用官方的，
+   * 没有就退回同令牌的原生 input —— 两者的 class 与尺寸一致。
+   */
+  function AskText({ id, type = 'text', value, placeholder, disabled, onChange, autoComplete }) {
+    const props = { id, type, value, placeholder, disabled, autoComplete };
+    if (typeof Input === 'function') {
+      return jsx(Input, { ...props, onChange: (event) => onChange(event.target.value) });
+    }
+    // data-ask 是归一化件的自证标记：渲染级测试据此区分套件自带的原生件与手搓件。
+    return jsx('input', { 'data-ask': 'text', ...props, style: ASK_STYLE.input, onChange: (event) => onChange(event.target.value) });
+  }
+
+  /** 选择类提问：官方没有 Select 原语，用同令牌原生件保证一致。 */
+  function AskSelect({ id, value, options, disabled, onChange }) {
+    return jsx('select', {
+      'data-ask': 'select',
+      id,
+      style: ASK_STYLE.input,
+      value,
+      disabled,
+      onChange: (event) => onChange(event.target.value),
+      children: (options ?? []).map((option) => jsx('option', { value: option.value, children: option.label }, option.value)),
+    });
+  }
+
+  /** 开关类提问：一整行可点，标签在左，方块在右。 */
+  function AskToggle({ id, label, checked, disabled, onChange, hint }) {
+    return jsxs('div', { style: { ...ASK_STYLE.row, gap: 2 }, children: [
+      jsxs('label', {
+        style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 },
+        htmlFor: id,
+        children: [
+          jsx('input', { 'data-ask': 'toggle', id, type: 'checkbox', checked: checked === true, disabled, onChange: (event) => onChange(event.target.checked) }),
+          jsx('span', { children: label }),
+        ],
+      }),
+      hint ? jsx('p', { style: { ...ASK_STYLE.copy, marginLeft: 24 }, children: hint }) : null,
+    ] });
+  }
+
+  /** 动作行：主按钮 + 次按钮 + 一行状态；忙时整体禁用。 */
+  function AskActions({ busy, status, primary, secondary, onPrimary, onSecondary, writable = true }) {
+    const locked = busy !== null || !writable;
+    return jsxs('div', { style: ASK_STYLE.actions, children: [
+      jsx(Button, {
+        variant: 'primary',
+        size: 'sm',
+        disabled: locked,
+        onClick: onPrimary,
+        children: busy === 'save' ? ASK_TEXT.saving : primary ?? ASK_TEXT.save,
+      }),
+      secondary
+        ? jsx(Button, { variant: 'outline', size: 'sm', disabled: locked, onClick: onSecondary, children: busy === 'test' ? ASK_TEXT.testing : secondary })
+        : null,
+      jsx('p', { style: ASK_STYLE.status, children: status }),
+    ] });
+  }
+
+  /** 结果行：一处画点与文字，成功/失败同一套观感。 */
+  function AskResult({ ok, text }) {
+    if (!text) return null;
+    return jsxs('div', { style: ASK_STYLE.line, children: [
+      typeof StateDot === 'function' ? jsx(StateDot, { state: ok ? 'done' : 'error', size: 10 }) : null,
+      jsx('span', { style: ok ? undefined : { color: 'var(--dsw-alias-label-error, #e06c6c)' }, children: text }),
+    ] });
+  }
+
+  /**
+   * 一份统一的读取/保存/测试逻辑。
+   *
+   * - `load()` 读当前值（通常是 GET 一个 state 端点）；`save(draft)` 落盘。
+   * - 只有真改过的字段才写：草稿与已存值相等即视为"没有需要保存的改动"。
+   * - `writable=false`（只读会话）时保存按钮停用并给出同一句说明。
+   * - 不轮询：挂载读一次、保存后复读一次。
+   *
+   * @param options - `{ load, save, onSaved, initial }`。
+   * @returns 归一化的表单状态机。
+   */
+  function useAskForm({ load, save, onSaved, initial = {} }) {
+    const [stored, setStored] = useState(null);
+    const [draft, setDraft] = useState(initial);
+    const [error, setError] = useState(false);
+    const [busy, setBusy] = useState(null);
+    const [status, setStatus] = useState(ASK_TEXT.loading);
+    const [reloadToken, setReloadToken] = useState(0);
+    const alive = useRef(true);
+    // load 走 ref：调用方常传内联函数，若进依赖会让每次渲染都重读一次。
+    const loadRef = useRef(load);
+    loadRef.current = load;
+
+    useEffect(() => {
+      alive.current = true;
+      let cancelled = false;
+      setStatus(ASK_TEXT.loading);
+      Promise.resolve()
+        .then(() => loadRef.current())
+        .then((value) => { if (!cancelled) { setStored(value); setError(false); setStatus(''); } })
+        .catch((cause) => { if (!cancelled) { setError(true); setStatus(readFailedText(cause)); } });
+      return () => { cancelled = true; alive.current = false; };
+    }, [reloadToken]);
+
+    const change = useCallback((key, value) => {
+      setDraft((current) => ({ ...current, [key]: value }));
+      setStatus('');
+    }, []);
+
+    const submit = useCallback(async () => {
+      setBusy('save');
+      setStatus('');
+      try {
+        const outcome = await save(draft, stored);
+        if (outcome?.changed === false) { setStatus(ASK_TEXT.unchanged); return outcome; }
+        setDraft(initial);
+        setStatus(ASK_TEXT.saved);
+        setReloadToken((token) => token + 1);
+        onSaved?.(outcome);
+        return outcome;
+      } catch (cause) {
+        setStatus(ASK_TEXT.saveFailed(describeError(cause)));
+        throw cause;
+      } finally {
+        setBusy(null);
+      }
+    }, [draft, stored, save, onSaved, initial]);
+
+    /** 由调用方注入的额外动作（如"测试"）走同一条忙/错通道。 */
+    const run = useCallback(async (kind, task) => {
+      setBusy(kind);
+      try { return await task(); } finally { setBusy(null); }
+    }, []);
+
+    return {
+      stored, draft, change, submit, run, busy, status, error,
+      readOnly: () => setStatus(ASK_TEXT.readOnly),
+      reload: () => setReloadToken((token) => token + 1),
+    };
+  }
+
+  return { ASK_TEXT, ASK_STYLE, AskSection, AskRow, AskText, AskSelect, AskToggle, AskActions, AskResult, useAskForm, describeError };
+}
+
+/** 读取失败的文案：不吐栈，只说明读不到。 */
+function readFailedText(error) {
+  return `暂时读不到设置（按已保存的值继续）：${describeError(error)}`;
+}
+
+module.exports = { createAskKit, ASK_TEXT, ASK_STYLE, describeError };
+// <<< fairy-contracts/client-ask-kit.cjs
+  return module.exports;
+})();
+    const { ASK_TEXT, ASK_STYLE, AskSection, AskRow, AskText, AskSelect, AskToggle, AskActions, AskResult, useAskForm, describeError } = createAskKit({
+      React,
+      jsx: jsx.jsx,
+      jsxs: jsx.jsxs,
+      primitives,
+    });
 
     const createFairyDiagnostics = (() => {
       const module = { exports: {} };
@@ -117,23 +392,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         ],
       },
     ];
-    const styles = {
-      root: { display: 'grid', gap: 12, padding: 16 },
-      copy: { margin: 0, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))', fontSize: 12, lineHeight: '18px' },
-      panel: { display: 'grid', gap: 10, padding: 12, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))', background: 'var(--dsw-alias-bg-layer-2, rgba(130,130,130,0.09))' },
-      row: { display: 'grid', gap: 4 },
-      entry: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 },
-      label: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
-      input: { width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))', background: 'var(--dsw-alias-bg-layer-1, transparent)', color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))', fontSize: 13 },
-      actions: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
-      status: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
-      error: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-error, #e06c6c)' },
-    };
-
-    function describeError(error) {
-      const message = typeof error?.message === 'string' ? error.message : String(error);
-      return message.length > 320 ? `${message.slice(0, 320)}…` : message;
-    }
+    // 提问行的外观一律用套件里的 `ASK_STYLE`，这里不再留一份同名副本。
 
     function providerOption(id) {
       return MEMORY_PROVIDERS.find((entry) => entry.id === id) || MEMORY_PROVIDERS[0];
@@ -152,8 +411,29 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return Object.fromEntries(option.fields.map((field) => [field.name, typeof stored[field.name] === 'string' ? stored[field.name] : '']));
     }
 
-    function draftsFrom(config) {
-      return Object.fromEntries(MEMORY_PROVIDERS.map((entry) => [entry.id, providerDraft(config, entry.id)]));
+    /** 草稿只装用户真改过的东西：没改的字段显示已存值（密钥是掩码哨兵）。 */
+    const EMPTY_DRAFT = { provider: null, autoRecall: null, fields: {} };
+
+    /**
+     * 生效值：草稿优先，未改的字段回落到已存的掩码配置；提供方与自动回忆同理。
+     * 渲染与保存共用这一份，免得"看到的"和"写下去的"各算一套。
+     */
+    function effective(config, draft) {
+      const provider = MEMORY_PROVIDERS.some((entry) => entry.id === draft?.provider)
+        ? draft.provider
+        : (MEMORY_PROVIDERS.some((entry) => entry.id === config?.provider) ? config.provider : MEMORY_PROVIDERS[0].id);
+      const option = providerOption(provider);
+      const edited = draft?.fields?.[provider] || {};
+      const values = providerDraft(config, provider);
+      for (const field of option.fields) {
+        if (typeof edited[field.name] === 'string') values[field.name] = edited[field.name];
+      }
+      return {
+        provider,
+        option,
+        values,
+        autoRecall: typeof draft?.autoRecall === 'boolean' ? draft.autoRecall : config?.autoRecall === true,
+      };
     }
 
     function createMemoryClient(fetchImpl = fetch) {
@@ -193,149 +473,137 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const memoryClient = createMemoryClient();
 
     function MemorySection() {
-      const [provider, setProvider] = React.useState(MEMORY_PROVIDERS[0].id);
-      const [config, setConfig] = React.useState(null);
-      const [drafts, setDrafts] = React.useState({});
-      // The one non-provider setting: whether recall runs before every answer.
-      const [autoRecall, setAutoRecall] = React.useState(false);
-      const [state, setState] = React.useState(null);
-      const [busy, setBusy] = React.useState(false);
-      const [status, setStatus] = React.useState('正在读取长期记忆配置…');
-      const [error, setError] = React.useState(false);
-      // ponytail: availability is read on mount, after a save, and on demand.
-      // Polling would spend one probe per interval on a value that rarely moves.
-      const refreshState = React.useCallback(() => memoryClient.state()
-        .then((value) => { setState(value); })
-        .catch((probeError) => {
-          setState(null);
-          setStatus(probeError?.message || '无法读取长期记忆状态。');
-          setError(true);
-        }), []);
-      const loadConfig = React.useCallback(() => memoryClient.config().then((value) => {
-        setConfig(value);
-        setDrafts(draftsFrom(value));
-        // The host's stored selection wins; an unknown value keeps the current one.
-        if (MEMORY_PROVIDERS.some((entry) => entry.id === value?.provider)) setProvider(value.provider);
-        setAutoRecall(value?.autoRecall === true);
-        setError(false);
-        return value;
-      }), []);
-      const refresh = React.useCallback(() => {
-        loadConfig().then(() => setStatus('')).catch((loadError) => {
-          setStatus(loadError?.message || '无法读取长期记忆配置。');
-          setError(true);
-        });
-        refreshState();
-      }, [loadConfig, refreshState]);
-      React.useEffect(() => { refresh(); }, [refresh]);
-      const selectProvider = (id) => {
-        setProvider(id);
-        setStatus('');
-        setError(false);
-      };
-      // A provider switch keeps the other providers' edits: the drafts are keyed
-      // by settings key, not by the current selection.
-      const updateField = (name, value) => setDrafts((current) => ({
-        ...current,
-        [provider]: { ...(current[provider] || {}), [name]: value },
-      }));
-      const save = async () => {
-        setBusy(true);
-        setError(false);
+      const [availability, setAvailability] = React.useState(null);
+      const [probeError, setProbeError] = React.useState('');
+
+      // 读取/保存/忙/状态只在 useAskForm 里：挂载读一次、保存成功后复读一次、不轮询。
+      const form = useAskForm({
+        initial: EMPTY_DRAFT,
+        load: () => memoryClient.config(),
+        save: async (draft, stored) => {
+          const next = effective(stored, draft);
+          // 只有真改过的字段才写盘：草稿与已存的掩码值逐项相等就是没有改动。
+          const kept = effective(stored, EMPTY_DRAFT);
+          const changed = next.provider !== kept.provider
+            || next.autoRecall !== kept.autoRecall
+            || Object.entries(next.values).some(([name, value]) => value !== kept.values[name]);
+          if (!changed) return { changed: false };
+          try {
+            // 复读交给 useAskForm：保存成功后它重跑 load，主机在那里重新掩码密钥。
+            // POST 的响应不参与界面，界面只认复读回来的值。
+            await memoryClient.save({
+              provider: next.provider,
+              autoRecall: next.autoRecall,
+              providers: { [next.option.key]: next.values },
+            });
+          } catch (saveError) {
+            diagnostics.warn('config.save', { provider: next.provider }, saveError);
+            throw saveError;
+          }
+          return { changed: true };
+        },
+      });
+
+      /** 可用性探测是另一条路由：失败只影响这一块，不动已经读到的配置。 */
+      const probeAvailability = async () => {
         try {
-          await memoryClient.save({ provider, autoRecall, providers: { [providerOption(provider).key]: drafts[provider] || {} } });
-          // Re-read instead of trusting the POST body: the host re-masks secrets,
-          // which is what the form must show after a save.
-          await loadConfig();
-          setStatus('已保存，下一次回忆或记录立即生效。');
-          refreshState();
-        } catch (saveError) {
-          diagnostics.warn('config.save', { provider }, saveError);
-          setStatus(saveError?.message || '保存失败。');
-          setError(true);
-        } finally { setBusy(false); }
+          setAvailability(await memoryClient.state());
+          setProbeError('');
+        } catch (probeFailure) {
+          setAvailability(null);
+          setProbeError(describeError(probeFailure));
+        }
       };
-      const option = providerOption(provider);
-      const availability = Array.isArray(state?.providers) ? state.providers : [];
-      const activeId = MEMORY_PROVIDERS.some((entry) => entry.id === state?.provider) ? state.provider : provider;
+
+      // ponytail: availability follows the settings read — once when it lands and
+      // once after every re-read (a save), never on a timer. 读取失败也探一次，
+      // 否则这一块会一直停在"正在读取"。
+      React.useEffect(() => {
+        if (form.stored === null && !form.error) return;
+        probeAvailability();
+      }, [form.stored, form.error]);
+
+      const submit = () => {
+        // useAskForm 已经把失败原因写进 status，这里只吞掉它有意抛出的 rejection。
+        form.submit().catch(() => {});
+      };
+
+      // A provider switch keeps the other providers' edits: the drafts are keyed
+      // by provider id, not by the current selection.
+      const updateField = (owner, name, value) => form.change('fields', {
+        ...(form.draft.fields || {}),
+        [owner]: { ...((form.draft.fields || {})[owner] || {}), [name]: value },
+      });
+
+      const { provider, option, values, autoRecall } = effective(form.stored, form.draft);
+      const availabilityRows = Array.isArray(availability?.providers) ? availability.providers : [];
+      const activeId = MEMORY_PROVIDERS.some((entry) => entry.id === availability?.provider) ? availability.provider : provider;
       // Only the local markdown provider reports a count, and it arrives as
       // `null` elsewhere. `Number(null)` is 0, so the type check comes first.
-      const count = typeof state?.count === 'number' && Number.isFinite(state.count) ? state.count : null;
+      const count = typeof availability?.count === 'number' && Number.isFinite(availability.count) ? availability.count : null;
       const countLine = count === null ? '已存记忆：未知' : `已存记忆：${count} 条`;
-      return jsx.jsxs('section', {
-        style: styles.root,
-        'data-dsh-fairy-memory': 'true',
-        'aria-label': '长期记忆设置',
+      return jsx.jsxs(AskSection, {
+        title: '长期记忆',
+        ariaLabel: '长期记忆设置',
+        description: [
+          'Fairy 的长期记忆默认由本机 GBrain 服务承担，也可以改指向 Mem0、任意 HTTP 服务或本地 Markdown 目录。切换后对下一次回忆或记录生效，无需重启。',
+          '密钥只保存在本机设置文件中，页面不会回显已保存的值。',
+        ],
         children: [
-          jsx.jsxs('div', { style: styles.row, children: [
-            jsx.jsx('h2', { style: { margin: 0, fontSize: 14 }, children: '长期记忆' }),
-            jsx.jsx('p', { style: styles.copy, children: 'Fairy 的长期记忆默认由本机 GBrain 服务承担，也可以改指向 Mem0、任意 HTTP 服务或本地 Markdown 目录。切换后对下一次回忆或记录生效，无需重启。' }),
-            jsx.jsx('p', { style: styles.copy, children: '密钥只保存在本机设置文件中，页面不会回显已保存的值。' }),
-          ] }),
-          jsx.jsxs('div', { style: styles.panel, children: [
-            jsx.jsxs('div', { style: styles.row, children: [
-              jsx.jsx('label', { style: styles.label, htmlFor: 'fairy-memory-provider', children: '提供方' }),
-              jsx.jsx('select', {
+          jsx.jsxs('div', { style: ASK_STYLE.panel, children: [
+            jsx.jsx(AskRow, {
+              id: 'fairy-memory-provider',
+              label: '提供方',
+              children: jsx.jsx(AskSelect, {
                 id: 'fairy-memory-provider',
-                style: styles.input,
-                'data-dsh-fairy-memory-provider': 'true',
                 value: provider,
-                disabled: busy,
-                onChange: (event) => selectProvider(event.target.value),
-                children: MEMORY_PROVIDERS.map((entry) => jsx.jsx('option', { value: entry.id, children: entry.label }, entry.id)),
+                options: MEMORY_PROVIDERS.map((entry) => ({ value: entry.id, label: entry.label })),
+                disabled: form.busy !== null,
+                onChange: (id) => form.change('provider', id),
               }),
-            ] }),
-            ...option.fields.map((field) => jsx.jsxs('div', { style: styles.row, children: [
-              jsx.jsx('label', { style: styles.label, htmlFor: `fairy-memory-${option.id}-${field.name}`, children: field.label }),
-              jsx.jsx('input', {
+            }),
+            ...option.fields.map((field) => jsx.jsx(AskRow, {
+              id: `fairy-memory-${option.id}-${field.name}`,
+              label: field.label,
+              children: jsx.jsx(AskText, {
                 id: `fairy-memory-${option.id}-${field.name}`,
-                style: styles.input,
-                'data-dsh-fairy-memory-field': field.name,
                 type: field.secret ? 'password' : 'text',
                 autoComplete: field.secret ? 'new-password' : 'off',
-                value: drafts[provider]?.[field.name] ?? '',
-                placeholder: field.secret && drafts[provider]?.[field.name] === SECRET_SENTINEL ? '已保存，输入新值以替换' : field.placeholder || '',
-                disabled: busy,
-                onChange: (event) => updateField(field.name, event.target.value),
-                'aria-label': field.label,
+                value: values[field.name],
+                placeholder: field.secret && values[field.name] === SECRET_SENTINEL ? '已保存，输入新值以替换' : field.placeholder || '',
+                disabled: form.busy !== null,
+                onChange: (value) => updateField(provider, field.name, value),
               }),
-            ] }, field.name)),
-            jsx.jsxs('label', { style: styles.entry, htmlFor: 'fairy-memory-auto-recall', children: [
-              jsx.jsx('input', {
-                id: 'fairy-memory-auto-recall',
-                type: 'checkbox',
-                'data-dsh-fairy-memory-auto-recall': 'true',
-                checked: autoRecall,
-                disabled: busy,
-                onChange: (event) => { setAutoRecall(event.target.checked); setStatus(''); },
-                'aria-label': '每次回答前自动回忆',
-              }),
-              jsx.jsx('span', { style: styles.label, children: '每次回答前自动回忆（关闭时只在明确要求时回忆）' }),
-            ] }),
-            jsx.jsxs('div', { style: styles.panel, children: [
-              availability.length === 0
-                ? jsx.jsx('p', { style: styles.status, children: state ? '宿主未报告任何提供方。' : '正在读取提供方可用性…' })
-                : availability.map((entry) => jsx.jsxs('div', { style: styles.entry, children: [
-                  jsx.jsx(StateDot, { state: entry?.available === true ? 'done' : 'error', size: 10 }),
-                  jsx.jsx('span', {
-                    'data-dsh-fairy-memory-available': String(entry?.id ?? 'unknown'),
-                    children: `${providerLabel(entry?.id)}：${entry?.available === true ? '可用' : `不可用 · ${entry?.reason || '未说明原因'}`}`,
-                  }),
-                ] }, `availability-${entry?.id ?? 'unknown'}`)),
-            ] }),
-            jsx.jsxs('div', { style: styles.entry, children: [
-              jsx.jsx(StateDot, { state: state?.available === true ? 'done' : 'error', size: 10 }),
-              jsx.jsx('span', {
-                'data-dsh-fairy-memory-state': 'true',
-                children: `当前提供方：${providerLabel(activeId)} · ${state?.available === true ? '可用' : `不可用 · ${state?.reason || '未检查'}`}`,
-              }),
-            ] }),
-            jsx.jsx('p', { style: styles.status, 'data-dsh-fairy-memory-count': 'true', children: countLine }),
-            jsx.jsxs('div', { style: styles.actions, children: [
-              jsx.jsx(Button, { variant: 'outline', size: 'sm', disabled: busy, 'data-dsh-fairy-memory-refresh': 'true', onClick: () => refreshState(), children: '刷新可用性' }),
-              jsx.jsx(Button, { variant: 'primary', size: 'sm', disabled: busy || !provider, 'data-dsh-fairy-memory-save': 'true', onClick: save, children: busy ? '处理中…' : '保存' }),
-            ] }),
-            jsx.jsx('p', { style: error ? styles.error : styles.status, 'data-error': error ? 'true' : 'false', children: status }),
+            }, field.name)),
+            jsx.jsx(AskToggle, {
+              id: 'fairy-memory-auto-recall',
+              label: '每次回答前自动回忆',
+              hint: '关闭时只在明确要求时回忆。',
+              checked: autoRecall,
+              disabled: form.busy !== null,
+              onChange: (checked) => form.change('autoRecall', checked),
+            }),
+            probeError
+              ? jsx.jsx(AskResult, { ok: false, text: probeError }, 'availability-error')
+              : availabilityRows.length === 0
+                ? jsx.jsx('p', { style: ASK_STYLE.status, children: availability === null ? ASK_TEXT.loading : '宿主未报告任何提供方。' }, 'availability-empty')
+                : availabilityRows.map((entry) => jsx.jsx(AskResult, {
+                  ok: entry?.available === true,
+                  text: `${providerLabel(entry?.id)}：${entry?.available === true ? '可用' : `不可用 · ${entry?.reason || '未说明原因'}`}`,
+                }, `availability-${entry?.id ?? 'unknown'}`)),
+            jsx.jsx(AskResult, {
+              ok: availability?.available === true,
+              text: `当前提供方：${providerLabel(activeId)} · ${availability?.available === true ? '可用' : `不可用 · ${availability?.reason || '未检查'}`}`,
+            }, 'active-provider'),
+            jsx.jsx('p', { style: ASK_STYLE.status, 'data-dsh-fairy-memory-count': 'true', children: countLine }),
+            jsx.jsx(AskActions, {
+              busy: form.busy,
+              status: form.status,
+              primary: ASK_TEXT.save,
+              secondary: '刷新可用性',
+              onPrimary: submit,
+              onSecondary: () => form.run('probe', probeAvailability),
+            }),
           ] }),
         ],
       });

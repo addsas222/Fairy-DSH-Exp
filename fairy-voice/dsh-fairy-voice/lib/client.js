@@ -1,9 +1,280 @@
 window.__ModuleLoader__.load({
   id: 'dsh-fairy-voice',
   factory: (require) => {
-    const React = require('react');
+    // >>> fairy-ask-kit (generated from fairy-contracts/client-ask-kit.cjs — 不要手改，跑 node fairy-system/sync-ask-kit.js)
+const fairyAskKit = (() => {
+  /**
+   * 归一化"提问件"套件 —— 设置卡里向用户要输入的那些行。
+   *
+   * 为什么要它：六个包的设置卡原本各写一套 input/select/checkbox、
+   * 各写一套加载/保存/状态/禁用逻辑，文案与行为都不一致（"已保存。"
+   * vs "已保存，下一次…"、只有部分包处理只读会话）。这里收成一份：
+   *
+   *  - 外观：优先用官方冻结原语（`Input`/`Button`/`StateDot`），其余用官方
+   *    设计令牌（`var(--dsw-alias-*)`），与官方设置面同色同尺。
+   *  - 操作逻辑：一份 useAskForm 管住 draft → 保存 → 复读 → 状态文案，
+   *    忙时禁用、只读会话停用、Enter 提交、不轮询。
+   *
+   * 契约：本文件是**唯一真源**。手写 bundle 的包由
+   * `fairy-system/sync-ask-kit.js` 把 `createAskKit` 内联进 `lib/client.js`
+   * 的标记区，`verify-build` 校验不漂移；有 `src/` 的包直接 require。
+   *
+   * @module dsh-fairy-contracts/client-ask-kit
+   */
+
+  /** 归一化状态文案：全仓只此一份，改文案就改这里。 */
+  const ASK_TEXT = {
+    loading: '正在读取…',
+    saved: '已保存。',
+    unchanged: '没有需要保存的改动。',
+    saving: '保存中…',
+    testing: '测试中…',
+    save: '保存',
+    test: '测试',
+    readOnly: '当前会话不可写入主机设置，保存已停用。',
+    saveFailed: (why) => `保存失败：${why}`,
+  };
+
+  /** 官方设计令牌（与设置面同一套变量，缺变量时回落到中性色）。 */
+  const ASK_STYLE = {
+    root: { display: 'grid', gap: 12, padding: 16 },
+    copy: { margin: 0, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))', fontSize: 12, lineHeight: '18px' },
+    panel: {
+      display: 'grid',
+      gap: 10,
+      padding: 12,
+      borderRadius: 8,
+      border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))',
+      background: 'var(--dsw-alias-bg-layer-2, rgba(130,130,130,0.09))',
+    },
+    row: { display: 'grid', gap: 4 },
+    label: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
+    input: {
+      width: '100%',
+      boxSizing: 'border-box',
+      padding: '6px 8px',
+      borderRadius: 6,
+      border: '1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))',
+      background: 'var(--dsw-alias-bg-layer-1, transparent)',
+      color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+      fontSize: 13,
+    },
+    actions: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
+    status: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))' },
+    line: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 },
+    pre: {
+      margin: 0,
+      padding: 10,
+      borderRadius: 6,
+      overflowX: 'auto',
+      background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.24))',
+      color: 'var(--dsw-alias-label-primary, rgba(225,225,225,0.95))',
+      fontSize: 12,
+      lineHeight: '18px',
+    },
+  };
+
+  /** 错误文案：长栈与 HTML 不进界面。 */
+  function describeError(error) {
+    const message = typeof error?.message === 'string' ? error.message : String(error);
+    return message.length > 320 ? `${message.slice(0, 320)}…` : message;
+  }
+
+  /**
+   * 造一套归一化提问件。
+   *
+   * @param spec - `{ React, jsx, jsxs, primitives }`：`primitives` 即
+   *   `require('@deepseek-ai/dsh-client-ui-primitives')`，只认官方确实导出的
+   *   那些名字（`Input`/`Button`/`StateDot`），其余留空则退化为同色令牌的原生件。
+   * @returns 归一化组件与一份统一的读写逻辑。
+   */
+  function createAskKit({ React, jsx, jsxs, primitives = {} }) {
+    const { Input, Button, StateDot } = primitives;
+    const { useState, useCallback, useEffect, useRef } = React;
+
+    function AskSection({ title, description, ariaLabel, children }) {
+      return jsxs('section', {
+        style: ASK_STYLE.root,
+        'aria-label': ariaLabel ?? title,
+        children: [
+          jsxs('div', { style: ASK_STYLE.row, children: [
+            jsx('h2', { style: { margin: 0, fontSize: 14 }, children: title }),
+            ...(description ?? []).map((line, index) => jsx('p', { style: ASK_STYLE.copy, children: line }, `${index}:${line}`)),
+          ] }),
+          children,
+        ],
+      });
+    }
+
+    /** 一行提问：标签 + 控件 + 可选补充说明。 */
+    function AskRow({ id, label, hint, children }) {
+      return jsxs('div', { style: ASK_STYLE.row, children: [
+        jsx('label', { style: ASK_STYLE.label, htmlFor: id, children: label }),
+        children,
+        hint ? jsx('p', { style: ASK_STYLE.copy, children: hint }) : null,
+      ] });
+    }
+
+    /**
+     * 文本类提问（text/password/url/搜索框…）。官方 `Input` 有就用官方的，
+     * 没有就退回同令牌的原生 input —— 两者的 class 与尺寸一致。
+     */
+    function AskText({ id, type = 'text', value, placeholder, disabled, onChange, autoComplete }) {
+      const props = { id, type, value, placeholder, disabled, autoComplete };
+      if (typeof Input === 'function') {
+        return jsx(Input, { ...props, onChange: (event) => onChange(event.target.value) });
+      }
+      // data-ask 是归一化件的自证标记：渲染级测试据此区分套件自带的原生件与手搓件。
+      return jsx('input', { 'data-ask': 'text', ...props, style: ASK_STYLE.input, onChange: (event) => onChange(event.target.value) });
+    }
+
+    /** 选择类提问：官方没有 Select 原语，用同令牌原生件保证一致。 */
+    function AskSelect({ id, value, options, disabled, onChange }) {
+      return jsx('select', {
+        'data-ask': 'select',
+        id,
+        style: ASK_STYLE.input,
+        value,
+        disabled,
+        onChange: (event) => onChange(event.target.value),
+        children: (options ?? []).map((option) => jsx('option', { value: option.value, children: option.label }, option.value)),
+      });
+    }
+
+    /** 开关类提问：一整行可点，标签在左，方块在右。 */
+    function AskToggle({ id, label, checked, disabled, onChange, hint }) {
+      return jsxs('div', { style: { ...ASK_STYLE.row, gap: 2 }, children: [
+        jsxs('label', {
+          style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 },
+          htmlFor: id,
+          children: [
+            jsx('input', { 'data-ask': 'toggle', id, type: 'checkbox', checked: checked === true, disabled, onChange: (event) => onChange(event.target.checked) }),
+            jsx('span', { children: label }),
+          ],
+        }),
+        hint ? jsx('p', { style: { ...ASK_STYLE.copy, marginLeft: 24 }, children: hint }) : null,
+      ] });
+    }
+
+    /** 动作行：主按钮 + 次按钮 + 一行状态；忙时整体禁用。 */
+    function AskActions({ busy, status, primary, secondary, onPrimary, onSecondary, writable = true }) {
+      const locked = busy !== null || !writable;
+      return jsxs('div', { style: ASK_STYLE.actions, children: [
+        jsx(Button, {
+          variant: 'primary',
+          size: 'sm',
+          disabled: locked,
+          onClick: onPrimary,
+          children: busy === 'save' ? ASK_TEXT.saving : primary ?? ASK_TEXT.save,
+        }),
+        secondary
+          ? jsx(Button, { variant: 'outline', size: 'sm', disabled: locked, onClick: onSecondary, children: busy === 'test' ? ASK_TEXT.testing : secondary })
+          : null,
+        jsx('p', { style: ASK_STYLE.status, children: status }),
+      ] });
+    }
+
+    /** 结果行：一处画点与文字，成功/失败同一套观感。 */
+    function AskResult({ ok, text }) {
+      if (!text) return null;
+      return jsxs('div', { style: ASK_STYLE.line, children: [
+        typeof StateDot === 'function' ? jsx(StateDot, { state: ok ? 'done' : 'error', size: 10 }) : null,
+        jsx('span', { style: ok ? undefined : { color: 'var(--dsw-alias-label-error, #e06c6c)' }, children: text }),
+      ] });
+    }
+
+    /**
+     * 一份统一的读取/保存/测试逻辑。
+     *
+     * - `load()` 读当前值（通常是 GET 一个 state 端点）；`save(draft)` 落盘。
+     * - 只有真改过的字段才写：草稿与已存值相等即视为"没有需要保存的改动"。
+     * - `writable=false`（只读会话）时保存按钮停用并给出同一句说明。
+     * - 不轮询：挂载读一次、保存后复读一次。
+     *
+     * @param options - `{ load, save, onSaved, initial }`。
+     * @returns 归一化的表单状态机。
+     */
+    function useAskForm({ load, save, onSaved, initial = {} }) {
+      const [stored, setStored] = useState(null);
+      const [draft, setDraft] = useState(initial);
+      const [error, setError] = useState(false);
+      const [busy, setBusy] = useState(null);
+      const [status, setStatus] = useState(ASK_TEXT.loading);
+      const [reloadToken, setReloadToken] = useState(0);
+      const alive = useRef(true);
+      // load 走 ref：调用方常传内联函数，若进依赖会让每次渲染都重读一次。
+      const loadRef = useRef(load);
+      loadRef.current = load;
+
+      useEffect(() => {
+        alive.current = true;
+        let cancelled = false;
+        setStatus(ASK_TEXT.loading);
+        Promise.resolve()
+          .then(() => loadRef.current())
+          .then((value) => { if (!cancelled) { setStored(value); setError(false); setStatus(''); } })
+          .catch((cause) => { if (!cancelled) { setError(true); setStatus(readFailedText(cause)); } });
+        return () => { cancelled = true; alive.current = false; };
+      }, [reloadToken]);
+
+      const change = useCallback((key, value) => {
+        setDraft((current) => ({ ...current, [key]: value }));
+        setStatus('');
+      }, []);
+
+      const submit = useCallback(async () => {
+        setBusy('save');
+        setStatus('');
+        try {
+          const outcome = await save(draft, stored);
+          if (outcome?.changed === false) { setStatus(ASK_TEXT.unchanged); return outcome; }
+          setDraft(initial);
+          setStatus(ASK_TEXT.saved);
+          setReloadToken((token) => token + 1);
+          onSaved?.(outcome);
+          return outcome;
+        } catch (cause) {
+          setStatus(ASK_TEXT.saveFailed(describeError(cause)));
+          throw cause;
+        } finally {
+          setBusy(null);
+        }
+      }, [draft, stored, save, onSaved, initial]);
+
+      /** 由调用方注入的额外动作（如"测试"）走同一条忙/错通道。 */
+      const run = useCallback(async (kind, task) => {
+        setBusy(kind);
+        try { return await task(); } finally { setBusy(null); }
+      }, []);
+
+      return {
+        stored, draft, change, submit, run, busy, status, error,
+        readOnly: () => setStatus(ASK_TEXT.readOnly),
+        reload: () => setReloadToken((token) => token + 1),
+      };
+    }
+
+    return { ASK_TEXT, ASK_STYLE, AskSection, AskRow, AskText, AskSelect, AskToggle, AskActions, AskResult, useAskForm, describeError };
+  }
+
+  /** 读取失败的文案：不吐栈，只说明读不到。 */
+  function readFailedText(error) {
+    return `暂时读不到设置（按已保存的值继续）：${describeError(error)}`;
+  }
+
+  return { createAskKit, ASK_TEXT, ASK_STYLE, describeError };
+})();
+
+const { createAskKit, ASK_TEXT, ASK_STYLE, describeError } = fairyAskKit;
+// <<< fairy-ask-kit
+
+
+const React = require('react');
     const jsx = require('react/jsx-runtime');
-    const { Tooltip, IconPauseOutline16, IconPlayOutline16, IconStopFill16 } = require('@deepseek-ai/dsh-client-ui-primitives');
+    const { Tooltip, IconPauseOutline16, IconPlayOutline16, IconStopFill16, Input, Button, StateDot } = require('@deepseek-ai/dsh-client-ui-primitives');
+
+    /** 设置卡的提问行、动作与状态只有一份实现（块由 sync-ask-kit 内联，别手改）。 */
+    const askKit = createAskKit({ React, jsx: jsx.jsx, jsxs: jsx.jsxs, primitives: { Input, Button, StateDot } });
 
     const EVENT_PLAY = 'fairy-voice-play';
     const EVENT_STATE = 'fairy-voice-state';
@@ -941,18 +1212,6 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
 .dsh-fairy-voice-volume::-moz-range-thumb{width:9px;height:9px;border:2px solid var(--dsw-alias-bg-layer-1);border-radius:50%;background:var(--dsw-alias-label-secondary);box-shadow:0 0 0 1px var(--dsw-alias-border-l2)}
 .dsh-fairy-voice-waveform{display:none;align-items:center;justify-content:space-between;gap:3px;flex:1;height:100%;padding:0 4px;pointer-events:none}
 .dsh-fairy-voice-wave-bar{display:block;width:3px;min-width:3px;height:var(--dsh-fairy-wave-height);border-radius:999px;background:currentColor;opacity:var(--dsh-fairy-wave-opacity)}
-.dsh-fairy-voice-brain{display:grid;gap:16px;width:min(640px,100%);padding:4px 0 12px;color:var(--dsw-alias-label-primary)}
-.dsh-fairy-voice-brain-head{display:grid;gap:5px;padding-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l2)}
-.dsh-fairy-voice-brain-title{margin:0;font-size:18px;font-weight:600;line-height:1.3}
-.dsh-fairy-voice-brain-copy{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.65}
-.dsh-fairy-voice-brain-panel{display:grid;gap:12px;padding:14px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}
-.dsh-fairy-voice-brain-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.dsh-fairy-voice-brain-label{font-size:14px;font-weight:600}.dsh-fairy-voice-brain-value{font-size:13px;color:var(--dsw-alias-label-secondary);text-align:right}
-.dsh-fairy-voice-brain-input{width:100%;height:34px;padding:0 10px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-0);color:var(--dsw-alias-label-primary);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;outline:none}
-.dsh-fairy-voice-brain-input:focus{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,transparent)}
-.dsh-fairy-voice-brain-actions{display:flex;justify-content:flex-end;gap:8px}.dsh-fairy-voice-brain-button{height:30px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;cursor:pointer}.dsh-fairy-voice-brain-button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.dsh-fairy-voice-brain-button--primary{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-brand-primary);color:#fff}.dsh-fairy-voice-brain-button:disabled{opacity:.5;cursor:not-allowed}.dsh-fairy-voice-brain-status{min-height:18px;margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5}.dsh-fairy-voice-brain-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-.dsh-fairy-voice-engine-field{display:grid;gap:6px}
-.dsh-fairy-voice-engine-field .dsh-fairy-voice-brain-label{font-weight:500;color:var(--dsw-alias-label-secondary)}
 `;
       (document.head || document.documentElement).appendChild(style);
     }
@@ -1239,85 +1498,107 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       }, [sessionKey, clearTimer]);
     }
 
+    /** 设置卡里的只读状态行：左标签、右取值；取值可以带一个 DOM 契约属性。 */
+    function AskStatusRow({ label, value, attributes }) {
+      return jsx.jsxs('div', {
+        style: { ...ASK_STYLE.line, justifyContent: 'space-between' },
+        children: [
+          jsx.jsx('span', { style: ASK_STYLE.label, children: label }),
+          jsx.jsx('span', { style: { ...ASK_STYLE.status, textAlign: 'right' }, ...attributes, children: value })
+        ]
+      });
+    }
+
+    /** 受控取值：草稿里改过的键用草稿的，没碰过就回落到已保存的值。 */
+    function askFieldValue(draft, fields, name) {
+      const edited = draft?.[name];
+      if (typeof edited === 'string') return edited;
+      return typeof fields?.[name] === 'string' ? fields[name] : '';
+    }
+
+    /** 已保存配置里某个提供方占的那一节（没有就是空对象）。 */
+    function providerSectionOf(config, option) {
+      return (option.key ? config?.providers?.[option.key] : null) || {};
+    }
+
+    /** `useAskForm` 的初始草稿：草稿只装"用户改过的键"，已保存值从 stored 读。 */
+    const EMPTY_ASK_DRAFT = Object.freeze({});
+    const BRAIN_ASK_DRAFT = Object.freeze({ apiKey: '' });
+
+    /** 设置卡的失败原因已经在状态行里说清了，这里只留一条诊断，别让 rejection 无声落地。 */
+    function reportAskActionFailure(operation, error) {
+      diagnostics.warn('ask.action', { operation }, error);
+    }
+
     function VoiceBrainSection() {
       const [threshold, setThreshold] = React.useState(readStoredBriefThreshold);
+      const [removal, setRemoval] = React.useState(null);
       const changeThreshold = (raw) => {
         const next = Math.max(0, Math.min(5000, Math.round(Number(raw) || 0)));
         setThreshold(next);
         briefThreshold.value = next;
         localStorage.setItem(SETTINGS_BRIEF_THRESHOLD, String(next));
       };
-      const [configured, setConfigured] = React.useState(false);
-      const [apiKey, setApiKey] = React.useState('');
-      const [busy, setBusy] = React.useState(false);
-      const [status, setStatus] = React.useState('正在读取配置…');
-      const [error, setError] = React.useState(false);
-      const refresh = React.useCallback(() => {
-        getVoiceBrainStatus().then((value) => {
-          setConfigured(value?.configured === true);
-          setStatus(value?.configured === true ? '已配置。密钥保存在本机，不会在页面回显。' : '未配置。未配置时，长回答会直接使用原文朗读。');
-          setError(false);
-          window.dispatchEvent(new CustomEvent(EVENT_BRAIN_CONFIG, { detail: value }));
-        }).catch(() => {
-          setStatus('暂时无法读取本地配置状态。');
-          setError(true);
-        });
-      }, []);
-      React.useEffect(() => { refresh(); }, [refresh]);
-      const save = async () => {
-        if (!apiKey.trim()) return;
-        setBusy(true); setError(false);
-        try {
-          const value = await requestVoiceBrainConfig({ apiKey: apiKey.trim() });
-          setApiKey('');
-          setConfigured(true);
-          setStatus('已配置。密钥保存在本机，不会在页面回显。');
-          window.dispatchEvent(new CustomEvent(EVENT_BRAIN_CONFIG, { detail: value }));
-        } catch (saveError) {
-          setStatus(saveError?.message || '保存失败。');
-          setError(true);
-        } finally { setBusy(false); }
-      };
-      const clear = async () => {
-        setBusy(true); setError(false);
+      // 读/写/忙/状态都走同一份状态机：挂载读一次、保存成功后复读一次，不轮询。
+      const form = askKit.useAskForm({
+        load: getVoiceBrainStatus,
+        save: async (draft) => {
+          const apiKey = String(draft.apiKey ?? '').trim();
+          if (!apiKey) return { changed: false };
+          return { changed: true, value: await requestVoiceBrainConfig({ apiKey }) };
+        },
+        onSaved: (outcome) => { window.dispatchEvent(new CustomEvent(EVENT_BRAIN_CONFIG, { detail: outcome.value })); },
+        initial: BRAIN_ASK_DRAFT
+      });
+      const configured = form.stored?.configured === true;
+      /** 移除密钥是一次性动作，走同一条忙通道；写完复读一次让连接状态跟上。 */
+      const removeKey = () => form.run('remove', async () => {
+        setRemoval(null);
         try {
           const value = await requestVoiceBrainConfig({ clear: true });
-          setConfigured(false); setApiKey('');
-          setStatus('已移除。未配置时不会调用云端模型。');
           window.dispatchEvent(new CustomEvent(EVENT_BRAIN_CONFIG, { detail: value }));
-        } catch (clearError) {
-          setStatus(clearError?.message || '移除失败。');
-          setError(true);
-        } finally { setBusy(false); }
-      };
-      return jsx.jsxs('section', { className: 'dsh-fairy-voice-brain', children: [
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-head', children: [
-          jsx.jsx('h2', { className: 'dsh-fairy-voice-brain-title', children: 'Fairy 语音简报' }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '仅用于压缩较长的最终回答，帮助 Fairy 更自然地朗读。搜索、思考、工具执行和过程汇报不会发送给模型。' }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '固定模型：DeepSeek V4 Flash。未配置、超时或请求失败时，自动回退到本地原文朗读。' })
-        ] }),
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: [
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '连接状态' }),
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-value', children: configured ? '已配置 · deepseek-v4-flash' : '未配置' })
-          ] }),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '简报触发字数' }),
-            jsx.jsx('input', {
-              className: 'dsh-fairy-voice-brain-input', type: 'number', min: '0', max: '5000', step: '20',
-              'data-dsh-fairy-brief-threshold': 'true', value: String(threshold),
-              onChange: (event) => changeThreshold(event.target.value), 'aria-label': '简报触发字数'
+          form.reload();
+        } catch (removeError) {
+          setRemoval({ ok: false, text: askKit.describeError(removeError) });
+        }
+      });
+      return jsx.jsx(askKit.AskSection, {
+        title: 'Fairy 语音简报',
+        description: [
+          '仅用于压缩较长的最终回答，帮助 Fairy 更自然地朗读。搜索、思考、工具执行和过程汇报不会发送给模型。',
+          '固定模型：DeepSeek V4 Flash。未配置、超时或请求失败时，自动回退到本地原文朗读。'
+        ],
+        children: jsx.jsxs('div', { style: ASK_STYLE.panel, children: [
+          jsx.jsx(AskStatusRow, { label: '连接状态', value: configured ? '已配置 · deepseek-v4-flash' : '未配置' }),
+          jsx.jsx(askKit.AskRow, {
+            id: 'fairy-voice-brief-threshold',
+            label: '简报触发字数',
+            hint: '超过该字数的最终回答会先压成口语简报再朗读；填 0 表示每次都先简报。',
+            children: jsx.jsx(askKit.AskText, {
+              id: 'fairy-voice-brief-threshold', type: 'number', value: String(threshold), onChange: changeThreshold
             })
-          ] }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '超过该字数的最终回答会先压成口语简报再朗读；填 0 表示每次都先简报。' }),
-          jsx.jsx('input', { className: 'dsh-fairy-voice-brain-input', type: 'password', autoComplete: 'new-password', value: apiKey, onChange: (event) => setApiKey(event.target.value), placeholder: configured ? '输入新 API Key 以替换当前密钥' : '输入 DeepSeek API Key', 'aria-label': 'DeepSeek API Key' }),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
-            configured ? jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: clear, children: '移除密钥' }) : null,
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy || !apiKey.trim(), onClick: save, children: busy ? '处理中…' : '保存密钥' })
-          ] }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': error ? 'true' : 'false', children: status })
+          }),
+          jsx.jsx(askKit.AskRow, {
+            id: 'fairy-voice-brain-key',
+            label: 'DeepSeek API Key',
+            hint: '密钥仅存于本机，不会在页面回显。',
+            children: jsx.jsx(askKit.AskText, {
+              id: 'fairy-voice-brain-key', type: 'password', autoComplete: 'new-password',
+              value: form.draft.apiKey ?? '',
+              placeholder: configured ? '输入新 API Key 以替换当前密钥' : '输入 DeepSeek API Key',
+              onChange: (value) => form.change('apiKey', value)
+            })
+          }),
+          jsx.jsx(askKit.AskActions, {
+            busy: form.busy,
+            status: form.status,
+            secondary: configured ? '移除密钥' : null,
+            onPrimary: () => form.submit().catch((error) => { reportAskActionFailure('voice-brain save', error); }),
+            onSecondary: removeKey
+          }),
+          jsx.jsx(askKit.AskResult, { ok: removal?.ok, text: removal?.text || '' })
         ] })
-      ] });
+      });
     }
 
     const VOICE_ENGINE_PROVIDERS = [
@@ -1407,34 +1688,67 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return VOICE_ENGINE_PROVIDERS.find((entry) => entry.id === id) || VOICE_ENGINE_PROVIDERS[0];
     }
 
-    function engineDraft(config, id) {
-      const option = engineOption(id);
-      const stored = option.key ? config?.providers?.[option.key] || {} : {};
-      return Object.fromEntries(option.fields.map((field) => [field.name, typeof stored[field.name] === 'string' ? stored[field.name] : '']));
-    }
-
     function VoiceEngineSection() {
-      const [provider, setProvider] = React.useState(VOICE_ENGINE_PROVIDERS[0].id);
-      const [config, setConfig] = React.useState(null);
-      const [draft, setDraft] = React.useState({});
       const [availability, setAvailability] = React.useState([]);
-      const [busy, setBusy] = React.useState(false);
-      const [status, setStatus] = React.useState('正在读取语音引擎配置…');
-      const [error, setError] = React.useState(false);
+      const [probe, setProbe] = React.useState(null);
       const [audition, setAudition] = React.useState({ status: 'idle', error: null });
+      const [model, setModel] = React.useState({ status: 'idle', error: null, note: '' });
       const [alwaysControls, setAlwaysControls] = React.useState(() => localStorage.getItem(SETTINGS_ALWAYS_CONTROLS) === 'true');
       const toggleAlwaysControls = (next) => {
         setAlwaysControls(next);
         localStorage.setItem(SETTINGS_ALWAYS_CONTROLS, String(next));
         window.dispatchEvent(new CustomEvent(EVENT_ALWAYS_CONTROLS, { detail: next }));
       };
-      const auditionOnce = async () => {
+      // ponytail: availability refreshes on mount, after a save, and on demand.
+      // Polling would spend one probe per interval on a value that rarely moves.
+      const refreshAvailability = React.useCallback((signal) => localTtsTransport.providers(signal)
+        .then((value) => { setAvailability(value); setProbe(null); })
+        .catch((probeError) => {
+          setAvailability([]);
+          setProbe({ ok: false, text: probeError?.message || '无法读取提供方可用性。' });
+        }), []);
+      /** 选中的提供方：草稿优先，其次是已保存的值。 */
+      const optionFor = (draft, stored) => engineOption(
+        typeof draft?.provider === 'string'
+          ? draft.provider
+          : (typeof stored?.provider === 'string' ? stored.provider : VOICE_ENGINE_PROVIDERS[0].id)
+      );
+      const form = askKit.useAskForm({
+        load: () => { refreshAvailability(); return localTtsTransport.providerConfig(); },
+        save: async (draft, stored) => {
+          const target = optionFor(draft, stored);
+          const storedFields = providerSectionOf(stored, target);
+          const values = {};
+          for (const field of target.fields) values[field.name] = askFieldValue(draft, storedFields, field.name);
+          const untouched = optionFor({}, stored).id === target.id
+            && target.fields.every((field) => values[field.name] === askFieldValue({}, storedFields, field.name));
+          if (untouched) return { changed: false };
+          const value = await localTtsTransport.saveProviderConfig(target.key
+            ? { provider: target.id, providers: { [target.key]: values } }
+            : { provider: target.id });
+          return { changed: true, value };
+        },
+        // 保存后复读已由状态机做了，这里只补上"读的是哪个提供方"和常驻控件闸门。
+        onSaved: () => { refreshAvailability(); requestAvailability(true); },
+        initial: EMPTY_ASK_DRAFT
+      });
+      const option = optionFor(form.draft, form.stored);
+      const provider = option.id;
+      const storedFields = providerSectionOf(form.stored, option);
+      const availabilityById = new Map(availability.map((entry) => [entry.id, entry]));
+      const selectProvider = (id) => {
+        form.change('provider', id);
+        // 换提供方就丢掉上一个提供方留下的同名字段，回到已保存的值。
+        for (const field of engineOption(id).fields) form.change(field.name, undefined);
+      };
+      const saveEngineConfig = () => form.submit().catch((error) => { reportAskActionFailure('voice engine save', error); });
+      const auditionOnce = () => form.run('test', async () => {
         setAudition({ status: 'working', error: null });
         try {
           if (provider === 'browser') {
             await speakSampleWithSystem();
           } else if (isLocalEngine(provider)) {
-            const engineSettings = localEngineConfig(config, provider);
+            const engineSettings = localEngineConfig(form.stored, provider);
             const handle = await openLocalEngine(provider, engineSettings);
             const clip = await synthesizeLocalEngine(handle, AUDITION_TEXT, engineSettings, scratchContext());
             await playSamplesOnce(clip.samples, clip.sampleRate);
@@ -1451,134 +1765,84 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         } catch (auditionError) {
           setAudition({ status: 'error', error: auditionError?.message || '试听失败。' });
         }
-      };
-      const [model, setModel] = React.useState({ status: 'idle', error: null, note: '' });
+      });
       /** 模型自行下载的显式入口：走的是与朗读完全相同的加载路径
        *  （openLocalEngine 按配置缓存），所以它既预热缓存，也把"加载期失败"
        *  从静默降级变成看得见、可重试的一步。 */
-      const downloadModel = async () => {
+      const downloadModel = () => form.run('model', async () => {
         setModel({ status: 'working', error: null, note: '' });
         const startedAt = Date.now();
         try {
-          await openLocalEngine(provider, localEngineConfig(config, provider));
+          await openLocalEngine(provider, localEngineConfig(form.stored, provider));
           setModel({ status: 'ready', error: null, note: `已缓存（${((Date.now() - startedAt) / 1000).toFixed(1)}s）` });
         } catch (downloadError) {
           setModel({ status: 'error', error: downloadError?.message || '模型下载失败。', note: '' });
         }
-      };
-      // ponytail: availability refreshes on mount, after a save, and on demand.
-      // Polling would spend one probe per interval on a value that rarely moves.
-      const refreshAvailability = React.useCallback((signal) => localTtsTransport.providers(signal)
-        .then((value) => { setAvailability(value); })
-        .catch((probeError) => {
-          setAvailability([]);
-          setStatus(probeError?.message || '无法读取提供方可用性。');
-          setError(true);
-        }), []);
-      const refresh = React.useCallback(() => {
-        localTtsTransport.providerConfig().then((value) => {
-          const id = typeof value?.provider === 'string' ? value.provider : VOICE_ENGINE_PROVIDERS[0].id;
-          setConfig(value);
-          setProvider(id);
-          setDraft(engineDraft(value, id));
-          setStatus('');
-          setError(false);
-        }).catch((loadError) => {
-          setStatus(loadError?.message || '无法读取语音引擎配置。');
-          setError(true);
-        });
-        refreshAvailability();
-      }, [refreshAvailability]);
-      React.useEffect(() => { refresh(); }, [refresh]);
-      const selectProvider = (id) => {
-        setProvider(id);
-        setDraft(engineDraft(config, id));
-        setStatus('');
-        setError(false);
-      };
-      const updateField = (name, value) => setDraft((current) => ({ ...current, [name]: value }));
-      const save = async () => {
-        const option = engineOption(provider);
-        setBusy(true); setError(false);
-        try {
-          const value = await localTtsTransport.saveProviderConfig(option.key
-            ? { provider, providers: { [option.key]: draft } }
-            : { provider });
-          const id = typeof value?.provider === 'string' ? value.provider : provider;
-          setConfig(value);
-          setProvider(id);
-          setDraft(engineDraft(value, id));
-          setStatus('已保存，下一次朗读立即生效。');
-          refreshAvailability();
-          requestAvailability(true);
-        } catch (saveError) {
-          setStatus(saveError?.message || '保存失败。');
-          setError(true);
-        } finally { setBusy(false); }
-      };
-      const option = engineOption(provider);
-      const availabilityById = new Map(availability.map((entry) => [entry.id, entry]));
-      return jsx.jsxs('section', { className: 'dsh-fairy-voice-brain', children: [
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-head', children: [
-          jsx.jsx('h2', { className: 'dsh-fairy-voice-brain-title', children: '语音引擎' }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '决定 Fairy 由谁合成朗读。浏览器朗读完全在当前浏览器内完成，不需要本机服务；其余提供方的配置只保存在本机。' })
-        ] }),
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: [
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '提供方' }),
-            jsx.jsx('select', {
-              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-engine-provider': 'true', value: provider,
-              onChange: (event) => selectProvider(event.target.value), 'aria-label': '语音提供方',
-              children: VOICE_ENGINE_PROVIDERS.map((entry) => jsx.jsx('option', { value: entry.id, children: entry.label }, entry.id))
+      });
+      const probeNow = () => form.run('probe', refreshAvailability);
+      return jsx.jsx(askKit.AskSection, {
+        title: '语音引擎',
+        description: ['决定 Fairy 由谁合成朗读。浏览器朗读完全在当前浏览器内完成，不需要本机服务；其余提供方的配置只保存在本机。'],
+        children: jsx.jsxs('div', { style: ASK_STYLE.panel, children: [
+          jsx.jsx(askKit.AskRow, {
+            id: 'fairy-voice-engine-provider',
+            label: '提供方',
+            children: jsx.jsx(askKit.AskSelect, {
+              id: 'fairy-voice-engine-provider',
+              value: provider,
+              options: VOICE_ENGINE_PROVIDERS.map((entry) => ({ value: entry.id, label: entry.label })),
+              onChange: selectProvider
             })
-          ] }),
-          ...option.fields.map((field) => jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: field.label }),
-            jsx.jsx('input', {
-              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-engine-field': field.name,
-              type: field.secret ? 'password' : 'text', autoComplete: field.secret ? 'new-password' : 'off',
-              value: draft[field.name] ?? '',
-              placeholder: field.secret && draft[field.name] === '***' ? '已保存，输入新值以替换' : field.placeholder || '',
-              onChange: (event) => updateField(field.name, event.target.value), 'aria-label': field.label
-            })
-          ] }, field.name)),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: VOICE_ENGINE_PROVIDERS.map((entry) => {
-            const current = availabilityById.get(entry.id);
-            return jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
-              jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: entry.label }),
-              jsx.jsx('span', {
-                className: 'dsh-fairy-voice-brain-value', 'data-dsh-fairy-engine-available': entry.id,
-                children: current?.available === true ? '可用' : `不可用 · ${current?.reason || '未检查'}`
+          }),
+          ...option.fields.map((field) => {
+            const id = `fairy-voice-engine-${field.name}`;
+            const value = askFieldValue(form.draft, storedFields, field.name);
+            return jsx.jsx(askKit.AskRow, {
+              id,
+              label: field.label,
+              children: jsx.jsx(askKit.AskText, {
+                id,
+                type: field.secret ? 'password' : 'text',
+                autoComplete: field.secret ? 'new-password' : 'off',
+                value,
+                placeholder: field.secret && value === '***' ? '输入新值以替换已存密钥' : field.placeholder || '',
+                onChange: (next) => form.change(field.name, next)
               })
-            ] }, `availability-${entry.id}`);
+            }, field.name);
+          }),
+          jsx.jsxs('div', { style: ASK_STYLE.panel, children: VOICE_ENGINE_PROVIDERS.map((entry) => {
+            const current = availabilityById.get(entry.id);
+            return jsx.jsx(AskStatusRow, {
+              label: entry.label,
+              value: current?.available === true ? '可用' : `不可用 · ${current?.reason || '未检查'}`,
+              attributes: { 'data-dsh-fairy-engine-available': entry.id }
+            }, `availability-${entry.id}`);
           }) }),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: () => refreshAvailability(), children: '刷新可用性' }),
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy || audition.status === 'working', 'data-dsh-fairy-audition': 'true', onClick: auditionOnce, children: audition.status === 'working' ? '试听中…' : '试听一句' }),
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy || !provider, onClick: save, children: busy ? '处理中…' : '保存' })
-          ] }),
-          audition.error ? jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': 'true', children: `试听失败：${audition.error}` }) : null,
-          isLocalEngine(provider) ? jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
-            jsx.jsx('button', {
-              className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy || model.status === 'working',
-              'data-dsh-fairy-model-download': 'true', onClick: downloadModel,
-              children: model.status === 'working' ? '下载中…' : '下载模型（缓存到本机）'
-            }),
-            jsx.jsx('span', {
-              className: 'dsh-fairy-voice-brain-value', 'data-dsh-fairy-model-state': model.status,
-              children: model.status === 'ready' ? model.note : model.status === 'error' ? `失败：${model.error}` : '模型未下载（首次朗读时才会拉取）'
-            })
-          ] }) : null,
-          jsx.jsxs('label', { className: 'dsh-fairy-voice-brain-row', children: [
-            jsx.jsx('input', {
-              type: 'checkbox', 'data-dsh-fairy-always-controls': 'true', checked: alwaysControls,
-              onChange: (event) => toggleAlwaysControls(event.target.checked), 'aria-label': '始终显示朗读与语音控件'
-            }),
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '始终显示朗读与语音控件（不依赖 H.D.D 视觉模式）' })
-          ] }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': error ? 'true' : 'false', children: status })
+          jsx.jsx(askKit.AskActions, {
+            busy: form.busy,
+            status: form.status,
+            secondary: '试听一句',
+            onPrimary: saveEngineConfig,
+            onSecondary: auditionOnce
+          }),
+          jsx.jsx(askKit.AskResult, { ok: audition.status !== 'error', text: audition.status === 'error' ? `试听失败：${audition.error}` : '' }),
+          jsx.jsx(askKit.AskActions, {
+            busy: form.busy, status: probe?.text || '', primary: '刷新可用性', onPrimary: probeNow
+          }),
+          isLocalEngine(provider) ? jsx.jsx(askKit.AskActions, {
+            busy: form.busy,
+            status: model.status === 'ready' ? model.note : model.status === 'error' ? `失败：${model.error}` : '模型未下载（首次朗读时才会拉取）',
+            primary: model.status === 'working' ? '下载中…' : '下载模型（缓存到本机）',
+            onPrimary: downloadModel
+          }) : null,
+          jsx.jsx(askKit.AskToggle, {
+            id: 'fairy-voice-always-controls',
+            label: '始终显示朗读与语音控件（不依赖 H.D.D 视觉模式）',
+            checked: alwaysControls,
+            onChange: toggleAlwaysControls
+          })
         ] })
-      ] });
+      });
     }
 
     const VOICE_STT_PROVIDERS = [
@@ -1649,110 +1913,98 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       return VOICE_STT_PROVIDERS.find((entry) => entry.id === id) || VOICE_STT_PROVIDERS[0];
     }
 
-    function sttDraft(config, id) {
-      const option = sttOption(id);
-      const stored = config?.providers?.[option.key] || {};
-      return Object.fromEntries(option.fields.map((field) => [field.name, typeof stored[field.name] === 'string' ? stored[field.name] : '']));
-    }
-
     function VoiceSttSection() {
-      const [provider, setProvider] = React.useState(VOICE_STT_PROVIDERS[0].id);
-      const [config, setConfig] = React.useState(null);
-      const [draft, setDraft] = React.useState({});
       const [availability, setAvailability] = React.useState([]);
-      const [busy, setBusy] = React.useState(false);
-      const [status, setStatus] = React.useState('正在读取语音输入配置…');
-      const [error, setError] = React.useState(false);
+      const [probe, setProbe] = React.useState(null);
       const refreshAvailability = React.useCallback((signal) => localTtsTransport.sttProviders(signal)
-        .then((value) => { setAvailability(value); })
+        .then((value) => { setAvailability(value); setProbe(null); })
         .catch((probeError) => {
           setAvailability([]);
-          setStatus(probeError?.message || '无法读取识别提供方可用性。');
-          setError(true);
+          setProbe({ ok: false, text: probeError?.message || '无法读取识别提供方可用性。' });
         }), []);
-      const refresh = React.useCallback(() => {
-        localTtsTransport.sttConfig().then((value) => {
-          const id = sttProviderId(value);
-          setConfig(value);
-          setProvider(id);
-          setDraft(sttDraft(value, id));
-          setStatus('');
-          setError(false);
-        }).catch((loadError) => {
-          setStatus(loadError?.message || '无法读取语音输入配置。');
-          setError(true);
-        });
-        refreshAvailability();
-      }, [refreshAvailability]);
-      React.useEffect(() => { refresh(); }, [refresh]);
-      const selectProvider = (id) => {
-        setProvider(id);
-        setDraft(sttDraft(config, id));
-        setStatus('');
-        setError(false);
-      };
-      const save = async () => {
-        const option = sttOption(provider);
-        setBusy(true); setError(false);
-        try {
-          const value = await localTtsTransport.saveSttConfig({ provider, providers: { [option.key]: draft } });
-          const id = sttProviderId(value);
-          setConfig(value);
-          setProvider(id);
-          setDraft(sttDraft(value, id));
-          setStatus('已保存，下一次语音输入立即生效。');
-          refreshAvailability();
-        } catch (saveError) {
-          setStatus(saveError?.message || '保存失败。');
-          setError(true);
-        } finally { setBusy(false); }
-      };
-      const option = sttOption(provider);
+      /** 选中的提供方：草稿优先，其次是已保存的值。 */
+      const optionFor = (draft, stored) => sttOption(
+        typeof draft?.provider === 'string' ? draft.provider : sttProviderId(stored)
+      );
+      const form = askKit.useAskForm({
+        load: () => { refreshAvailability(); return localTtsTransport.sttConfig(); },
+        save: async (draft, stored) => {
+          const target = optionFor(draft, stored);
+          const storedFields = providerSectionOf(stored, target);
+          const values = {};
+          for (const field of target.fields) values[field.name] = askFieldValue(draft, storedFields, field.name);
+          const untouched = optionFor({}, stored).id === target.id
+            && target.fields.every((field) => values[field.name] === askFieldValue({}, storedFields, field.name));
+          if (untouched) return { changed: false };
+          const value = await localTtsTransport.saveSttConfig({ provider: target.id, providers: { [target.key]: values } });
+          return { changed: true, value };
+        },
+        onSaved: () => { refreshAvailability(); },
+        initial: EMPTY_ASK_DRAFT
+      });
+      const option = optionFor(form.draft, form.stored);
+      const provider = option.id;
+      const storedFields = providerSectionOf(form.stored, option);
       const availabilityById = new Map(availability.map((entry) => [entry.id, entry]));
       const recognitionSupported = typeof window !== 'undefined' && speechRecognitionCtor() !== null;
-      return jsx.jsxs('section', { className: 'dsh-fairy-voice-brain', children: [
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-head', children: [
-          jsx.jsx('h2', { className: 'dsh-fairy-voice-brain-title', children: 'Fairy 语音输入' }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '把说话转成文字并写入输入框（写入后由你确认再发送）。本地路径：Whisper 在浏览器内离线识别，或把 OpenAI 兼容地址指向本机服务（whisper.cpp server / faster-whisper / speaches）。在线路径：浏览器识别、Deepgram、Azure。密钥只保存在本机。' }),
-          recognitionSupported ? null : jsx.jsx('p', { className: 'dsh-fairy-voice-brain-copy', children: '当前浏览器不支持内置语音识别，请选择 Whisper 或自定义 HTTP 提供方。' })
-        ] }),
-        jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: [
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: '提供方' }),
-            jsx.jsx('select', {
-              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-stt-provider': 'true', value: provider,
-              onChange: (event) => selectProvider(event.target.value), 'aria-label': '语音识别提供方',
-              children: VOICE_STT_PROVIDERS.map((entry) => jsx.jsx('option', { value: entry.id, children: entry.label }, entry.id))
+      const selectProvider = (id) => {
+        form.change('provider', id);
+        // 换提供方就丢掉上一个提供方留下的同名字段，回到已保存的值。
+        for (const field of sttOption(id).fields) form.change(field.name, undefined);
+      };
+      const saveSttConfig = () => form.submit().catch((error) => { reportAskActionFailure('voice stt save', error); });
+      const probeNow = () => form.run('probe', refreshAvailability);
+      return jsx.jsx(askKit.AskSection, {
+        title: 'Fairy 语音输入',
+        description: [
+          '把说话转成文字并写入输入框（写入后由你确认再发送）。本地路径：Whisper 在浏览器内离线识别，或把 OpenAI 兼容地址指向本机服务（whisper.cpp server / faster-whisper / speaches）。在线路径：浏览器识别、Deepgram、Azure。密钥只保存在本机。',
+          ...(recognitionSupported ? [] : ['当前浏览器不支持内置语音识别，请选择 Whisper 或自定义 HTTP 提供方。'])
+        ],
+        children: jsx.jsxs('div', { style: ASK_STYLE.panel, children: [
+          jsx.jsx(askKit.AskRow, {
+            id: 'fairy-voice-stt-provider',
+            label: '提供方',
+            children: jsx.jsx(askKit.AskSelect, {
+              id: 'fairy-voice-stt-provider',
+              value: provider,
+              options: VOICE_STT_PROVIDERS.map((entry) => ({ value: entry.id, label: entry.label })),
+              onChange: selectProvider
             })
-          ] }),
-          ...option.fields.map((field) => jsx.jsxs('div', { className: 'dsh-fairy-voice-engine-field', children: [
-            jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: field.label }),
-            jsx.jsx('input', {
-              className: 'dsh-fairy-voice-brain-input', 'data-dsh-fairy-stt-field': field.name,
-              type: field.secret ? 'password' : 'text', autoComplete: field.secret ? 'new-password' : 'off',
-              value: draft[field.name] ?? '',
-              placeholder: field.secret && draft[field.name] === '***' ? '已保存，输入新值以替换' : field.placeholder || '',
-              onChange: (event) => setDraft((current) => ({ ...current, [field.name]: event.target.value })),
-              'aria-label': field.label
-            })
-          ] }, field.name)),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-actions', children: [
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button', type: 'button', disabled: busy, onClick: () => refreshAvailability(), children: '刷新可用性' }),
-            jsx.jsx('button', { className: 'dsh-fairy-voice-brain-button dsh-fairy-voice-brain-button--primary', type: 'button', disabled: busy, onClick: save, children: busy ? '处理中…' : '保存' })
-          ] }),
-          jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-panel', children: VOICE_STT_PROVIDERS.map((entry) => {
-            const current = availabilityById.get(entry.id);
-            return jsx.jsxs('div', { className: 'dsh-fairy-voice-brain-row', children: [
-              jsx.jsx('span', { className: 'dsh-fairy-voice-brain-label', children: entry.label }),
-              jsx.jsx('span', {
-                className: 'dsh-fairy-voice-brain-value', 'data-dsh-fairy-stt-available': entry.id,
-                children: current?.available === true ? '可用' : `不可用 · ${current?.reason || '未检查'}`
+          }),
+          ...option.fields.map((field) => {
+            const id = `fairy-voice-stt-${field.name}`;
+            const value = askFieldValue(form.draft, storedFields, field.name);
+            return jsx.jsx(askKit.AskRow, {
+              id,
+              label: field.label,
+              children: jsx.jsx(askKit.AskText, {
+                id,
+                type: field.secret ? 'password' : 'text',
+                autoComplete: field.secret ? 'new-password' : 'off',
+                value,
+                placeholder: field.secret && value === '***' ? '输入新值以替换已存密钥' : field.placeholder || '',
+                onChange: (next) => form.change(field.name, next)
               })
-            ] }, `stt-availability-${entry.id}`);
-          }) }),
-          jsx.jsx('p', { className: 'dsh-fairy-voice-brain-status', 'data-error': error ? 'true' : 'false', children: status })
+            }, field.name);
+          }),
+          jsx.jsx(askKit.AskActions, {
+            busy: form.busy,
+            status: form.status,
+            onPrimary: saveSttConfig
+          }),
+          jsx.jsx(askKit.AskActions, {
+            busy: form.busy, status: probe?.text || '', primary: '刷新可用性', onPrimary: probeNow
+          }),
+          jsx.jsxs('div', { style: ASK_STYLE.panel, children: VOICE_STT_PROVIDERS.map((entry) => {
+            const current = availabilityById.get(entry.id);
+            return jsx.jsx(AskStatusRow, {
+              label: entry.label,
+              value: current?.available === true ? '可用' : `不可用 · ${current?.reason || '未检查'}`,
+              attributes: { 'data-dsh-fairy-stt-available': entry.id }
+            }, `stt-availability-${entry.id}`);
+          }) })
         ] })
-      ] });
+      });
     }
 
     function usePlayer(sessionKey) {

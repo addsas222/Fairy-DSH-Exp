@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./index.js",
+    "./client-ask-kit": "./client-ask-kit.cjs",
     "./client-dom": "./client-dom.cjs",
     "./client-diagnostics": "./client-diagnostics.cjs",
     "./diagnostics": "./diagnostics.js",

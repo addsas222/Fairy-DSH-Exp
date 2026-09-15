@@ -10,6 +10,7 @@ DSH_ROOT="$(cd "$ROOT/.." && pwd)"
 node --check "$DSH_ROOT/fairy-contracts/index.js"
 node --check "$DSH_ROOT/fairy-contracts/diagnostics.js"
 node --check "$DSH_ROOT/fairy-contracts/client-diagnostics.cjs"
+node --check "$DSH_ROOT/fairy-contracts/client-ask-kit.cjs"
 node --check "$DSH_ROOT/balance-meter/dsh-balance-meter/lib/index.js"
 node --check "$DSH_ROOT/balance-meter/dsh-balance-meter/lib/client.js"
 node --check "$DSH_ROOT/browser-dock/dsh-browser-dock/proxy.cjs"
@@ -64,6 +65,7 @@ for runtime_file in "$DSH_ROOT/.agent-presets/fairy/runtime/index.js" "$DSH_ROOT
   fi
 done
 node --check "$ROOT/preflight-build.js"
+node --check "$ROOT/sync-ask-kit.js"
 node --check "$ROOT/upgrade-preflight.js"
 node --check "$ROOT/accepted-baseline.js"
 node --check "$ROOT/log-triage.js"
@@ -71,6 +73,8 @@ if [[ -f "$DSH_ROOT/launchers/dsh-web-launcher.sh" ]]; then
   zsh -n "$DSH_ROOT/launchers/dsh-web-launcher.sh"
 fi
 node "$ROOT/preflight-build.js"
+# 提问件真源与手写 bundle 的内联块必须逐字节一致（唯一真源是 fairy-contracts/client-ask-kit.cjs）。
+node "$ROOT/sync-ask-kit.js" --check
 node "$ROOT/accepted-baseline.js"
 node "$ROOT/log-triage.js" --require-healthy
 

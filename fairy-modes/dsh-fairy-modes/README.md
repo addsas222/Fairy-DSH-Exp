@@ -65,7 +65,8 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 - 标签：`极简` / `探查` / `PTC` / `创造` / `角色` / `空闲`；弹层六项 `探查·极简（官方）`、`探查·只读（流水线）`、`建造·PTC`、`角色扮演`、`创造·回忆`、`关闭`，勾选表示当前生效。
 - 数据源：优先 `useProjection('fairyMode')` 与 `useProjection('plan')`；两者缺席时回落到 `GET /fairy-modes/state`，并在**会话切换**与窗口事件 `fairy-modes-changed` 时刷新（不使用定时器）。
 - 极简项经 composer 动作发送 `/plan`（已生效时发 `/plan off`）；`inputActions` 不可用时该行不动作，chip 的 tooltip 提示手动输入。
-- 无设置命名空间：模式是会话状态，不是配置。
+- 设置卡：`settings.section`，`{ id: 'fairy-modes', order: 29, label: '模式' }`，卡体是归一化提问件（`AskSection` + `AskRow` + `AskSelect` + `AskActions`，来源 `fairy-contracts/client-ask-kit.cjs`）：选择只改草稿，点「保存」才写 `localStorage`，状态只用归一化那几句（`已保存。` / `没有需要保存的改动。` / `保存失败：…`），忙时保存按钮与下拉一起锁住；浏览器存储写不进去时报失败，不假装已保存。
+- 无设置命名空间：模式是会话状态，不是配置；设置卡里唯一的持久项是浏览器侧的「新会话默认模式」。
 
 ## 挂载（宿主侧集成点）
 
@@ -107,4 +108,4 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 pnpm install --ignore-scripts && pnpm test
 ```
 
-`test/modes.test.js`（事件与投影折叠、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）、`test/pipeline.test.js`（站点映射与环、`mode_pipeline` 四个动作、plan 闸门的解析/排队/降级三态、被挡住时不切站且不误报目标站、`advanced` 只认 committed/queued）、`test/client-contract.test.js`（chip 与设置卡契约：模式清单与术语、新会话默认值持久化、会话归属、极简走官方 `/plan`）。
+`test/modes.test.js`（事件与投影折叠、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）、`test/pipeline.test.js`（站点映射与环、`mode_pipeline` 四个动作、plan 闸门的解析/排队/降级三态、被挡住时不切站且不误报目标站、`advanced` 只认 committed/queued）、`test/client-contract.test.js`（chip 与设置卡契约：模式清单与术语、设置卡没有裸提问件、新会话默认值经归一化提问件落盘（草稿 → 保存 → 复读）与保存失败上报、会话归属、极简走官方 `/plan`）。

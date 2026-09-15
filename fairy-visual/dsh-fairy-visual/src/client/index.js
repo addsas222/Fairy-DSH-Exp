@@ -1,6 +1,8 @@
 const React = require('react');
 const { jsx, jsxs } = require('react/jsx-runtime');
 const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
+const { createAskKit } = require('../../../../fairy-contracts/client-ask-kit.cjs');
+const uiPrimitives = require('@deepseek-ai/dsh-client-ui-primitives');
 const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = require('./constants.js');
 const IDENTITY_SETTINGS_NAMESPACE = 'fairy-identity';
 const { deriveSessionActivity, syncDocumentMode } = require('./utils.js');
@@ -21,7 +23,7 @@ const { claimBrandSidebarGeometry } = require('./brand-sidebar-geometry.js');
 const { claimPowerModeGeometry } = require('./power-mode.js');
 const { createSelectionGuard } = require('./selection-guard.js');
 const { scheduleMascotScale, MASCOT_GEOMETRY_EVENT } = require('./mascot-scale-control.js');
-const { saveControllerSetting } = require('./settings-write.js');
+const { saveControllerSetting, setControllerSetting, settingError } = require('./settings-write.js');
 const { mutationTouchesSurface } = require('./surface-utils.js');
 const { migrateVisualSettings, normalizeSetting } = require('./settings-normalizer.cjs');
 const { createVisualTransitions } = require('./visual-transitions.js');
@@ -798,7 +800,58 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       ] });
     }
 
+    /** 归一化提问件：真源是 fairy-contracts/client-ask-kit.cjs，构建时内联。 */
+    const askKit = createAskKit({ React, jsx, jsxs, primitives: uiPrimitives });
+
+    /** 本卡提问的视觉字段（写回 `fairy-visual`）与身份字段（写回 `fairy-identity`）。 */
+    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode'];
+    const IDENTITY_TEXT_FIELDS = ['customName', 'secondAssistant'];
+    const IDENTITY_MODE_OPTIONS = [
+      { value: 'ling', label: '铃' },
+      { value: 'zhe', label: '哲' },
+      { value: 'custom', label: '自定义' },
+    ];
+
+    /** 家庭成员的线上形态：顿号/逗号分隔、最多 12 项（与逐键写盘时一致）。 */
+    const parseHousehold = (text) => String(text ?? '').split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
+    const sameHousehold = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
+
+    /** 两处命名空间在卡片里的稳定形态：草稿只覆盖其中的几个字段。 */
+    const askShape = (visual, identity) => ({
+      enabled: visual.enabled === true,
+      theme: visual.theme === 'light' ? 'light' : 'dark',
+      mascotVisible: visual.mascotVisible === true,
+      powerMode: visual.powerMode === 'low-power' ? 'low-power' : 'normal',
+      mode: identity.mode || 'ling',
+      customName: typeof identity.customName === 'string' ? identity.customName : '',
+      secondAssistant: typeof identity.secondAssistant === 'string' ? identity.secondAssistant : '',
+      household: Array.isArray(identity.household) ? identity.household.join('、') : '',
+    });
+
+    /** 草稿里相对当前值真改过的字段：只有这些会被写盘。 */
+    function changedFields(draft, current) {
+      const visual = VISUAL_FIELDS.filter((field) => draft[field] !== undefined && draft[field] !== current[field]).map((field) => [field, draft[field]]);
+      const identity = [];
+      if (draft.mode !== undefined && draft.mode !== current.mode) identity.push(['mode', draft.mode]);
+      for (const field of IDENTITY_TEXT_FIELDS) {
+        if (draft[field] !== undefined && draft[field] !== current[field]) identity.push([field, draft[field]]);
+      }
+      if (draft.household !== undefined && !sameHousehold(parseHousehold(draft.household), parseHousehold(current.household))) {
+        identity.push(['household', parseHousehold(draft.household)]);
+      }
+      return { visual, identity };
+    }
+
+    /** 写盘失败先留诊断再抛出，交给提问件把原因写进状态行。 */
+    const writeSetting = (scope, field, value) => setControllerSetting(scope, field, value).catch((error) => {
+      settingError(field, error);
+      throw error;
+    });
+
     function Settings({ controller, identitySettings }) {
+      // 组件作用域里的绑定：即便将来有别的机制往这个 bundle 里再塞一份套件，
+      // 也不会在工厂顶层撞名。
+      const { ASK_TEXT, AskSection, AskRow, AskText, AskSelect, AskToggle, AskActions, useAskForm } = askKit;
       const state = useController(controller);
       // Keep a cached value for the host settings bridge. Some host versions
       // return a fresh snapshot wrapper on every read; passing that directly to
@@ -812,19 +865,49 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
         refresh();
         return identitySettings.subscribe(refresh);
       }, [identitySettings]);
-      const mode = identityValue.mode || 'ling';
-      return jsxs('div', {
-        style: { display: 'grid', gap: 12, padding: 16 },
+      // 主机设置桥用 `writable: false` 声明只读会话；字段缺失时按可写处理，
+      // 免得整张卡被误判成只读。
+      const writable = identitySettings.getSnapshot()?.writable !== false;
+      const live = askShape(state.settings, identityValue);
+      // 读写都以“现读一次”为准：挂载后才到达的主机值与会话头那个 H.D.D 开关
+      // 都不经过草稿，草稿只负责用户改过的那几个字段。
+      const readCurrent = () => askShape(controller.getSnapshot().settings, readIdentity());
+      const form = useAskForm({
+        load: readCurrent,
+        save: async (draft) => {
+          const { visual, identity } = changedFields(draft, readCurrent());
+          if (!visual.length && !identity.length) return { changed: false };
+          for (const [field, value] of visual) await writeSetting(controller, field, value);
+          for (const [field, value] of identity) await writeSetting(identitySettings, field, value);
+          return { changed: true };
+        },
+      });
+      const value = (key) => (form.draft[key] === undefined ? live[key] : form.draft[key]);
+      /** 失败已经进了状态行与诊断，这里只挡住重复抛出的未处理拒绝。 */
+      const submit = () => { form.submit().catch(() => {}); };
+      /** 文本行失焦即落盘；草稿与当前值一致时不空跑一条状态文案。 */
+      const flush = () => {
+        const { visual, identity } = changedFields(form.draft, readCurrent());
+        if (form.busy === null && (visual.length || identity.length)) submit();
+      };
+      const customMode = value('mode') === 'custom';
+      return jsxs(AskSection, {
+        title: 'HDD 视觉与 Fairy 身份',
         children: [
-          jsx('label', { children: [jsx('input', { type: 'checkbox', checked: state.settings.enabled, onChange: (event) => save(controller, 'enabled', event.target.checked) }), ' 启用 HDD 视觉'] }),
-          jsx('label', { children: [jsx('input', { type: 'checkbox', checked: state.settings.theme === 'light', onChange: (event) => save(controller, 'theme', event.target.checked ? 'light' : 'dark') }), ' HDD 日间模式'] }),
-          jsx('label', { children: [jsx('input', { type: 'checkbox', checked: state.settings.mascotVisible, onChange: (event) => save(controller, 'mascotVisible', event.target.checked) }), ' 显示 Fairy 主视觉'] }),
-          jsx('label', { children: [jsx('input', { type: 'checkbox', checked: state.settings.powerMode === 'low-power', onChange: (event) => save(controller, 'powerMode', event.target.checked ? 'low-power' : 'normal') }), ' 低功耗模式'] }),
-          jsx('hr', {}),
-          jsx('label', { children: ['Fairy 当前将我识别为：', jsx('select', { value: mode, onChange: (event) => save(identitySettings, 'mode', event.target.value), children: [jsx('option', { value: 'ling', children: '铃' }), jsx('option', { value: 'zhe', children: '哲' }), jsx('option', { value: 'custom', children: '自定义' })] })] }),
-          mode === 'custom' ? jsx('label', { children: ['自定义称呼：', jsx('input', { value: identityValue.customName || '', maxLength: 40, onChange: (event) => save(identitySettings, 'customName', event.target.value) })] }) : null,
-          mode === 'custom' ? jsx('label', { children: ['第二助手（可选）：', jsx('input', { value: identityValue.secondAssistant || '', maxLength: 40, onChange: (event) => save(identitySettings, 'secondAssistant', event.target.value) })] }) : null,
-          mode === 'custom' ? jsx('label', { children: ['家庭成员（可选，逗号分隔）：', jsx('input', { value: Array.isArray(identityValue.household) ? identityValue.household.join('、') : '', maxLength: 240, onChange: (event) => save(identitySettings, 'household', event.target.value.split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12)) })] }) : null,
+          jsx(AskToggle, { id: 'dsh-fairy-visual-enabled', label: '启用 HDD 视觉', checked: value('enabled'), disabled: !writable, onChange: (next) => form.change('enabled', next) }, 'enabled'),
+          jsx(AskToggle, { id: 'dsh-fairy-visual-theme', label: 'HDD 日间模式', checked: value('theme') === 'light', disabled: !writable, onChange: (next) => form.change('theme', next ? 'light' : 'dark') }, 'theme'),
+          jsx(AskToggle, { id: 'dsh-fairy-visual-mascot', label: '显示 Fairy 主视觉', checked: value('mascotVisible'), disabled: !writable, onChange: (next) => form.change('mascotVisible', next) }, 'mascot'),
+          jsx(AskToggle, { id: 'dsh-fairy-visual-power', label: '低功耗模式', checked: value('powerMode') === 'low-power', disabled: !writable, onChange: (next) => form.change('powerMode', next ? 'low-power' : 'normal') }, 'power'),
+          jsx(AskRow, { id: 'dsh-fairy-identity-mode', label: 'Fairy 当前将我识别为：', children: jsx(AskSelect, { id: 'dsh-fairy-identity-mode', value: value('mode'), options: IDENTITY_MODE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mode', next) }) }, 'mode'),
+          jsx('div', {
+            onBlur: flush,
+            children: customMode ? [
+              jsx(AskRow, { id: 'dsh-fairy-identity-custom-name', label: '自定义称呼：', children: jsx(AskText, { id: 'dsh-fairy-identity-custom-name', value: value('customName'), disabled: !writable, onChange: (next) => form.change('customName', next.slice(0, 40)) }) }, 'customName'),
+              jsx(AskRow, { id: 'dsh-fairy-identity-second-assistant', label: '第二助手（可选）：', children: jsx(AskText, { id: 'dsh-fairy-identity-second-assistant', value: value('secondAssistant'), disabled: !writable, onChange: (next) => form.change('secondAssistant', next.slice(0, 40)) }) }, 'secondAssistant'),
+              jsx(AskRow, { id: 'dsh-fairy-identity-household', label: '家庭成员（可选，逗号分隔）：', children: jsx(AskText, { id: 'dsh-fairy-identity-household', value: value('household'), disabled: !writable, onChange: (next) => form.change('household', next.slice(0, 240)) }) }, 'household'),
+            ] : null,
+          }, 'custom'),
+          jsx(AskActions, { busy: form.busy, status: writable ? form.status : ASK_TEXT.readOnly, primary: ASK_TEXT.save, onPrimary: submit, writable }, 'actions'),
         ],
       });
     }

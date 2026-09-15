@@ -53,6 +53,10 @@
   `conversation.input.left`。
 - 有 `src/` 的包（browser-dock、fairy-visual、fairy-memory）**必须重建**：
   `pnpm bundle`（fairy-memory 为 `node scripts/bundle.mjs`），`lib/**` 是产物。
+- 设置卡里"向用户提问"的控件不得手搓：统一用 `fairy-contracts/client-ask-kit.cjs`
+  （有 `src/` 直接 require；手写 bundle 由 `node fairy-system/sync-ask-kit.js` 内联，
+  `--check` 在 `check.sh` 里查漂移）。界面件优先官方原语（`Input`/`Button`/`StateDot`），
+  官方没有的用官方设计令牌自绘；文案只在 `ASK_TEXT` 里写一次。
 - 预设行名只能是字面字符串或预设内相对路径；`$DSH_HOME` 下被 link 的包只能经
   **预设内 shim**（`DSH_FAIRY_REPO_ROOT` 解析真身）或文件路径加载。
 - 预设必须**复制**进 `$DSH_HOME/.agent-presets/`：`readdir` 的
