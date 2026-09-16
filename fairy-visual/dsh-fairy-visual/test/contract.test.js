@@ -1057,3 +1057,12 @@ test('centralizes official DOM coupling in the capability adapter', () => {
   assert.doesNotMatch(surfaceUtilsSource, /\[data-conversation-scroll\]|\[data-input-scroll\]/);
   assert.doesNotMatch(composerAnchorSource, /\[data-conversation-scroll\]/);
 });
+
+test('附件态底材不得盖住输入内容（z-index 层序）', () => {
+  // 附件态会在卡片上挂一块不透明底材（::after，z-index:1）。输入区必须以 z-index:2
+  // 压在它上面，否则文字被底材盖掉（实机症状：缩略图在、文字消失）。
+  const cardChildrenRule = styleSource.match(/\[data-composer-card="true"\]>:not\(\[data-dsh-fairy-composer-material="true"\]\)[^{]*\{[^}]*\}/)?.[0] ?? '';
+  assert.match(cardChildrenRule, /:not\(\[data-input-scroll\]\)/, '输入区必须排除在这条 z-index:1 之外');
+  assert.match(styleSource, /\[data-input-scroll\]\{position:relative!important;z-index:2!important/);
+  assert.match(styleSource, /\[data-dsh-fairy-composer-attachments="true"\]\{position:relative!important;z-index:2!important\}/, '附件槽自身要在底材之上');
+});
