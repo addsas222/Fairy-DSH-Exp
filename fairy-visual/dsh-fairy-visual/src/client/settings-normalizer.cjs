@@ -2,6 +2,12 @@
 
 const SETTINGS_VERSION = 2;
 const SPEED_STOPS = Object.freeze([0.7, 1, 1.5]);
+// 大眼睛位置：九宫格锚点（与 host schema、客户端常量表同一份清单）。
+const MASCOT_POSITIONS = Object.freeze([
+  'top-left', 'top-center', 'top-right',
+  'middle-left', 'center', 'middle-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
+]);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const nearest = (value, values) => values.reduce((best, item) => Math.abs(item - value) < Math.abs(best - value) ? item : best, values[0]);
 const toFiniteNumber = (value) => {
@@ -26,6 +32,8 @@ function migrateVisualSettings(input = {}) {
     contentFade: typeof source.contentFade === 'boolean' ? source.contentFade : false,
     mascotScale: Number.isFinite(numericScale) ? clamp(numericScale, 0.55, 1) : 1,
     mascotAnimationSpeed: Number.isFinite(numericSpeed) ? nearest(numericSpeed, SPEED_STOPS) : 1,
+    // 这个对象是**逐字段重建**的：漏一个字段就等于把它丢掉（mascotPosition 曾因此写入无效）。
+    mascotPosition: MASCOT_POSITIONS.includes(source.mascotPosition) ? source.mascotPosition : 'center',
     powerMode: source.powerMode === 'low-power' ? 'low-power' : 'normal',
     composerDockHeight: Number.isFinite(numericComposerHeight) ? Math.round(clamp(numericComposerHeight, 132, 420)) : 132,
   };
@@ -35,4 +43,4 @@ function normalizeSetting(field, value, current = {}) {
   return migrateVisualSettings({ ...current, [field]: value })[field];
 }
 
-module.exports = { SETTINGS_VERSION, SPEED_STOPS, migrateVisualSettings, normalizeSetting };
+module.exports = { SETTINGS_VERSION, SPEED_STOPS, MASCOT_POSITIONS, migrateVisualSettings, normalizeSetting };

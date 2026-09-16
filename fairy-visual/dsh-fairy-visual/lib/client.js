@@ -869,8 +869,8 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				26
 			][Math.floor(index / 3)]}%}`;
 		}).join("") + "html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}");
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:51px!important;width:max-content!important;height:20px!important;display:flex!important;align-items:center!important;gap:2px!important;padding:2px 4px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;pointer-events:auto!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:14px!important;height:14px!important;padding:0!important;border-radius:4px!important;border:1px solid rgba(255,255,255,.18)!important;background:transparent!important;color:var(--dsh-card-text,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important;cursor:pointer!important}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:110px!important;width:max-content!important;height:18px!important;display:flex!important;align-items:center!important;gap:1px!important;padding:2px 3px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;pointer-events:auto!important}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:10px!important;height:10px!important;padding:0!important;border-radius:4px!important;border:1px solid rgba(255,255,255,.18)!important;background:transparent!important;color:var(--dsh-card-text,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important;cursor:pointer!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button][aria-pressed="true"]{background:var(--dsh-fairy-keycap-face,#555f68)!important;border-color:var(--dsh-fairy-keycap-edge,#3d444b)!important;color:#fff!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{top:31px!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{height:24px!important;padding:2px 6px!important;overflow:hidden!important;--dsh-fairy-scale-track:#8ea6b5;--dsh-fairy-scale-track-rest:rgba(82,112,132,.24)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-track:#a8bac9;--dsh-fairy-scale-track-rest:rgba(168,186,201,.24)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]{position:absolute!important;left:16px!important;right:16px!important;top:50%!important;transform:translateY(-50%)!important;width:auto!important;height:16px!important;margin:0!important;box-sizing:border-box!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track{height:5px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-track) 0 var(--dsh-fairy-scale),var(--dsh-fairy-scale-track-rest) var(--dsh-fairy-scale) 100%)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{margin-top:-2.5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track{height:5px!important;background:var(--dsh-fairy-scale-track-rest)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{height:5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{background:var(--dsh-fairy-scale-track)!important}`);
@@ -6889,6 +6889,17 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			1,
 			1.5
 		]);
+		const MASCOT_POSITIONS = Object.freeze([
+			"top-left",
+			"top-center",
+			"top-right",
+			"middle-left",
+			"center",
+			"middle-right",
+			"bottom-left",
+			"bottom-center",
+			"bottom-right"
+		]);
 		const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 		const nearest = (value, values) => values.reduce((best, item) => Math.abs(item - value) < Math.abs(best - value) ? item : best, values[0]);
 		const toFiniteNumber = (value) => {
@@ -6911,6 +6922,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				contentFade: typeof source.contentFade === "boolean" ? source.contentFade : false,
 				mascotScale: Number.isFinite(numericScale) ? clamp(numericScale, .55, 1) : 1,
 				mascotAnimationSpeed: Number.isFinite(numericSpeed) ? nearest(numericSpeed, SPEED_STOPS) : 1,
+				mascotPosition: MASCOT_POSITIONS.includes(source.mascotPosition) ? source.mascotPosition : "center",
 				powerMode: source.powerMode === "low-power" ? "low-power" : "normal",
 				composerDockHeight: Number.isFinite(numericComposerHeight) ? Math.round(clamp(numericComposerHeight, 132, 420)) : 132
 			};
@@ -6924,6 +6936,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		module.exports = {
 			SETTINGS_VERSION,
 			SPEED_STOPS,
+			MASCOT_POSITIONS,
 			migrateVisualSettings,
 			normalizeSetting
 		};

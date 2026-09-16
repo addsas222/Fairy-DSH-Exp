@@ -16,8 +16,8 @@ test('emits the approved scoped CSS byte sequence', () => {
   try {
     injectStyles();
     const [style] = nodes.values();
-    assert.equal(Buffer.byteLength(style.textContent), 143692);
-    assert.equal(createHash('sha256').update(style.textContent).digest('hex'), 'be25f3400bf4896b94e03f5eae7aac9a441e535eb174c66e3f52d9a3333931d1');
+    assert.equal(Buffer.byteLength(style.textContent), 143693);
+    assert.equal(createHash('sha256').update(style.textContent).digest('hex'), 'a5e4651270933dbb0b634b2e21d744cb7a5184f4211cf7e1e521b7e30bbac011');
     injectStyles();
     assert.equal(nodes.size, 1);
   } finally {
