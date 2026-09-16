@@ -168,8 +168,9 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
       return hookCells[index];
     },
     useCallback(callback) { hookCursor++; return callback; },
-    useEffect(callback) { hookCursor++; effects.push(callback); },
-    useLayoutEffect(callback) { hookCursor++; effects.push(callback); },
+    // 按 hook cell 存**最新**一次：多趟渲染只保留每个 effect 的最后一次，数组不再无限增长。
+    useEffect(callback) { const index = hookCursor++; effects[index] = callback; },
+    useLayoutEffect(callback) { const index = hookCursor++; effects[index] = callback; },
     useSyncExternalStore(_subscribe, getSnapshot) { hookCursor++; return getSnapshot(); },
   };
   const jsxRuntime = {
@@ -274,7 +275,8 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   assert.match(rendered, /profiles\/web\/cordis\.patch\.yml/);
 
   // The mounted effect reads engine availability from the host.
-  for (const effect of effects) effect();
+  // 快照迭代：effect 触发重渲染时数组会变，直接在活数组上 for...of 会永不结束。
+  for (const effect of [...effects]) if (typeof effect === 'function') effect();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(fetches[0].url, '/fairy-search/state');
 
@@ -311,6 +313,7 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
       register(definition, component) { slots.set(definition.id, { definition, component }); },
     },
   });
+  hookCursor = 0;
   const readOnlyElement = slots.get('fairy-search').component();
   const readOnlyTree = renderTree(readOnlyElement.type(readOnlyElement.props));
   assert.equal(JSON.stringify(readOnlyTree).includes(ASK_TEXT.readOnly), true, '只读会话给出套件那句说明');
