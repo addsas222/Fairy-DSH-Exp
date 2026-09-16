@@ -7023,7 +7023,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						const height = random(2, 13);
 						return `polygon(0% ${top.toFixed(1)}%,100% ${top.toFixed(1)}%,100% ${(top + height).toFixed(1)}%,0% ${(top + height).toFixed(1)}%)`;
 					};
-					const shakeFrames = Array.from({ length: 9 }, () => ({ transform: `translate3d(${random(-.35, .35).toFixed(3)}%,${random(-.25, .25).toFixed(3)}%,0)` }));
+					const shakeFrames = Array.from({ length: 9 }, () => ({ transform: `translate3d(${random(-.1, .1).toFixed(3)}%,${random(-.08, .08).toFixed(3)}%,0)` }));
 					this.frameAnimation = frame.animate(shakeFrames, {
 						duration,
 						easing: "steps(9, jump-start)",
@@ -7039,7 +7039,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 							return {
 								opacity: 1,
 								clipPath: band(),
-								transform: `translate3d(${random(-8, 8).toFixed(2)}%,0,0)`
+								backgroundColor: `rgba(96,196,255,${random(.05, .15).toFixed(2)})`
 							};
 						});
 						layer.animate(keyframes, {
@@ -7073,7 +7073,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						bar.style.top = `${random(0, 88).toFixed(1)}%`;
 						bar.style.left = "-5%";
 						bar.style.width = "110%";
-						bar.style.height = `${random(2, 11).toFixed(1)}%`;
+						bar.style.height = `${random(2, 6).toFixed(1)}%`;
 						bar.style.background = colors[Math.floor(Math.random() * colors.length)];
 						overlay.appendChild(bar);
 						const keyframes = Array.from({ length: 7 }, (_, step) => step === 6 || Math.random() < .25 ? { opacity: 0 } : {
@@ -7179,7 +7179,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 					clippedRegion.appendChild(base);
 					const baseFrames = Array.from({ length: 9 }, (_, index) => index === 8 ? { opacity: 0 } : {
 						opacity: 1,
-						transform: `translate3d(${random(-.35, .35).toFixed(3)}%,${random(-.25, .25).toFixed(3)}%,0)`
+						transform: `translate3d(${random(-.1, .1).toFixed(3)}%,${random(-.08, .08).toFixed(3)}%,0)`
 					});
 					this.animate(base, baseFrames, {
 						duration,
@@ -7198,7 +7198,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 								return {
 									opacity: 1,
 									clipPath: band(),
-									transform: `translate3d(${random(-8, 8).toFixed(2)}%,0,0)`
+									backgroundColor: `rgba(96,196,255,${random(.05, .15).toFixed(2)})`
 								};
 							});
 							this.animate(layer, keyframes, {

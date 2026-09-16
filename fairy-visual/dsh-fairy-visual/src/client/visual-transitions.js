@@ -261,8 +261,9 @@ function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, c
         return `polygon(0% ${top.toFixed(1)}%,100% ${top.toFixed(1)}%,100% ${(top + height).toFixed(1)}%,0% ${(top + height).toFixed(1)}%)`;
       };
 
+      // 整帧轻推（≤0.1% ≈ 1.3px）：原 ±0.35% 在大屏上是 4-5px 的跳，观感像卡顿。
       const shakeFrames = Array.from({ length: 9 }, () => ({
-        transform: `translate3d(${random(-.35, .35).toFixed(3)}%,${random(-.25, .25).toFixed(3)}%,0)`,
+        transform: `translate3d(${random(-.1, .1).toFixed(3)}%,${random(-.08, .08).toFixed(3)}%,0)`,
       }));
       this.frameAnimation = frame.animate(shakeFrames, { duration, easing: 'steps(9, jump-start)', fill: 'none' });
 
@@ -276,7 +277,9 @@ function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, c
           return {
             opacity: 1,
             clipPath: band(),
-            transform: `translate3d(${random(-8, 8).toFixed(2)}%,0,0)`,
+            // 不位移切片：横带一旦水平位移，落在带里的文字就被切开、错位（实机症状）。
+            // 保留「信号带」观感的做法是给带子加色罩闪烁，而不是移动像素。
+            backgroundColor: `rgba(96,196,255,${random(.05, .15).toFixed(2)})`,
           };
         });
         layer.animate(keyframes, { duration, easing: 'steps(8, jump-start)', fill: 'forwards' });
@@ -299,7 +302,7 @@ function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, c
         bar.style.top = `${random(0, 88).toFixed(1)}%`;
         bar.style.left = '-5%';
         bar.style.width = '110%';
-        bar.style.height = `${random(2, 11).toFixed(1)}%`;
+        bar.style.height = `${random(2, 6).toFixed(1)}%`;
         bar.style.background = colors[Math.floor(Math.random() * colors.length)];
         overlay.appendChild(bar);
         const keyframes = Array.from({ length: 7 }, (_, step) => step === 6 || Math.random() < .25
@@ -407,7 +410,7 @@ function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, c
         ? { opacity: 0 }
         : {
           opacity: 1,
-          transform: `translate3d(${random(-.35, .35).toFixed(3)}%,${random(-.25, .25).toFixed(3)}%,0)`,
+          transform: `translate3d(${random(-.1, .1).toFixed(3)}%,${random(-.08, .08).toFixed(3)}%,0)`,
         });
       this.animate(base, baseFrames, { duration, easing: 'steps(9, jump-start)', fill: 'forwards' });
 
@@ -426,7 +429,9 @@ function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, c
             return {
               opacity: 1,
               clipPath: band(),
-              transform: `translate3d(${random(-8, 8).toFixed(2)}%,0,0)`,
+              // 不位移切片：横带一旦水平位移，落在带里的文字就被切开、错位（实机症状）。
+              // 保留「信号带」观感的做法是给带子加色罩闪烁，而不是移动像素。
+              backgroundColor: `rgba(96,196,255,${random(.05, .15).toFixed(2)})`,
             };
           });
           this.animate(layer, keyframes, { duration, easing: 'steps(8, jump-start)', fill: 'forwards' });

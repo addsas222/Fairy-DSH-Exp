@@ -1125,3 +1125,13 @@ test('全页 800 字重不得命中官方弹层；合成粗体另设全局兜底
   assert.match(styleSource, /html\[data-dsh-fairy-visual\] body :where\(\.dsh-fairy-session-metrics-panel,\.dsh-fairy-session-metrics-item\)\{font-weight:800!important\}/, 'fairy 自建弹层必须显式兜回 800');
   assert.ok(styleSource.indexOf('.dsh-fairy-session-metrics-panel,.dsh-fairy-session-metrics-item') < styleSource.indexOf('.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle'), '自建表面 800 必须写在 750 特例之前');
 });
+
+test('过渡动效不得水平位移画面（文字被切开/错位的实机症状）', () => {
+  // 实机症状：会话/模式过渡期的横带把落在带里的文字整体平移几十像素（实测 -83.7px / +32.2px），
+  // 用户看到的就是「文字错位、被边缘切开」。修：切片不做位移，改用色罩闪烁保留信号带观感。
+  assert.doesNotMatch(visualTransitionsSource, /translate3d\(\$\{random\(-8, 8\)/, '过渡切片不得再水平位移');
+  assert.doesNotMatch(visualTransitionsSource, /random\(-\.35, \.35\)/, '整帧抖动不得再回到 ±0.35%');
+  const tints = (visualTransitionsSource.match(/backgroundColor: `rgba\(96,196,255,/g) || []).length;
+  assert.equal(tints, 2, '模式与会话两处过渡都要用色罩替代位移');
+  assert.match(visualTransitionsSource, /bar\.style\.height = `\$\{random\(2, 6\)\.toFixed\(1\)\}%`/, '彩条高度上限 6%（原先 11% 会整块盖住文字行）');
+});
