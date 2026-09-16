@@ -213,8 +213,16 @@ function installRuntime(options, base) {
     log(`放行 ${allowed.length} 个原生依赖的构建脚本（pnpm-workspace.yaml）并显式重建：${allowed.join(', ')}`);
     if (!options.dryRun) {
       const second = rebuild(allowed);
-      const lines = (second.stdout ?? '').trim().split('\n').filter((line) => line.trim());
-      console.log(lines.length > 0 ? lines.slice(-3).join('\n') : '（rebuild 无输出：这批被拦的多是 prebuild/平台分包，本就无需现场构建）');
+      // stdout **和** stderr 都要打：只看 stdout 会把 pnpm 的解析/构建失败整条吞掉
+      // （本轮实测过一次：pnpm-workspace.yaml 因缺引号解析失败，第二趟就成了"无输出"的假象）。
+      const lines = `${second.stdout ?? ''}\n${second.stderr ?? ''}`.trim().split('\n').filter((line) => line.trim());
+      console.log(lines.length > 0 ? lines.slice(-4).join('\n') : '（rebuild 无输出：这批被拦的多是 prebuild/平台分包，本就无需现场构建）');
+      // 断言：pnpm 真的读懂了这份配置。配置写坏时任何 pnpm 命令都以非 0 退出，
+      // 所以退出码 0 即证明"放行清单已被接受"——否则它只是个未验证的假设。
+      if (second.status !== 0) {
+        fail(`pnpm rebuild 退出码 ${second.status}：放行清单未被接受或构建失败（见上方输出）`);
+      }
+      log('放行清单已被 pnpm 接受（rebuild 退出码 0）✓');
     }
   }
 
