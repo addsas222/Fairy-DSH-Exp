@@ -180,9 +180,15 @@ function installRuntime(options, base) {
   const result = IS_WINDOWS
     ? spawnSync(`pnpm add ${spec}`, { cwd: root, stdio: 'inherit', shell: true })
     : spawnSync('pnpm', ['add', spec], { cwd: root, stdio: 'inherit' });
-  if (result.status !== 0) fail('运行时安装失败（检查网络与 pnpm 版本 ≥ 11）');
+  // 成败以**产物是否就位**为准，不看 pnpm 的退出码：pnpm ≥ 10 默认拦截依赖的构建脚本
+  // （node-pty / koffi 等原生件），会以 `ERR_PNPM_IGNORED_BUILDS` 退出 1，但运行时本身
+  // 已经装好、应用照常启动（实测）。把它当失败会让一键安装在干净机器上直接中断。
   const installed = inspectRuntime(join(root, 'node_modules', '@deepseek-ai', 'dsh'));
-  if (!installed) fail('运行时装完了但找不到 @deepseek-ai/dsh/lib/bin.js');
+  if (!installed) fail('运行时安装失败（检查网络与 pnpm 版本 ≥ 11）');
+  if (result.status !== 0) {
+    warn('pnpm 退出码非 0：多半是它默认拦截了依赖构建脚本（node-pty / koffi 等原生件）。');
+    warn(`运行时已就位、应用可正常启动；要启用终端类原生功能，可在 ${root} 跑 pnpm approve-builds`);
+  }
   return installed;
 }
 
@@ -256,12 +262,17 @@ function main() {
   requireCommand('git', '安装 Git：https://git-scm.com');
   requireCommand('pnpm', '安装 pnpm ≥ 11：corepack enable pnpm（或 npm i -g pnpm）');
 
-  let runtime = detectRuntime(options);
+  // `--install-runtime` 是**强制**语义：跳过一切环境探测，直接装一份到 <home>/runtime。
+  // 否则本机已有安装时会被探测命中，"干净机器"那条分支永远跑不到（本仓 2026-09-16 踩过：
+  // 报告写成"已验证"，实际两次都命中了 C:/tmp/dsh-011 的旧安装）。
+  let runtime = options.installRuntime ? null : detectRuntime(options);
   if (!runtime) {
-    // 一键安装的默认行为：找不到就自己装到 <home>/runtime（与平台无关的目录），
-    // 版本线由 --base 决定（默认 011 ⇒ 0.1.1-rc.2）。
+    // 默认路径：找不到就自己装到 <home>/runtime（与平台无关的目录），版本线由 --base 决定
+    // （默认 011 ⇒ 0.1.1-rc.2）。
     const wanted = KNOWN_BASES.includes(options.base) ? options.base : '011';
-    log(`没有找到 DSH 运行时；按底座线 ${wanted} 装一个到 <home>/runtime`);
+    log(options.installRuntime
+      ? `按 --install-runtime 强制安装运行时（跳过探测）到 <home>/runtime`
+      : `没有找到 DSH 运行时；按底座线 ${wanted} 装一个到 <home>/runtime`);
     runtime = installRuntime(options, wanted);
   }
   if (!runtime) fail('缺少运行时：--runtime <@deepseek-ai/dsh 包目录或 lib/bin.js>，或 --install-runtime [版本]');
