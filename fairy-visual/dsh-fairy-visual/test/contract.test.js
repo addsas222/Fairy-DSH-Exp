@@ -571,7 +571,7 @@ test('keeps native card ownership and flat selected-session presentation', () =>
   assert.match(styleSource, /justify-content:space-between!important/);
   assert.match(styleSource, /div:nth-child\(1\),html[^}]*div:nth-child\(2\)\{display:contents!important\}/);
   assert.match(styleSource, /grid-template-columns:max-content max-content!important/);
-  assert.match(styleSource, /clip-path:none!important;-webkit-mask-image:none!important;mask-image:none!important;border-radius:8px!important/);
+  assert.match(styleSource, /clip-path:none!important;-webkit-mask-image:none!important;mask-image:none!important;border-radius:var\(--dsh-fairy-keycap-radius\)!important/);
   assert.doesNotMatch(styleSource, /data:image\/svg\+xml/);
   assert.match(styleSource, /DeepSeek 余额.*>div:nth-child\(3\)\{display:grid!important;grid-template-columns:max-content max-content!important;column-gap:0!important;justify-content:space-between!important;grid-column:1 \/ span 2!important;grid-row:2!important;width:100%!important;max-width:100%!important/);
   assert.match(clientSource, /const dailyRow = balance\.children\[1\]/);
@@ -588,12 +588,12 @@ test('keeps native card ownership and flat selected-session presentation', () =>
 test('shares the new-session material with the voice volume hardware', () => {
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#30353a/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*--dsh-card-border:linear-gradient\(135deg,#555f68/);
-  assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*box-shadow:-4px -4px 9px rgba\(255,255,255,\.06\),5px 6px 13px rgba\(0,0,0,\.13\)/);
+  assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*box-shadow:var\(--dsh-fairy-keycap-shadow\)/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{background-image:radial-gradient\(circle at 1px 1px,var\(--dsh-card-grain-light\)/);
   assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#f4f5f6/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\] \[data-dsh-fairy-volume-input="true"\]\{[^}]*opacity:0!important/);
   assert.match(styleSource, /data-dsh-fairy-wave-bar="true"\]\{width:2px!important;min-width:0!important;max-width:2px!important;flex:1 1 2px!important/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px!important;box-shadow:-4px -4px 9px/);
+  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px!important;box-shadow:var\(--dsh-fairy-keycap-shadow\)/);
   assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-mascot-scale-control="true"\]\{box-shadow:-4px -4px 9px rgba\(255,255,255,\.46\)/);
 });
 
@@ -1097,5 +1097,15 @@ test('官方 Plan 标识在 HDD 下套用键帽风格（不再用 warn 白底橙
   assert.match(adapterSource, /planChip: ariaLabelSelector\('planChip', \{ base: 'button', match: 'prefix' \}\)/);
   assert.match(adapterSource, /OPTIONAL: Object\.freeze\(\['toBottom', 'planChip'\]\)/, '计划标识属于「出现时才调整」的 OPTIONAL 能力');
   assert.match(composerMarkerSource, /mark\(planTarget, 'data-dsh-fairy-composer-plan-control'\)/);
-  assert.match(styleSource, /\[data-dsh-fairy-composer-plan-control="true"\]\{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:8px!important;background:linear-gradient\(#30353a,#30353a\) padding-box/, '必须套用工作区芯片同款键帽底材');
+  assert.match(styleSource, /\[data-dsh-fairy-composer-plan-control="true"\]\{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:var\(--dsh-fairy-keycap-radius\)!important;background:linear-gradient\(var\(--dsh-fairy-keycap-face\),var\(--dsh-fairy-keycap-face\)\) padding-box/, '必须套用工作区芯片同款键帽底材（走 token）');
+});
+
+test('键帽风格走 token：配方只定义一处，规则不再内联字面量', () => {
+  // 归一化：同一套键帽底材曾在 7~11 处复制（改一处漏一处 → 风格漂移）。现在只留一份 token。
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\]\{--dsh-fairy-keycap-face:#30353a;--dsh-fairy-keycap-edge:linear-gradient\(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%\);--dsh-fairy-keycap-text:#f4f7fb;--dsh-fairy-keycap-hover:#cfe8ff;--dsh-fairy-keycap-radius:8px;--dsh-fairy-keycap-shadow:/, '键帽 token 必须定义（face/edge/text/hover/radius/shadow）');
+  assert.match(styleSource, /\[data-dsh-fairy-keycap="true"\]\{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:var\(--dsh-fairy-keycap-radius\)!important;background:linear-gradient\(var\(--dsh-fairy-keycap-face\),var\(--dsh-fairy-keycap-face\)\) padding-box,var\(--dsh-fairy-keycap-edge\) border-box!important/, '可复用键帽规则必须在（新元素只打 data-dsh-fairy-keycap）');
+  assert.doesNotMatch(styleSource, /linear-gradient\(#30353a,#30353a\) padding-box/, '键帽底不得再内联字面量');
+  assert.doesNotMatch(styleSource, /linear-gradient\(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%\) border-box/, '键帽描边不得再内联字面量');
+  assert.ok((styleSource.match(/var\(--dsh-fairy-keycap-/g) || []).length >= 20, '键帽族必须引用 token（当前 48 处）');
+  assert.match(styleSource, /\[data-dsh-fairy-composer-plan-control="true"\][^}]*var\(--dsh-fairy-keycap-face\)/, '计划标识已走 token');
 });
