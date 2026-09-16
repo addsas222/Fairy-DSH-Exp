@@ -87,6 +87,7 @@ function findPenMcp() {
     push(join(root, 'resources', 'app.asar.unpacked', 'out'), names);
     push(join(root, 'app.asar.unpacked', 'out'), names);
   }
+  // ~/.pencil/mcp/<variant>/ 是**编辑器变体**，只能配同名 -app；排在桌面版之后。
   push(join(homedir(), '.pencil', 'mcp'), names);
   return candidates[0] ?? null;
 }
@@ -101,7 +102,7 @@ const INSTALL_GUIDE = [
 ].join('\n');
 
 /** 幂等：patch 里已有 pen 行就跳过；否则插到 insert 列表最前面。 */
-function ensureProfileRow(patchPath, mcpPath, agent, dryRun) {
+function ensureProfileRow(patchPath, mcpPath, appId, agent, dryRun) {
   if (!existsSync(patchPath)) {
     warn(`profile patch 不存在：${patchPath}（先跑一次部署，或 --profile-patch 指定）`);
     return false;
@@ -133,6 +134,13 @@ function ensureProfileRow(patchPath, mcpPath, agent, dryRun) {
   return true;
 }
 
+/** -app 与变体配对：~/.pencil/mcp/<variant>/ 取 <variant>；应用自带的那份取 desktop。 */
+export function appIdFor(mcpPath) {
+  if (!mcpPath) return 'desktop';
+  const variant = /[\\/]\.pencil[\\/]mcp[\\/]([^\\/]+)[\\/]/.exec(String(mcpPath).replace(/\\/g, '/'))?.[1];
+  return variant ?? 'desktop';
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   // 默认写到**已安装 home** 的 profile patch：它是机器本地文件（部署时被 --preserve 保住），
@@ -144,12 +152,16 @@ function main() {
     console.log(INSTALL_GUIDE);
     process.exit(3);
   }
-  log(`找到 Pen MCP：${mcpPath}`);
+  // -app 必须与变体配对：应用自带的那份连桌面应用（desktop），
+  // ~/.pencil/mcp/<variant>/ 下的只能配同名（visual_studio_code 等）。配错会得到
+  // 「装了但连不上」的 MCP（实测报 failed to connect to running Pencil app）。
+  const appId = appIdFor(mcpPath);
+  log(`找到 Pen MCP：${mcpPath}（-app ${appId}${variant ? '，编辑器变体' : '，桌面版'}）`);
   if (options.mode === 'check') {
     log('（--check：未做改动）');
     return;
   }
-  const ok = ensureProfileRow(patchPath, mcpPath, options.agent, options.dryRun);
+  const ok = ensureProfileRow(patchPath, mcpPath, appId, options.agent, options.dryRun);
   if (!ok) process.exit(1);
   log('下一步：重启 DSH 并确保 Pen 在运行（且打开着一个 .pen 文件），');
   log('        然后在会话里让 agent 用 Pen 起设计稿——设计由 DSH 自己的模型配置驱动。');
