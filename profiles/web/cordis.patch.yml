@@ -26,10 +26,18 @@
 
 # 搜索枢纽接管 provider 选择:请求时按 fairy-search 设置路由;
 # deepseek-official/exa/perplexity/custom 均为可切换后端。
+#
+# 不声明 fetchProvider:上游 dsh-base 故意不挂任何抓取通道(其注释原文:Fetch stays
+# disabled and no fetch provider is mounted —— 该通道会让模型自己选抓取目标,等于把
+# 内网可达面交出去,`@deepseek-ai/dsh-web-fetch-http` 要自行 mount 才存在)。
+# 原先写的 `fetchProvider: http` 指向一个**没有任何插件注册**的 id,于是任何 web.fetch
+# 调用都以 `Error: configured web provider "http" is not registered` 失败(实机 2026-09-16;
+# 仓库内无任何代码调用 web.fetch,是外部/工具侧触发的)。
+# 若要启用抓取:把 `@deepseek-ai/dsh-web-fetch-http` 加进本 profile 依赖并在此 insert 一行,
+# 再把 fetchProvider 写回 http —— 这是显式接受 SSRF 取舍的决定,别默默打开。
 - id: web
   config:
     searchProvider: fairy-search-hub
-    fetchProvider: http
 
 # 创造模式的回忆能力需要全文索引;first-search 延迟打开以保持启动安静。
 # ponytail: 内存索引,跨进程重建;持久索引文件是升级路径。
