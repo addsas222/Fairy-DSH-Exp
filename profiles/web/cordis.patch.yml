@@ -38,12 +38,10 @@
     searchProvider: fairy-search-hub
     fetchProvider: http
 
-# tool-web 的 patch 会替换整行 config,所以这里把 base 的两个键都重述:
-# fetch 打开后模型才有抓取工具(取上文那条通道);搜索超时沿用 base 的 60s。
-- id: tool-web
-  config:
-    fetch: true
-    searchTimeoutMs: 60000
+# 模型侧的抓取开关**不在这里**:host 的 tool-web 行被 @deepseek-ai/dsh-web-app 束
+# 冻结为 `disabled: true`(patch 只改 config,改不动 disabled,写了也是死配置),
+# 真正的开关在 preset 的 web 工具行上:fairy-full/agent.cordis.yml `fetch: true`、
+# fairy-lite 同处 `fetch: false`。上面这条通道只负责让 web.fetch 有 provider 可用。
 
 # 创造模式的回忆能力需要全文索引;first-search 延迟打开以保持启动安静。
 # ponytail: 内存索引,跨进程重建;持久索引文件是升级路径。
