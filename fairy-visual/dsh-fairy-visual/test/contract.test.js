@@ -1135,3 +1135,14 @@ test('过渡动效不得水平位移画面（文字被切开/错位的实机症�
   assert.equal(tints, 2, '模式与会话两处过渡都要用色罩替代位移');
   assert.match(visualTransitionsSource, /bar\.style\.height = `\$\{random\(2, 6\)\.toFixed\(1\)\}%`/, '彩条高度上限 6%（原先 11% 会整块盖住文字行）');
 });
+
+test('官方弹层必须画在 HDD 工作区芯片之上（层叠上下文陷阱）', () => {
+  // 实机：访问菜单寄生在 [data-dsh-fairy-composer-row]（z=1）里，而工作区芯片行是 z=4 ⇒
+  // 弹层内部的 z=6/100 全被压死，芯片文字画在菜单之上，与菜单首行叠成
+  // 「粗体 Downloads + 更淡的 Workspace Write」（用户截图里的「重影/被边缘遮住」）。
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\] \[data-dsh-fairy-composer-dock="true"\]\[data-dsh-fairy-composer-popover="true"\] \[data-composer-card\]\{z-index:5!important\}/, '弹层打开期间卡片必须高于工作区芯片行(z=4)，否则其内部弹层被芯片盖住');
+  // 必须只在弹层打开时抬：常态抬会把芯片压到卡片下面（实测芯片不可点 + 8.39% 像素差）
+  assert.match(composerDockSource, /const syncComposerPopoverLayer = \(\) => \{/, "弹层标记必须有同步函数");
+  assert.match(composerDockSource, /syncComposerPopoverLayer\(\);/, "同步函数必须被调用");
+  assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\] \[data-dsh-fairy-composer-workspace="true"\]\{position:absolute!important;z-index:4!important/, '工作区芯片行 z=4 是既有契约（5 严格大于它）');
+});

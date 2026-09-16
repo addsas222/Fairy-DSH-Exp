@@ -356,6 +356,16 @@ function mountComposerDock(controller) {
     }
   };
 
+  // 官方弹层（访问/模式菜单）挂在 [data-composer-card] 内，而卡片是 isolation:isolate：
+  // 弹层内部的 z 出不了卡片这一层，HDD 的工作区芯片行(z=4)便画在菜单之上，与菜单首行叠字。
+  // 弹层打开期间给 dock 打标记，CSS 只在该标记下把卡片抬到芯片之上；关闭立即恢复。
+  const syncComposerPopoverLayer = () => {
+    if (!seat) return;
+    const open = Boolean(seat.querySelector('[role="menu"], [role="listbox"]'));
+    if (open) seat.setAttribute('data-dsh-fairy-composer-popover', 'true');
+    else seat.removeAttribute('data-dsh-fairy-composer-popover');
+  };
+
   const captureWorkspaceTemplate = (workspaceRow) => {
     const nextTemplate = captureWorkspaceTemplateModule(workspaceRow);
     if (nextTemplate) workspaceTemplate = nextTemplate;
@@ -428,6 +438,7 @@ function mountComposerDock(controller) {
     const stack = seat?.querySelector('[data-dsh-fairy-composer-stack="true"]');
     ensureWorkspaceProjection(stack, workspaceRow);
     syncReasoningMenuLayer();
+    syncComposerPopoverLayer();
     const currentSurface = resolvedSession.surface;
     if (currentSurface !== surface) {
       resizeObserver?.disconnect();
