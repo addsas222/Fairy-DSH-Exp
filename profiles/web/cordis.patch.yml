@@ -27,17 +27,23 @@
 # 搜索枢纽接管 provider 选择:请求时按 fairy-search 设置路由;
 # deepseek-official/exa/perplexity/custom 均为可切换后端。
 #
-# 不声明 fetchProvider:上游 dsh-base 故意不挂任何抓取通道(其注释原文:Fetch stays
-# disabled and no fetch provider is mounted —— 该通道会让模型自己选抓取目标,等于把
-# 内网可达面交出去,`@deepseek-ai/dsh-web-fetch-http` 要自行 mount 才存在)。
-# 原先写的 `fetchProvider: http` 指向一个**没有任何插件注册**的 id,于是任何 web.fetch
-# 调用都以 `Error: configured web provider "http" is not registered` 失败(实机 2026-09-16;
-# 仓库内无任何代码调用 web.fetch,是外部/工具侧触发的)。
-# 若要启用抓取:把 `@deepseek-ai/dsh-web-fetch-http` 加进本 profile 依赖并在此 insert 一行,
-# 再把 fetchProvider 写回 http —— 这是显式接受 SSRF 取舍的决定,别默默打开。
+# fetchProvider 是**显式打开**的抓取通道(2026-09-16 用户选择启用):
+# 上游 dsh-base 默认不开——其注释原文:Fetch stays disabled and no fetch provider is mounted:
+# that provider defers SSRF protection and the model would choose the request target。
+# 本行配的 `@deepseek-ai/dsh-web-fetch-http`(见下面 insert)自己也写明 "SSRF / private-network
+# blocking is deferred" —— 即**没有**私网阻断:模型选什么地址就抓什么地址,内网可达面随之暴露。
+# 关掉的办法:删本行 + 下面 web-fetch-http 的 insert(+ tool-web 的 fetch: true)。
 - id: web
   config:
     searchProvider: fairy-search-hub
+    fetchProvider: http
+
+# tool-web 的 patch 会替换整行 config,所以这里把 base 的两个键都重述:
+# fetch 打开后模型才有抓取工具(取上文那条通道);搜索超时沿用 base 的 60s。
+- id: tool-web
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
 
 # 创造模式的回忆能力需要全文索引;first-search 延迟打开以保持启动安静。
 # ponytail: 内存索引,跨进程重建;持久索引文件是升级路径。
@@ -47,6 +53,12 @@
     openAt: first-search
 
 - insert:
+    # 抓取通道本体(上面 `- id: web` 的 fetchProvider: http 指向它)。
+    # 只做 URL 卫生检查(http(s) / 无内嵌凭据 / 长度上限),**不做私网阻断**;
+    # 默认 maxUrlLength=2048 未改。
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+
     - id: mcp-playwright
       name: '@deepseek-ai/dsh-mcp-client'
       config:
