@@ -176,20 +176,82 @@ function installRuntime(options, base) {
   log(`安装运行时：pnpm add ${spec}（到 ${root}）`);
   if (options.dryRun) { console.log(`  would run: pnpm add ${spec}  # cwd ${root}`); return null; }
   mkdirSync(root, { recursive: true });
-  if (!existsSync(join(root, 'package.json'))) writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'dsh-runtime', private: true }, null, 2) + '\n');
-  const result = IS_WINDOWS
-    ? spawnSync(`pnpm add ${spec}`, { cwd: root, stdio: 'inherit', shell: true })
-    : spawnSync('pnpm', ['add', spec], { cwd: root, stdio: 'inherit' });
-  // 成败以**产物是否就位**为准，不看 pnpm 的退出码：pnpm ≥ 10 默认拦截依赖的构建脚本
-  // （node-pty / koffi 等原生件），会以 `ERR_PNPM_IGNORED_BUILDS` 退出 1，但运行时本身
-  // 已经装好、应用照常启动（实测）。把它当失败会让一键安装在干净机器上直接中断。
+  const manifestPath = join(root, 'package.json');
+  const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { name: 'dsh-runtime', private: true };
+  if (!existsSync(manifestPath)) writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+
+  // 第二趟必须是 install（不是 rebuild）：pnpm 只在 install 时按 onlyBuiltDependencies 跑构建脚本，
+  // 实测 pnpm rebuild 空跑（无输出、不编译）。
+  const run = (install = false) => {
+    const argv = install ? ['install'] : ['add', spec];
+    const command = `pnpm ${argv.join(' ')}`;
+    const options2 = { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
+    return IS_WINDOWS ? spawnSync(command, { ...options2, shell: true }) : spawnSync('pnpm', argv, options2);
+  };
+  const first = run();
+  const output = `${first.stdout ?? ''}${first.stderr ?? ''}`;
+  if (output.trim()) console.log(output.trim());
+
+  // pnpm ≥ 10 默认拦截依赖的构建脚本。**不能静音了当没事**：被拦的 node-pty / koffi /
+  // @deepseek-ai/dsh-subprocess-local 等是真正要编译的原生件，静音后运行时能起、
+  // 终端与子进程能力却会无声降级。这里解析出被拦清单，写进 pnpm **当前**读取的配置
+  // （v10+ 已不再读 package.json 的 pnpm 字段，改读 pnpm-workspace.yaml），再装一次让它们真编译。
+  const ignored = /Ignored build scripts:\s*([^\n]+)/.exec(output)?.[1]
+    ?.split(',')
+    .map((entry) => entry.trim().replace(/@[^@]*$/, ''))
+    .filter(Boolean) ?? [];
+  if (ignored.length > 0) {
+    const workspaceFile = join(root, 'pnpm-workspace.yaml');
+    const existing = existsSync(workspaceFile) ? readFileSync(workspaceFile, 'utf8') : '';
+    const allowed = [...new Set([...(existing.match(/^\s*-\s+(.+)$/gm) ?? []).map((line) => line.replace(/^\s*-\s+/, '').trim()), ...ignored])].sort();
+    writeFileSync(workspaceFile, `# 由 scripts/install.mjs 生成：只放行运行时真正需要的原生构建脚本（不是关闭严格模式）。\nonlyBuiltDependencies:\n${allowed.map((name) => `  - ${name}`).join('\n')}\n`);
+    log(`放行 ${allowed.length} 个原生依赖的构建脚本（pnpm-workspace.yaml）：${allowed.join(', ')}`);
+    if (!options.dryRun) {
+      const second = run(true);
+      const lines = (second.stdout ?? '').trim().split('\n').filter((line) => line.trim());
+      console.log(lines.length > 0 ? lines.slice(-3).join('\n') : '（第二趟 install 无输出）');
+    }
+  }
+
   const installed = inspectRuntime(join(root, 'node_modules', '@deepseek-ai', 'dsh'));
   if (!installed) fail('运行时安装失败（检查网络与 pnpm 版本 ≥ 11）');
-  if (result.status !== 0) {
-    warn('pnpm 退出码非 0：多半是它默认拦截了依赖构建脚本（node-pty / koffi 等原生件）。');
-    warn(`运行时已就位、应用可正常启动；要启用终端类原生功能，可在 ${root} 跑 pnpm approve-builds`);
-  }
   return installed;
+}
+
+/**
+ * 原生能力抽查：这些包缺二进制时终端/子进程会无声降级，所以安装摘要里点名。
+ * 抽查依据是**运行时真正会加载的东西**，不是「有没有跑过构建脚本」：
+ *   · node-pty 随包带 `prebuilds/<platform>-<arch>/pty.node`（Windows 也走它，无需编译）；
+ *   · koffi 的二进制在平台包 `@koromix/koffi-<platform>-<arch>` 里。
+ * 只有两者都不在时才算缺（那才是真需要 `pnpm rebuild` 的情形）。
+ */
+function nativeArtifacts(root) {
+  const pnpmDir = join(root, 'node_modules', '.pnpm');
+  const storeDirs = existsSync(pnpmDir) ? readdirSync(pnpmDir) : [];
+  const platform = `${process.platform === 'win32' ? 'win32' : process.platform}-${process.arch}`;
+  const inDir = (prefix, ...relative) => {
+    const hit = storeDirs.find((entry) => entry.startsWith(prefix));
+    return hit ? existsSync(join(pnpmDir, hit, ...relative)) : false;
+  };
+  const anyFile = (prefix, suffix) => {
+    const hit = storeDirs.find((entry) => entry.startsWith(prefix));
+    if (!hit) return false;
+    const base = join(pnpmDir, hit, 'node_modules');
+    const walk = (dir, depth) => {
+      if (depth > 4 || !existsSync(dir)) return false;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const next = join(dir, entry.name);
+        if (entry.isDirectory() && walk(next, depth + 1)) return true;
+        if (entry.isFile() && entry.name === suffix) return true;
+      }
+      return false;
+    };
+    return walk(base, 0);
+  };
+  return [
+    { name: 'node-pty', present: inDir('node-pty@', 'node_modules', 'node-pty', 'prebuilds', platform, 'pty.node') || anyFile('node-pty@', 'pty.node') },
+    { name: 'koffi', present: inDir(`@koromix+koffi-${platform}@`, 'node_modules', `@koromix/koffi-${platform}`, ...(process.platform === 'win32' ? ['win32_x64'] : []), 'koffi.node') || anyFile('koffi@', 'koffi.node') },
+  ];
 }
 
 /**
@@ -283,6 +345,11 @@ function main() {
   log(`repo      : ${REPO_ROOT}`);
   log(`home      : ${options.home}`);
   log(`runtime   : ${runtime.version}  (${runtime.bin})`);
+  // 原生件抽查：静音 pnpm 的 ignored-builds 警告会让终端/子进程无声降级，所以在摘要里点名。
+  const installRoot = resolve(runtime.root, '..', '..', '..');
+  for (const artifact of nativeArtifacts(installRoot)) {
+    log(`native    : ${artifact.name} ${artifact.present ? '二进制就位 ✓（prebuild 或构建产物）' : '缺二进制：终端/子进程能力会降级，可在 ' + installRoot + ' 跑 pnpm install'}`);
+  }
   log(`base flag : DSH_FAIRY_BASE=${base}${base === baseFor(runtime.version) ? '' : '（显式指定）'}`);
   log(`shell     : ${bash}`);
 
