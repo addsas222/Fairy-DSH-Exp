@@ -903,7 +903,7 @@ test('anchors the original content mask to the stationary conversation viewport'
 
 test('侧栏层必须留在官方覆盖层之下（HDD 宿主挂在那里）；dock 高于官方覆盖层但不等高侧栏', () => {
   assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]\{display:none!important\}/);
-  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, 'todo/queue 条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background:transparent!important;border:0!important/, '条必须透明：卡片与输入区常态就是透 HDD 背景，条自填不透明底会显得「更实」（实机反馈过）');
   assert.match(styleSource, /\[data-dsh-fairy-composer-stack="true"\]\{position:relative!important;display:flex!important;flex-direction:column!important;gap:0!important;padding:0!important/, 'stack 必须是列向流式且不带官方内边距/间距：条占自己的高度，卡片不被一起抬高');
   assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
@@ -1067,12 +1067,12 @@ test('附件态底材不得盖住输入内容（z-index 层序）', () => {
   assert.match(styleSource, /\[data-dsh-fairy-composer-attachments="true"\]\{position:relative!important;z-index:2!important\}/, '附件槽自身要在底材之上');
 });
 
-test('任务条与卡片读作一块版面：顶边高光在 dock 顶沿，条带卡片同一玻璃底材', () => {
+test('任务条与卡片读作一块版面：顶边高光在 dock 顶沿，条本身不画底', () => {
   // 条与卡片是兄弟节点，无法用选择器条件化。做法：顶边高光挂在 dock 的 ::before
   // （条在时=面板顶沿、条不在时=卡片顶沿），条与卡片之间因此不再有分界线。
   assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\]::before\{content:''!important;position:absolute!important;z-index:3!important;top:0!important;right:0!important;left:0!important;height:9px!important;pointer-events:none!important;background:linear-gradient/, '顶边高光必须在 dock 顶沿');
   assert.match(styleSource, /\[data-composer-card="true"\]::before\{display:none!important\}/, '卡片自己那份顶边高光必须撤掉（否则就是条/卡之间的亮线）');
-  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\][^}]*background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, '条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\][^}]*background:transparent!important;border:0!important/, '条不画自己的底：底材由 HDD 背景与 material 皮肤承担，条填不透明底会显得比卡片「更实」');
 });
 
 test('任务条只扩展材料挖洞的顶部，不参与并集宽度', () => {
