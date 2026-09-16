@@ -903,7 +903,7 @@ test('anchors the original content mask to the stationary conversation viewport'
 
 test('keeps the sidebar hardware above the composer edge in every session', () => {
   assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]\{display:none!important\}/);
-  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background:#0a1c30!important;border:1px solid rgba\(126,220,255,\.28\)!important;border-bottom:0!important;margin:0!important;padding:6px 12px 2px!important\}/, 'todo/queue 条必须回流到 seat 内并带卡片底材');
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, 'todo/queue 条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
   assert.match(styleSource, /\[data-dsh-fairy-composer-stack="true"\]\{position:relative!important;display:flex!important;flex-direction:column!important;gap:0!important;padding:0!important/, 'stack 必须是列向流式且不带官方内边距/间距：条占自己的高度，卡片不被一起抬高');
   assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
@@ -912,8 +912,8 @@ test('keeps the sidebar hardware above the composer edge in every session', () =
 });
 
 test('keeps the composer edge inside the card stacking context below nested control popovers', () => {
-  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\:\:before\{display:none!important/);
-  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\] \[data-composer-card="true"\]\:\:before\{content:'';position:absolute;z-index:3;/);
+  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]::before\{content:''!important;position:absolute!important;z-index:3!important;/, '顶边高光挂在 dock（整块面板）顶沿');
+  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\] \[data-composer-card="true"\]::before\{display:none!important\}/, '卡片那份顶边高光撤掉（否则条/卡之间出现亮线）');
   assert.match(styleSource, /\.dsh-fairy-composer-resizer\{[^}]*z-index:20/);
   assert.match(styleSource, /data-dsh-fairy-composer-reasoning-control="true"\]\{z-index:30!important\}/);
   assert.match(styleSource, /data-dsh-fairy-composer-stack="true"\]\[data-dsh-fairy-model-menu-open="true"\]\{z-index:21!important\}/);
@@ -1065,4 +1065,19 @@ test('附件态底材不得盖住输入内容（z-index 层序）', () => {
   assert.match(cardChildrenRule, /:not\(\[data-input-scroll\]\)/, '输入区必须排除在这条 z-index:1 之外');
   assert.match(styleSource, /\[data-input-scroll\]\{position:relative!important;z-index:2!important/);
   assert.match(styleSource, /\[data-dsh-fairy-composer-attachments="true"\]\{position:relative!important;z-index:2!important\}/, '附件槽自身要在底材之上');
+});
+
+test('任务条与卡片读作一块版面：顶边高光在 dock 顶沿，条带卡片同一玻璃底材', () => {
+  // 条与卡片是兄弟节点，无法用选择器条件化。做法：顶边高光挂在 dock 的 ::before
+  // （条在时=面板顶沿、条不在时=卡片顶沿），条与卡片之间因此不再有分界线。
+  assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\]::before\{content:''!important;position:absolute!important;z-index:3!important;top:0!important;right:0!important;left:0!important;height:9px!important;pointer-events:none!important;background:linear-gradient/, '顶边高光必须在 dock 顶沿');
+  assert.match(styleSource, /\[data-composer-card="true"\]::before\{display:none!important\}/, '卡片自己那份顶边高光必须撤掉（否则就是条/卡之间的亮线）');
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\][^}]*background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, '条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
+});
+
+test('任务条参与材料挖洞的并集，卡片顶到洞顶不再露出框材', () => {
+  // 条在卡片上方：把「可见的」条并入 material 的 union 后，洞顶被夹到卡片顶沿，
+  // 卡片顶那条 10px 的框材亮带消失，::after 玻璃顺势上移与条接成一块。
+  assert.match(composerDockSource, /const visibleInputDock = inputDock && inputDock\.getBoundingClientRect\?\.\(\)\.height > 0 \? inputDock : null;/, '只并入可见的条（空槽 rect 全 0 会把洞拽到左上角）');
+  assert.match(composerDockSource, /syncMaterialLayerModule\(layer, inputScroll\(card\), \[attachmentRail\(attachmentSlot\(card\)\), visibleInputDock\]\)/);
 });

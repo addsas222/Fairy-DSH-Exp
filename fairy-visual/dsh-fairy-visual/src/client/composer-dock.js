@@ -189,7 +189,10 @@ function mountComposerDock(controller) {
 
   const syncMaterialLayer = () => {
     const layer = ensureMaterialLayer();
-    syncMaterialLayerModule(layer, inputScroll(card), [attachmentRail(attachmentSlot(card))]);
+    const inputDock = composerInputDockSlot(seat);
+    // 只并入「可见的」条：display:none 的空槽 rect 全 0，并进去会把洞拽到左上角。
+    const visibleInputDock = inputDock && inputDock.getBoundingClientRect?.().height > 0 ? inputDock : null;
+    syncMaterialLayerModule(layer, inputScroll(card), [attachmentRail(attachmentSlot(card)), visibleInputDock]);
   };
 
   const restoreSeat = ({ clearWorkspaceTemplate = false } = {}) => {
