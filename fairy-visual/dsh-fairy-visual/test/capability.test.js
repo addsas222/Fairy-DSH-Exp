@@ -12,8 +12,19 @@ const require = createRequire(import.meta.url);
 const clientDomContracts = require('../../../fairy-contracts/client-dom.cjs');
 
 function node(entries = {}) {
+  // 与浏览器一致：支持逗号联合选择器。底座 0.1.5 起同一锚点需要并集
+  // （例如 `[data-slot="conversation"], [data-slot="main.conversation"]`），
+  // 若替身只做精确字符串匹配，适配层的联合选择器会被判成「找不到」。
+  const lookup = (selector) => {
+    if (Object.prototype.hasOwnProperty.call(entries, selector)) return entries[selector];
+    for (const part of String(selector).split(',')) {
+      const trimmed = part.trim();
+      if (Object.prototype.hasOwnProperty.call(entries, trimmed) && entries[trimmed] !== null) return entries[trimmed];
+    }
+    return null;
+  };
   return {
-    querySelector(selector) { return entries[selector] ?? null; },
+    querySelector(selector) { return lookup(selector); },
     querySelectorAll() { return []; },
   };
 }
@@ -133,4 +144,35 @@ test('exports the official slot selectors the marker pass consumes', () => {
   assert.equal(adapter.composerInputDockSlot({ children: [direct] }), direct, '直接子节点优先');
   const nested = { tag: 'nested' };
   assert.equal(adapter.composerInputDockSlot({ children: [], querySelector: (selector) => (selector === adapter.composerInputDock ? nested : null) }), nested, '非直接子节点回落查询');
+});
+
+test('resolves the composer pipeline on the 0.1.5 slot vocabulary', () => {
+  // 0.1.5 的槽位表里没有 `data-slot="conversation"`（改为 main.conversation / conversation.composer），
+  // 输入框也从 textarea 变成 contenteditable。这里用 0.1.5 形状的假 DOM 断言整条链路仍可解析：
+  // conversation → composerSeat → composerCard → inputScroll，以及输入元素双形态。
+  const input = node();
+  const card = node({ '[data-input-scroll]': input });
+  const seat = node({ '[data-composer-card="true"]': card });
+  const conversation = node({
+    '[data-composer-seat]': seat,
+    '[data-phase="active"]': node(),
+    '[data-phase]': node(),
+    '[data-conversation-scroll]': node(),
+  });
+  const documentRef = node({
+    'body > #root > [data-slot="root"]': node(),
+    '[data-slot="shell.overlay"]': node(),
+    '[data-slot="main.conversation"]': conversation,
+    '[data-slot="sidebar"]': node(),
+    '[data-slot="conversation.session.header"]': node(),
+  });
+  const adapter = loadAdapter(documentRef);
+  const missing = adapter.reportMissingCapabilities(undefined, { report: () => {} });
+  assert.equal(missing.some(({ name, required }) => required && name !== 'conversation'), false, '除会话面外不应有必需能力缺失');
+  assert.equal(adapter.conversation(documentRef), conversation, 'main.conversation 必须被认作会话面');
+  assert.equal(adapter.composerSeat(conversation), seat);
+  assert.equal(adapter.composerCard(seat), card);
+  assert.equal(adapter.inputScroll(card), input);
+  // 输入元素双形态：0.1.1 的 textarea 与 0.1.5 的 contenteditable 都能被选中。
+  assert.equal(adapter.OFFICIAL_SELECTORS.composerTextarea, 'textarea, [data-composer-input="true"]');
 });

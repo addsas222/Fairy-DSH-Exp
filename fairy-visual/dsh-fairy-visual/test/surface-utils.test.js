@@ -9,7 +9,8 @@ const officialSelectors = {
   phaseHero: '[hero]',
   phaseActive: '[active]',
   composerSeat: '[seat]',
-  composerTextarea: 'textarea',
+  // 底座 0.1.5 起输入框是 contenteditable，不再是 textarea ⇒ 双形态。
+  composerTextarea: 'textarea, [data-composer-input="true"]',
 };
 const officialAttributes = { phase: 'data-phase' };
 

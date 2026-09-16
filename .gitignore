@@ -48,3 +48,6 @@ fairy-visual/dsh-fairy-visual/lib/index.iife.js
 # 绝区零官方文本（借用的第三方游戏资源，版权归 miHoYo）：只在本机供 world-core 使用，
 # 不随仓库/部署分发。由 C:/tmp/zzz-extract.mjs 从 dimbreath/ZenlessData TextMap 提取。
 .agent-presets/fairy-lite/world-core/
+
+# 隔离实例 home（0.1.5 验证用）：与 .dsh-test-home/ 同理，绝不入库。
+.dsh-test-home*/
