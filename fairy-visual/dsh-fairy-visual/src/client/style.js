@@ -277,6 +277,9 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
   // Translate the complete SVG, including its masks, as one reflection below
   // the subtitle rail; its inner layer geometry remains untouched.
   appendSection(`.dsh-fairy-hero-host{width:100vw}.dsh-fairy-hero-projection-svg{top:-2px;transform:translateX(2px)}.dsh-fairy-hero-sub{transform:translateY(-8px)}.dsh-fairy-hero-sub::before,.dsh-fairy-hero-sub::after{width:240px}@media(max-width:520px){.dsh-fairy-hero-projection-svg{top:1px}.dsh-fairy-hero-sub{transform:translateX(2px)}.dsh-fairy-hero-sub::before,.dsh-fairy-hero-sub::after{width:170px}}`);
+  // 计划模式标识（官方 dsh-client-ui-plan 的 Plan chip）：官方外观走 state-warn 主题（白底橙字），
+  // 在 HDD 深色里与其它芯片风格不统一；这里套用与工作区芯片同款的键帽底材。
+  appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"]{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:8px!important;background:linear-gradient(#30353a,#30353a) padding-box,linear-gradient(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%) border-box!important;color:#f4f7fb!important;min-width:34px!important;padding:2px 8px!important;font-size:13px!important;font-weight:500!important;line-height:20px!important;box-shadow:-4px -4px 9px rgba(255,255,255,.06),5px 6px 13px rgba(0,0,0,.13),inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"]:hover:not(:disabled){color:#cfe8ff!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"] svg{color:inherit!important}`);
   el.textContent = cssSections.join('');
 
   (document.head || document.documentElement).appendChild(el);

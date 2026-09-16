@@ -845,6 +845,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;border-radius:999px!important;background:linear-gradient(#30353a,#30353a) padding-box,linear-gradient(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.06),5px 6px 13px rgba(0,0,0,.13),inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;background:linear-gradient(#30353a,#30353a) padding-box,linear-gradient(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.06),5px 6px 13px rgba(0,0,0,.13),inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
 		appendSection(`.dsh-fairy-hero-host{width:100vw}.dsh-fairy-hero-projection-svg{top:-2px;transform:translateX(2px)}.dsh-fairy-hero-sub{transform:translateY(-8px)}.dsh-fairy-hero-sub::before,.dsh-fairy-hero-sub::after{width:240px}@media(max-width:520px){.dsh-fairy-hero-projection-svg{top:1px}.dsh-fairy-hero-sub{transform:translateX(2px)}.dsh-fairy-hero-sub::before,.dsh-fairy-hero-sub::after{width:170px}}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"]{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:8px!important;background:linear-gradient(#30353a,#30353a) padding-box,linear-gradient(135deg,#555f68 0%,#4e5861 48%,#3d444b 100%) border-box!important;color:#f4f7fb!important;min-width:34px!important;padding:2px 8px!important;font-size:13px!important;font-weight:500!important;line-height:20px!important;box-shadow:-4px -4px 9px rgba(255,255,255,.06),5px 6px 13px rgba(0,0,0,.13),inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"]:hover:not(:disabled){color:#cfe8ff!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-plan-control="true"] svg{color:inherit!important}`);
 		el.textContent = cssSections.join("");
 		(document.head || document.documentElement).appendChild(el);
 	}
@@ -931,6 +932,10 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 			model: Object.freeze({
 				zh: Object.freeze(["选择模型"]),
 				en: Object.freeze(["Select model"])
+			}),
+			planChip: Object.freeze({
+				zh: Object.freeze(["plan mode 已开启"]),
+				en: Object.freeze(["Plan mode on"])
 			}),
 			reasoning: Object.freeze({
 				zh: Object.freeze(["模型 "]),
@@ -1058,6 +1063,10 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				match: "prefix",
 				suffix: "[aria-haspopup=\"menu\"]"
 			}),
+			planChip: ariaLabelSelector("planChip", {
+				base: "button",
+				match: "prefix"
+			}),
 			workspace: ariaLabelSelector("workspace", { base: "button" }),
 			balance: ariaLabelSelector("balance", {
 				base: "[data-slot=\"sidebar.footer.action\"] *",
@@ -1135,7 +1144,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				"composerAttachmentsSlot",
 				"modelSelection"
 			]),
-			OPTIONAL: Object.freeze(["toBottom"])
+			OPTIONAL: Object.freeze(["toBottom", "planChip"])
 		});
 		const CAPABILITY_LEVEL_BY_NAME = Object.freeze(Object.fromEntries(Object.entries(CAPABILITY_LEVEL).flatMap(([level, names]) => names.map((name) => [name, level]))));
 		const CAPABILITY_DEFINITIONS = Object.freeze({
@@ -1232,6 +1241,12 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				required: false,
 				applicable: (doc) => Boolean(phase(conversation(doc), "active")),
 				resolve: redoControl
+			},
+			planChip: {
+				selector: OFFICIAL_SELECTORS.planChip,
+				level: CAPABILITY_LEVEL_BY_NAME.planChip,
+				required: false,
+				resolve: planChip
 			},
 			toBottom: {
 				selector: OFFICIAL_SELECTORS.toBottom,
@@ -1415,6 +1430,9 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 		function modelControl(scope) {
 			return officialNode("model", scope);
 		}
+		function planChip(scope) {
+			return officialNode("planChip", scope);
+		}
 		function reasoningControl(scope) {
 			return officialNode("reasoning", scope);
 		}
@@ -1581,6 +1599,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 			commandControl,
 			accessControl,
 			modelControl,
+			planChip,
 			reasoningControl,
 			modelAndReasoningShareNode,
 			workspaceControl,
@@ -2115,7 +2134,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 //#endregion
 //#region src/client/composer-marker-projection.js
 	var require_composer_marker_projection = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const { OFFICIAL_ATTRIBUTES, composerInputDock, inputScroll, sendButton, contextControl, voiceControl, commandControl, accessControl, modelControl, reasoningControl, modelAndReasoningShareNode, workspaceControl } = require_dom_adapter();
+		const { OFFICIAL_ATTRIBUTES, composerInputDock, inputScroll, sendButton, contextControl, voiceControl, commandControl, accessControl, modelControl, planChip, reasoningControl, modelAndReasoningShareNode, workspaceControl } = require_dom_adapter();
 		const { attachmentSlot, attachmentRail } = require_composer_attachments();
 		const COMPOSER_ATTR = "data-dsh-fairy-composer-dock";
 		const MARKER_ATTRS = [
@@ -2206,6 +2225,8 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 			const barRoot = card.parentElement;
 			mark(barRoot, "data-dsh-fairy-composer-bar-root");
 			const seat = card.closest("[" + OFFICIAL_ATTRIBUTES.composerSeat + "]");
+			const planTarget = planChip(seat) || planChip(card);
+			if (planTarget) mark(planTarget, "data-dsh-fairy-composer-plan-control");
 			const workspaceButton = workspaceControl(seat);
 			let stack = barRoot?.parentElement || null;
 			while (stack && stack !== seat && !(stack.children.length > 1 && (!workspaceButton || stack.contains(workspaceButton)))) stack = stack.parentElement;

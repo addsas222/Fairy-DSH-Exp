@@ -8,6 +8,7 @@ const {
   commandControl,
   accessControl,
   modelControl,
+  planChip,
   reasoningControl,
   modelAndReasoningShareNode,
   workspaceControl,
@@ -118,6 +119,10 @@ function markControls(card) {
   const barRoot = card.parentElement;
   mark(barRoot, 'data-dsh-fairy-composer-bar-root');
   const seat = card.closest('[' + OFFICIAL_ATTRIBUTES.composerSeat + ']');
+  // 计划模式标识（官方 dsh-client-ui-plan 的 Plan chip）：默认走 state-warn 主题（白底橙字），
+  // 在 HDD 深色里与其它芯片风格不一致；出现时才调整（OPTIONAL 能力）。
+  const planTarget = planChip(seat) || planChip(card);
+  if (planTarget) mark(planTarget, 'data-dsh-fairy-composer-plan-control');
   const workspaceButton = workspaceControl(seat);
   let stack = barRoot?.parentElement || null;
   while (stack && stack !== seat && !(stack.children.length > 1 && (!workspaceButton || stack.contains(workspaceButton)))) stack = stack.parentElement;

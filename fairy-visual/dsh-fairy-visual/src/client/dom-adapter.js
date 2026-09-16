@@ -33,6 +33,7 @@ const ARIA_LABELS = Object.freeze({
   command: Object.freeze({ zh: Object.freeze(['命令']), en: Object.freeze(['Commands', 'Command']) }),
   access: Object.freeze({ zh: Object.freeze(['访问模式']), en: Object.freeze(['Access mode']) }),
   model: Object.freeze({ zh: Object.freeze(['选择模型']), en: Object.freeze(['Select model']) }),
+  planChip: Object.freeze({ zh: Object.freeze(['plan mode 已开启']), en: Object.freeze(['Plan mode on']) }),
   reasoning: Object.freeze({ zh: Object.freeze(['模型 ']), en: Object.freeze(['Model ']) }),
   workspace: Object.freeze({ zh: Object.freeze(['选择工作区']), en: Object.freeze(['Choose workspace']) }),
   // Balance and edit controls are local/third-party additions, but keeping
@@ -136,6 +137,7 @@ const OFFICIAL_SELECTORS = Object.freeze({
   access: ariaLabelSelector('access', { base: 'button', match: 'prefix' }),
   model: joinSelectors(ariaLabelSelector('model', { base: 'select', match: 'prefix' }), ariaLabelSelector('model', { base: 'button', match: 'prefix' })),
   reasoning: ariaLabelSelector('reasoning', { base: 'button', match: 'prefix', suffix: '[aria-haspopup="menu"]' }),
+  planChip: ariaLabelSelector('planChip', { base: 'button', match: 'prefix' }),
   workspace: ariaLabelSelector('workspace', { base: 'button' }),
   balance: ariaLabelSelector('balance', { base: '[data-slot="sidebar.footer.action"] *', match: 'prefix' }),
   undo: ariaLabelSelector('undo', { base: 'button' }),
@@ -220,7 +222,7 @@ const CAPABILITY_LEVEL = Object.freeze({
     'modelSelection',
   ]),
   // Fairy only adjusts this native control when it is present.
-  OPTIONAL: Object.freeze(['toBottom']),
+  OPTIONAL: Object.freeze(['toBottom', 'planChip']),
 });
 
 const CAPABILITY_LEVEL_BY_NAME = Object.freeze(Object.fromEntries(
@@ -247,6 +249,7 @@ const CAPABILITY_DEFINITIONS = Object.freeze({
   balanceAction: { selector: OFFICIAL_SELECTORS.balance, level: CAPABILITY_LEVEL_BY_NAME.balanceAction, required: false, resolve: balanceAction },
   undoControl: { selector: OFFICIAL_SELECTORS.undo, level: CAPABILITY_LEVEL_BY_NAME.undoControl, required: false, applicable: (doc) => Boolean(phase(conversation(doc), 'active')), resolve: undoControl },
   redoControl: { selector: OFFICIAL_SELECTORS.redo, level: CAPABILITY_LEVEL_BY_NAME.redoControl, required: false, applicable: (doc) => Boolean(phase(conversation(doc), 'active')), resolve: redoControl },
+  planChip: { selector: OFFICIAL_SELECTORS.planChip, level: CAPABILITY_LEVEL_BY_NAME.planChip, required: false, resolve: planChip },
   toBottom: { selector: OFFICIAL_SELECTORS.toBottom, level: CAPABILITY_LEVEL_BY_NAME.toBottom, required: false, resolve: toBottomControl },
   composerAttachmentsSlot: { selector: OFFICIAL_SELECTORS.composerAttachmentsSlot, level: CAPABILITY_LEVEL_BY_NAME.composerAttachmentsSlot, required: false, resolve: (doc) => composerAttachmentsSlot(composerCard(composerSeat(conversation(doc)))) },
   modelSelection: { selector: OFFICIAL_SELECTORS.model, level: CAPABILITY_LEVEL_BY_NAME.modelSelection, required: false, applicable: (doc) => Boolean(phase(conversation(doc), 'active')), resolve: (doc) => modelControl(composerCard(composerSeat(conversation(doc)))) },
@@ -379,6 +382,7 @@ function voiceControl(scope) {
 function commandControl(scope) { return officialNode('command', scope); }
 function accessControl(scope) { return officialNode('access', scope); }
 function modelControl(scope) { return officialNode('model', scope); }
+function planChip(scope) { return officialNode('planChip', scope); }
 function reasoningControl(scope) { return officialNode('reasoning', scope); }
 function modelAndReasoningShareNode(scope) {
   const model = modelControl(scope);
@@ -555,6 +559,7 @@ module.exports = {
   commandControl,
   accessControl,
   modelControl,
+  planChip,
   reasoningControl,
   modelAndReasoningShareNode,
   workspaceControl,

@@ -109,6 +109,7 @@ test('attachment slots receive their own marker and never become generic accesso
         accessControl: () => null,
         modelControl: () => null,
         reasoningControl: () => null,
+        planChip: () => null,
         modelAndReasoningShareNode: () => false,
         workspaceControl: () => null,
       };

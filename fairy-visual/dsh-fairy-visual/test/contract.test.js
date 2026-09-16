@@ -1089,3 +1089,13 @@ test('dock 必须压过官方对话覆盖层（代码块/产物卡的 20 层）�
   // dock=22：压过 overlay(20)/舞台(10)/滚动条(4)，仍低于回溯按钮(30)/弹窗(1000)/过渡层。
   assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:22!important;/, 'dock 的层级必须高于官方对话覆盖层');
 });
+
+test('官方 Plan 标识在 HDD 下套用键帽风格（不再用 warn 白底橙字）', () => {
+  // 官方 dsh-client-ui-plan 的 Plan chip 走 state-warn 主题，在 HDD 深色里与其它芯片不一致。
+  // 按本仓约定：不硬编码官方哈希类名，用 aria 文案识别 + marker 属性 + CSS。
+  assert.match(adapterSource, /planChip: Object\.freeze\(\{ zh: Object\.freeze\(\['plan mode 已开启'\]\), en: Object\.freeze\(\['Plan mode on'\]\) \}\)/);
+  assert.match(adapterSource, /planChip: ariaLabelSelector\('planChip', \{ base: 'button', match: 'prefix' \}\)/);
+  assert.match(adapterSource, /OPTIONAL: Object\.freeze\(\['toBottom', 'planChip'\]\)/, '计划标识属于「出现时才调整」的 OPTIONAL 能力');
+  assert.match(composerMarkerSource, /mark\(planTarget, 'data-dsh-fairy-composer-plan-control'\)/);
+  assert.match(styleSource, /\[data-dsh-fairy-composer-plan-control="true"\]\{box-sizing:border-box!important;border-style:solid!important;border-width:2px!important;border-color:transparent!important;border-radius:8px!important;background:linear-gradient\(#30353a,#30353a\) padding-box/, '必须套用工作区芯片同款键帽底材');
+});
