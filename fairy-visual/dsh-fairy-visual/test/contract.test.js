@@ -908,7 +908,7 @@ test('keeps the sidebar hardware above the composer edge in every session', () =
   assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
   assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:22!important/, 'dock 必须压过官方对话覆盖层（代码块/产物卡在 20 层）');
-  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:24!important/, '侧栏硬件仍要压过 dock 左沿');
+  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/, '侧栏层保持低位：实测侧栏列与 dock 零重叠，抬高会盖住挂在官方覆盖层里的 HDD 装饰（品牌标记等）');
 });
 
 test('keeps the composer edge inside the card stacking context below nested control popovers', () => {
