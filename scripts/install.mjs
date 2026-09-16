@@ -180,13 +180,18 @@ function installRuntime(options, base) {
   const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { name: 'dsh-runtime', private: true };
   if (!existsSync(manifestPath)) writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
-  // 第二趟必须是 install（不是 rebuild）：pnpm 只在 install 时按 onlyBuiltDependencies 跑构建脚本，
-  // 实测 pnpm rebuild 空跑（无输出、不编译）。
-  const run = (install = false) => {
-    const argv = install ? ['install'] : ['add', spec];
+  const run = () => {
+    const argv = ['add', spec];
     const command = `pnpm ${argv.join(' ')}`;
     const options2 = { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
     return IS_WINDOWS ? spawnSync(command, { ...options2, shell: true }) : spawnSync('pnpm', argv, options2);
+  };
+  // 放行后必须**显式**重建：pnpm add/install 在依赖已满足时走 already-up-to-date，
+  // 不会因为 onlyBuiltDependencies 变化而回头执行构建脚本。
+  const rebuild = (names) => {
+    const argv = ['rebuild', ...names];
+    const options2 = { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
+    return IS_WINDOWS ? spawnSync(`pnpm ${argv.join(' ')}`, { ...options2, shell: true }) : spawnSync('pnpm', argv, options2);
   };
   const first = run();
   const output = `${first.stdout ?? ''}${first.stderr ?? ''}`;
@@ -204,12 +209,12 @@ function installRuntime(options, base) {
     const workspaceFile = join(root, 'pnpm-workspace.yaml');
     const existing = existsSync(workspaceFile) ? readFileSync(workspaceFile, 'utf8') : '';
     const allowed = [...new Set([...(existing.match(/^\s*-\s+(.+)$/gm) ?? []).map((line) => line.replace(/^\s*-\s+/, '').trim()), ...ignored])].sort();
-    writeFileSync(workspaceFile, `# 由 scripts/install.mjs 生成：只放行运行时真正需要的原生构建脚本（不是关闭严格模式）。\nonlyBuiltDependencies:\n${allowed.map((name) => `  - ${name}`).join('\n')}\n`);
-    log(`放行 ${allowed.length} 个原生依赖的构建脚本（pnpm-workspace.yaml）：${allowed.join(', ')}`);
+    writeFileSync(workspaceFile, `# 由 scripts/install.mjs 生成：只放行运行时真正需要的原生构建脚本（不是关闭严格模式）。\n# 包名一律加引号：以 @ 开头的标量是 YAML 保留指示符，不加引号 pnpm 会直接解析失败。\nonlyBuiltDependencies:\n${allowed.map((name) => `  - "${name}"`).join('\n')}\n`);
+    log(`放行 ${allowed.length} 个原生依赖的构建脚本（pnpm-workspace.yaml）并显式重建：${allowed.join(', ')}`);
     if (!options.dryRun) {
-      const second = run(true);
+      const second = rebuild(allowed);
       const lines = (second.stdout ?? '').trim().split('\n').filter((line) => line.trim());
-      console.log(lines.length > 0 ? lines.slice(-3).join('\n') : '（第二趟 install 无输出）');
+      console.log(lines.length > 0 ? lines.slice(-3).join('\n') : '（rebuild 无输出：这批被拦的多是 prebuild/平台分包，本就无需现场构建）');
     }
   }
 
