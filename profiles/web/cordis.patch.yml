@@ -59,7 +59,10 @@
     # (0.1.1 无 base 行 / 0.1.5 本行 disabled),所以不会出现 WEB_DUPLICATE_PROVIDER。
     - id: fairy-web-fetch-http
       name: '@deepseek-ai/dsh-web-fetch-http'
-      disabled: !!js process.env.DSH_FAIRY_BASE !== '011'
+      # 默认**启用**(只在显式声明 0.1.5 时禁用):未设变量 ⇒ 当 0.1.1 处理。
+      # 反过来(默认禁用)会让手抄旧启动器的 0.1.1 实例静默丢掉抓取通道 —— 宁可 0.1.5 忘记设
+      # 时**响**地失败(duplicate loader entry),也不要静默少功能。
+      disabled: !!js process.env.DSH_FAIRY_BASE === '015'
     - id: mcp-playwright
       name: '@deepseek-ai/dsh-mcp-client'
       config:
