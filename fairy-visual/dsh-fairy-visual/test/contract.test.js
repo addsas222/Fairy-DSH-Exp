@@ -1109,3 +1109,10 @@ test('键帽风格走 token：配方只定义一处，规则不再内联字面�
   assert.ok((styleSource.match(/var\(--dsh-fairy-keycap-/g) || []).length >= 20, '键帽族必须引用 token（当前 48 处）');
   assert.match(styleSource, /\[data-dsh-fairy-composer-plan-control="true"\][^}]*var\(--dsh-fairy-keycap-face\)/, '计划标识已走 token');
 });
+
+test('全页 800 字重不得命中官方弹层，且禁用字体合成（防「重影」）', () => {
+  // 实机症状：访问菜单文字「重影/双重描边」。A/B 定因：fairy 的 body 800 字重让没有 800 字面的
+  // 字体走「合成粗体」，小字号下画成双重描边。修：①弹层不吃这条规则（它们不是 HDD 表面）
+  // ②其余处 font-synthesis-weight:none（没有 800 字面就落到最近的真实字重，不再合成）。
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\] body,html\[data-dsh-fairy-visual\] body :where\(\*\):not\(\[role="menu"\], \[role="menu"\] \*, \[role="listbox"\], \[role="listbox"\] \*, \[role="dialog"\], \[role="dialog"\] \*, \[data-radix-popper-content-wrapper\] \*\)\{font-weight:800!important;font-synthesis-weight:none!important\}/, '800 字重必须排除官方弹层并禁用合成粗体');
+});

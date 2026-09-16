@@ -61,7 +61,11 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
   // #dsh-fairy-root child. Move that rendered projection, not the outer stage
   // geometry box used for sidebar alignment and lifecycle ownership.
   appendSection(`.dsh-fairy-stage>[data-dsh-fairy-mascot-root="true"]{top:-20px}`);
-  appendSection(`html[data-dsh-fairy-visual] body,html[data-dsh-fairy-visual] body :where(*){font-weight:800!important}html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp),html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp) *{font-weight:400!important}html[data-dsh-fairy-visual] body :where(.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle){font-weight:750!important}`);
+  appendSection(`/* 全页 800 字重（HDD 控制台感）有两个例外/约束：
+   ① 官方弹层（菜单/列表/对话框）不属于 HDD 表面：不吃这条规则，保持它们自己的字重；
+   ② 其余处一并声明 font-synthesis-weight:none——字体没有 800 字面时浏览器会「合成粗体」，
+      合成粗体在小字号下会画成双重描边/重影（2026-09-16 实机：访问菜单文字重影，A/B 定因）。 */
+html[data-dsh-fairy-visual] body,html[data-dsh-fairy-visual] body :where(*):not([role="menu"], [role="menu"] *, [role="listbox"], [role="listbox"] *, [role="dialog"], [role="dialog"] *, [data-radix-popper-content-wrapper] *){font-weight:800!important;font-synthesis-weight:none!important}html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp),html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp) *{font-weight:400!important}html[data-dsh-fairy-visual] body :where(.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle){font-weight:750!important}`);
 
   appendSection(`html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar{width:12px!important;transition:opacity 180ms cubic-bezier(.22,.61,.36,1)}html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar-thumb{width:6px!important}html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar[data-idle="true"]{opacity:0;pointer-events:none;transition-timing-function:cubic-bezier(.4,0,.2,1)}`);
 
