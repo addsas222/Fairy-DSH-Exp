@@ -1152,3 +1152,18 @@ test('弹层打开期间：拖拽把手不得吞掉菜单点击（网格扫描�
   // 全部集中在菜单顶部 12px 带（把手 z=20，压在卡片之上）。让它在弹层打开期间指针穿透即可。
   assert.match(styleSource, /\[data-dsh-fairy-composer-popover="true"\] \.dsh-fairy-composer-resizer\{pointer-events:none!important\}/, '弹层打开期间把手必须指针穿透');
 });
+
+test('大眼睛位置设置项：锚点 → 内层 float 的 translate 位移（挂载/清理/schema 齐备）', async () => {
+  // 需求：眼睛有独立设置项、可改位置。实现只动眼睛本身（宿主固定定位不动、布局盒不变），
+  // 用 translate（独立于 transform，不与入场 transform 打架），并走既有的设置写入路径。
+  assert.ok(styleSource.includes('--dsh-fairy-mascot-shift-x'), '缺位移令牌');
+  assert.ok(styleSource.includes('.dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x)'), '缺 float 位移规则');
+  assert.ok(styleSource.includes('data-dsh-fairy-mascot-position='), '缺锚点选择器');
+  const positionControl = await read('../src/client/mascot-position-control.js');
+  assert.ok(positionControl.includes("setControllerSetting(controller, 'mascotPosition', anchor)"), '缺设置写入（必须走 settings 通道）');
+  assert.ok(positionControl.includes('data-dsh-fairy-mascot-position-control'), '缺控件标记');
+  const dock = await read('../src/client/composer-dock.js');
+  assert.ok(dock.includes('ensureMascotPositionBase();') && dock.includes('removeMascotPositionBase();'), '缺挂载或清理');
+  assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
+  assert.ok((await read('../lib/client.js')).includes('mascot-position-control'), '客户端 bundle 没带上位置控件');
+});

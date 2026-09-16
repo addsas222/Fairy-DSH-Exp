@@ -232,6 +232,19 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
   // Keep the secondary size track available at narrow widths; the parent voice
   // bar already owns its responsive width and the range remains touch-sized.
   appendSection(`@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]{display:block!important}}`);
+  // 大眼睛位置：锚点 → 内层 float 的 translate 位移。用 translate（独立于 transform）以免和
+  // 既有的入场 transform 打架；只动眼睛、不动布局盒，宿主固定定位不受影响。
+  appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"]{--dsh-fairy-mascot-shift-x:0px;--dsh-fairy-mascot-shift-y:0px}`
+    + ['top-left','top-center','top-right','middle-left','center','middle-right','bottom-left','bottom-center','bottom-right']
+      .map((anchor, index) => {
+        const x = [-26, 0, 26][index % 3];
+        const y = [-26, 0, 26][Math.floor(index / 3)];
+        return `html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"][data-dsh-fairy-mascot-position="${anchor}"]{--dsh-fairy-mascot-shift-x:${x}%;--dsh-fairy-mascot-shift-y:${y}%}`;
+      }).join('')
+    + 'html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}');
+  appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:51px!important;width:max-content!important;height:20px!important;display:flex!important;align-items:center!important;gap:2px!important;padding:2px 4px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;pointer-events:auto!important}`);
+  appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:14px!important;height:14px!important;padding:0!important;border-radius:4px!important;border:1px solid rgba(255,255,255,.18)!important;background:transparent!important;color:var(--dsh-card-text,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important;cursor:pointer!important}`);
+  appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button][aria-pressed="true"]{background:var(--dsh-fairy-keycap-face,#555f68)!important;border-color:var(--dsh-fairy-keycap-edge,#3d444b)!important;color:#fff!important}`);
   // Keep the Fairy size track below the voice hardware with the same molded
   // edge lighting and cast shadow. The explicit top anchor avoids the two
   // absolute controls touching at responsive widths.

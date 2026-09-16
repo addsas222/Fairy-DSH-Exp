@@ -14,6 +14,9 @@ export const DEFAULT = {
   contentFade: false,
   mascotScale: 1,
   mascotAnimationSpeed: 1,
+  // 大眼睛位置：九宫格锚点，默认居中（= 既有无位移观感）。客户端默认表必须列全，
+  // 否则写入会被判非法字段而被丢弃（实测：点击控件属性不生效）。
+  mascotPosition: 'center',
   powerMode: 'normal',
   composerDockHeight: 132
 };

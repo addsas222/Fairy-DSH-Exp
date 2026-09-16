@@ -30,6 +30,7 @@ const { createResizeController, HEIGHT_MIN, HEIGHT_MAX, CONTENT_MIN } = require(
 const { setControllerSetting, settingError } = require('./settings-write.js');
 const { createMascotScaleBase } = require('./mascot-scale-control.js');
 const { createMascotAnimationSpeedBase } = require('./mascot-animation-speed-control.js');
+const { createMascotPositionBase } = require('./mascot-position-control.js');
 const MARKER_ATTRS = [
   COMPOSER_ATTR,
   'data-dsh-fairy-composer-row',
@@ -97,6 +98,7 @@ function mountComposerDock(controller) {
   let clearControls = () => {};
   let mascotScaleBase = null;
   let mascotAnimationSpeedBase = null;
+  let mascotPositionBase = null;
   let previousSeatStyle = null;
   let height = HEIGHT_MIN;
   let workspaceTemplate = null;
@@ -283,6 +285,11 @@ function mountComposerDock(controller) {
     mascotAnimationSpeedBase = null;
     seat?.querySelectorAll?.('[data-dsh-fairy-mascot-animation-speed-base="true"]').forEach((node) => node.remove());
   };
+  const removeMascotPositionBase = () => {
+    mascotPositionBase?.dispose?.();
+    mascotPositionBase = null;
+    seat?.querySelectorAll?.('[data-dsh-fairy-mascot-position-control="true"]').forEach((node) => node.remove());
+  };
   const ensureMascotAnimationSpeedBase = () => {
     if (!card) return;
     if (mascotAnimationSpeedBase?.node?.isConnected && mascotAnimationSpeedBase.host === card) return;
@@ -301,6 +308,12 @@ function mountComposerDock(controller) {
     if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
     removeMascotScaleBase();
     mascotScaleBase = createMascotScaleBase(card, controller);
+  };
+  const ensureMascotPositionBase = () => {
+    if (!card) return;
+    if (mascotPositionBase?.node?.isConnected && mascotPositionBase.host === card) return;
+    removeMascotPositionBase();
+    mascotPositionBase = createMascotPositionBase(card, controller);
   };
   // While a question card is elected the seat is auto-height and the card can
   // resize with its own content (multiple questions, expanding options). The
@@ -424,6 +437,7 @@ function mountComposerDock(controller) {
       removeMaterialLayer();
       removeMascotScaleBase();
       removeMascotAnimationSpeedBase();
+      removeMascotPositionBase();
       removeLegacyVoiceDensityMarker(card);
       card = currentCard;
       removeLegacyVoiceDensityMarker();
@@ -433,6 +447,7 @@ function mountComposerDock(controller) {
     removeLegacyMascotScaleControl();
     ensureMascotScaleBase();
     ensureMascotAnimationSpeedBase();
+    ensureMascotPositionBase();
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');
     if (workspaceRow) captureWorkspaceTemplate(workspaceRow);
     const stack = seat?.querySelector('[data-dsh-fairy-composer-stack="true"]');

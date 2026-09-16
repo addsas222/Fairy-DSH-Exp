@@ -598,6 +598,7 @@ window.__ModuleLoader__.load({
 			contentFade: false,
 			mascotScale: 1,
 			mascotAnimationSpeed: 1,
+			mascotPosition: "center",
 			powerMode: "normal",
 			composerDockHeight: 132
 		};
@@ -847,6 +848,30 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-a{background:radial-gradient(ellipse 56vmax 29vh at 46% 48%,rgba(96,212,255,.27),rgba(54,184,255,.135) 52%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-b{background:radial-gradient(ellipse 53vmax 37vh at 55% 52%,rgba(157,132,255,.23),rgba(119,91,255,.115) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-c{background:radial-gradient(ellipse 50vmax 26vh at 54% 49%,rgba(174,112,255,.24),rgba(143,94,255,.12) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-a{background:radial-gradient(ellipse 56vmax 29vh at 46% 48%,rgba(48,180,229,.22),rgba(54,184,255,.10) 52%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-b{background:radial-gradient(ellipse 53vmax 37vh at 55% 52%,rgba(139,115,241,.17),rgba(119,91,255,.078) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-c{background:radial-gradient(ellipse 50vmax 26vh at 54% 49%,rgba(154,91,233,.17),rgba(143,94,233,.075) 53%,transparent 100%)}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-native-new-session="true"]{transition:filter 90ms ease,transform 90ms ease}html[data-dsh-fairy-visual] [data-dsh-fairy-native-new-session="true"]:active{filter:brightness(.84)!important;transform:translateY(1px)!important}`);
 		appendSection(`@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]{display:block!important}}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"]{--dsh-fairy-mascot-shift-x:0px;--dsh-fairy-mascot-shift-y:0px}` + [
+			"top-left",
+			"top-center",
+			"top-right",
+			"middle-left",
+			"center",
+			"middle-right",
+			"bottom-left",
+			"bottom-center",
+			"bottom-right"
+		].map((anchor, index) => {
+			return `html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"][data-dsh-fairy-mascot-position="${anchor}"]{--dsh-fairy-mascot-shift-x:${[
+				-26,
+				0,
+				26
+			][index % 3]}%;--dsh-fairy-mascot-shift-y:${[
+				-26,
+				0,
+				26
+			][Math.floor(index / 3)]}%}`;
+		}).join("") + "html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}");
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:51px!important;width:max-content!important;height:20px!important;display:flex!important;align-items:center!important;gap:2px!important;padding:2px 4px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;pointer-events:auto!important}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:14px!important;height:14px!important;padding:0!important;border-radius:4px!important;border:1px solid rgba(255,255,255,.18)!important;background:transparent!important;color:var(--dsh-card-text,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important;cursor:pointer!important}`);
+		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button][aria-pressed="true"]{background:var(--dsh-fairy-keycap-face,#555f68)!important;border-color:var(--dsh-fairy-keycap-edge,#3d444b)!important;color:#fff!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{top:31px!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{height:24px!important;padding:2px 6px!important;overflow:hidden!important;--dsh-fairy-scale-track:#8ea6b5;--dsh-fairy-scale-track-rest:rgba(82,112,132,.24)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-track:#a8bac9;--dsh-fairy-scale-track-rest:rgba(168,186,201,.24)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]{position:absolute!important;left:16px!important;right:16px!important;top:50%!important;transform:translateY(-50%)!important;width:auto!important;height:16px!important;margin:0!important;box-sizing:border-box!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track{height:5px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-track) 0 var(--dsh-fairy-scale),var(--dsh-fairy-scale-track-rest) var(--dsh-fairy-scale) 100%)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{margin-top:-2.5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track{height:5px!important;background:var(--dsh-fairy-scale-track-rest)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{height:5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{background:var(--dsh-fairy-scale-track)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{position:absolute!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]::before{content:''!important;position:absolute!important;z-index:0!important;left:16px!important;right:16px!important;top:50%!important;height:5px!important;transform:translateY(-50%)!important;border-radius:999px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-track) 0 var(--dsh-fairy-scale),var(--dsh-fairy-scale-track-rest) var(--dsh-fairy-scale) 100%)!important;pointer-events:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]{z-index:1!important;background:transparent!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{background:transparent!important}`);
@@ -3583,6 +3608,109 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 	}));
 
 //#endregion
+//#region src/client/mascot-position-control.js
+	var require_mascot_position_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const CONTROL_ATTR = "data-dsh-fairy-mascot-position-control";
+		const BUTTON_ATTR = "data-dsh-fairy-mascot-position-button";
+		const ROOT_ID = "dsh-fairy-root";
+		const MASCOT_POSITION_ATTR = "data-dsh-fairy-mascot-position";
+		const MASCOT_POSITIONS = [
+			"top-left",
+			"top-center",
+			"top-right",
+			"middle-left",
+			"center",
+			"middle-right",
+			"bottom-left",
+			"bottom-center",
+			"bottom-right"
+		];
+		const MASCOT_POSITION_DEFAULT = "center";
+		const MASCOT_POSITION_LABELS = {
+			"top-left": "左上",
+			"top-center": "中上",
+			"top-right": "右上",
+			"middle-left": "左中",
+			"center": "居中",
+			"middle-right": "右中",
+			"bottom-left": "左下",
+			"bottom-center": "中下",
+			"bottom-right": "右下"
+		};
+		const { setControllerSetting, settingError } = require_settings_write();
+		function normalizeMascotPosition(value) {
+			return MASCOT_POSITIONS.includes(value) ? value : MASCOT_POSITION_DEFAULT;
+		}
+		function mascotRoot(documentRef = document) {
+			return documentRef?.getElementById(ROOT_ID) || null;
+		}
+		function applyMascotPosition(value, documentRef = document) {
+			const root = mascotRoot(documentRef);
+			if (!root?.setAttribute) return;
+			root.setAttribute(MASCOT_POSITION_ATTR, normalizeMascotPosition(value));
+		}
+		/** 一行九格：紧凑控件条，与缩放/速度控件同宽同高，塞得进 composer 卡片。 */
+		function createMascotPositionBase(host, controller, documentRef = document) {
+			const shell = documentRef.createElement("div");
+			shell.setAttribute(CONTROL_ATTR, "true");
+			shell.setAttribute("role", "group");
+			shell.setAttribute("aria-label", "Fairy 眼睛位置");
+			const buttons = /* @__PURE__ */ new Map();
+			const paint = (value) => {
+				const current = normalizeMascotPosition(value);
+				for (const [anchor, button] of buttons) button.setAttribute("aria-pressed", String(anchor === current));
+			};
+			for (const anchor of MASCOT_POSITIONS) {
+				const button = documentRef.createElement("button");
+				button.type = "button";
+				button.setAttribute(BUTTON_ATTR, anchor);
+				button.setAttribute("aria-label", `Fairy 眼睛位置：${MASCOT_POSITION_LABELS[anchor]}`);
+				button.textContent = MASCOT_POSITION_LABELS[anchor].slice(-1);
+				button.addEventListener("click", () => {
+					applyMascotPosition(anchor, documentRef);
+					paint(anchor);
+					setControllerSetting(controller, "mascotPosition", anchor).catch((error) => {
+						const current = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
+						applyMascotPosition(current, documentRef);
+						paint(current);
+						console.warn("[fairy] 眼睛位置写入失败：", settingError("mascotPosition", error));
+					});
+				});
+				buttons.set(anchor, button);
+				shell.appendChild(button);
+			}
+			const off = controller.subscribe?.(() => {
+				const next = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
+				applyMascotPosition(next, documentRef);
+				paint(next);
+			});
+			const initial = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
+			applyMascotPosition(initial, documentRef);
+			paint(initial);
+			host?.appendChild?.(shell);
+			return {
+				node: shell,
+				host,
+				dispose: () => {
+					off?.();
+					shell.remove?.();
+				}
+			};
+		}
+		module.exports = {
+			CONTROL_ATTR,
+			BUTTON_ATTR,
+			MASCOT_POSITION_ATTR,
+			MASCOT_POSITIONS,
+			MASCOT_POSITION_DEFAULT,
+			MASCOT_POSITION_LABELS,
+			normalizeMascotPosition,
+			applyMascotPosition,
+			createMascotPositionBase
+		};
+	}));
+
+//#endregion
 //#region src/client/composer-dock.js
 	var require_composer_dock = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const COMPOSER_ATTR = "data-dsh-fairy-composer-dock";
@@ -3601,6 +3729,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 		const { setControllerSetting, settingError } = require_settings_write();
 		const { createMascotScaleBase } = require_mascot_scale_control();
 		const { createMascotAnimationSpeedBase } = require_mascot_animation_speed_control();
+		const { createMascotPositionBase } = require_mascot_position_control();
 		const MARKER_ATTRS = [
 			COMPOSER_ATTR,
 			"data-dsh-fairy-composer-row",
@@ -3656,6 +3785,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 			let clearControls = () => {};
 			let mascotScaleBase = null;
 			let mascotAnimationSpeedBase = null;
+			let mascotPositionBase = null;
 			let previousSeatStyle = null;
 			let height = HEIGHT_MIN;
 			let workspaceTemplate = null;
@@ -3821,6 +3951,11 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				mascotAnimationSpeedBase = null;
 				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-animation-speed-base=\"true\"]").forEach((node) => node.remove());
 			};
+			const removeMascotPositionBase = () => {
+				mascotPositionBase?.dispose?.();
+				mascotPositionBase = null;
+				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-position-control=\"true\"]").forEach((node) => node.remove());
+			};
 			const ensureMascotAnimationSpeedBase = () => {
 				if (!card) return;
 				if (mascotAnimationSpeedBase?.node?.isConnected && mascotAnimationSpeedBase.host === card) return;
@@ -3839,6 +3974,12 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
 				removeMascotScaleBase();
 				mascotScaleBase = createMascotScaleBase(card, controller);
+			};
+			const ensureMascotPositionBase = () => {
+				if (!card) return;
+				if (mascotPositionBase?.node?.isConnected && mascotPositionBase.host === card) return;
+				removeMascotPositionBase();
+				mascotPositionBase = createMascotPositionBase(card, controller);
 			};
 			let seatObserver = null;
 			const syncQuestionObserver = () => {
@@ -3942,6 +4083,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 					removeMaterialLayer();
 					removeMascotScaleBase();
 					removeMascotAnimationSpeedBase();
+					removeMascotPositionBase();
 					removeLegacyVoiceDensityMarker(card);
 					card = currentCard;
 					removeLegacyVoiceDensityMarker();
@@ -3951,6 +4093,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				removeLegacyMascotScaleControl();
 				ensureMascotScaleBase();
 				ensureMascotAnimationSpeedBase();
+				ensureMascotPositionBase();
 				const workspaceRow = seat?.querySelector("[data-dsh-fairy-composer-workspace=\"true\"]:not([data-dsh-fairy-composer-workspace-projection=\"true\"])");
 				if (workspaceRow) captureWorkspaceTemplate(workspaceRow);
 				const stack = seat?.querySelector("[data-dsh-fairy-composer-stack=\"true\"]");
