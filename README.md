@@ -358,3 +358,13 @@ npm 工程根（lock 与盘上不一致即"一次 install 可能把整棵树拧�
 除文件另有说明外，本仓库中 Fairy-DSH 的原创代码、脚本、测试、配置和文档按 **Apache License 2.0** 发布（见 `LICENSE` 与 `NOTICE`）。第三方插件、依赖及其生成物不在本许可范围内，继续适用各自许可证。
 
 《绝区零》剧情文本、角色资料、官方素材、私有 WORLD CORE、个人语料、会话数据和运行时密钥**均不随仓库发布**；本项目不授予相关版权、商标或官方关联权利。发布前请按 `RELEASE-CHECKLIST.md` 复核分发内容。
+
+### 设计工坊（pen.dev）
+
+用户要设计 UI 时走 pen.dev：
+
+1. **没装 Pen** ⇒ 自行安装（安装器会打印指引，不做静默安装）：<https://www.pen.dev/> 下载 → 首次启动 → 新建/打开一个 `.pen`；
+2. **装好后** ⇒ 安装器已自动把 MCP 写进该 home 的 `profiles/web/cordis.patch.yml`（幂等；也可单独跑 `node scripts/pen-mcp.mjs --ensure`）；
+3. **起设计** ⇒ 设计会话由 **DSH 自己的 agent + 模型配置**驱动（MCP 只是笔刷）。
+
+两个前提：MCP 连的是**运行中的应用**（Pen 没开会报 failed to connect），且编辑器里要**打开着一个 .pen 文件**（否则报 a file needs to be open）。

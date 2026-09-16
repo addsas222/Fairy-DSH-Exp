@@ -377,6 +377,14 @@ function main() {
   const deployed = spawnSync(bash, ['-lc', command], { stdio: 'inherit' });
   if (deployed.status !== 0) fail('部署失败（见上方输出）');
 
+  // 设计工坊：装了 Pen 就自动把它的 MCP 配进该 home 的 profile（幂等）；没装则打印安装指引，
+  // 不算失败（用户自行安装后重跑即可）。
+  if (!options.dryRun) {
+    const pen = spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'pen-mcp.mjs'), '--ensure', '--home', options.home], { stdio: 'inherit' });
+    if (pen.status === 3) log('Pen 未安装：上面是安装指引；装好后重跑本安装器即可自动接上 MCP');
+    else if (pen.status !== 0) warn('pen MCP 自动配置未完成（不阻塞安装）；可单独重跑 node scripts/pen-mcp.mjs');
+  }
+
   let launcher = null;
   if (!options.skipLauncher && !options.dryRun) launcher = writeLauncher(options, runtime, base);
   else if (options.dryRun) log('（dry-run）跳过启动器写入');
