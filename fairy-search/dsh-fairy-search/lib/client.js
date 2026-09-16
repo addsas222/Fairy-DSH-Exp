@@ -346,6 +346,11 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     const SETTINGS_NAMESPACE = 'fairy-search';
     const STATE_PATH = '/fairy-search/state';
     const TEST_PATH = '/fairy-search/test';
+    // 写设置必须走宿主路由：浏览器镜像的 scope 只有 `set(field, value)`（顶层标量），
+    // 而 `custom.baseURL` 这类嵌套字段在页面上根本寻址不到（`scope.mutate` 是宿主侧 API，
+    // 镜像上没有——曾因此保存恒定失败「scope.mutate is not a function」）。宿主用自己的
+    // scope 做**合并**写入，没提交的字段（尤其是未改动的密钥）保持原样。
+    const SETTINGS_PATH = '/fairy-search/settings';
     // The host gives one probe 15s; the browser waits slightly longer so the
     // host's own timeout (and its message) wins the race.
     const TEST_TIMEOUT_MS = 20_000;
@@ -439,17 +444,23 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         // Only fields the user actually typed are written: an empty input never
         // clears a stored secret, and keys are never read back into the form.
         save: async (drafts) => {
-          const ops = [];
-          if (drafts.deepseekKey.trim()) ops.push({ op: 'set', path: ['deepseek', 'apiKey'], value: drafts.deepseekKey.trim() });
-          if (drafts.exaKey.trim()) ops.push({ op: 'set', path: ['exa', 'apiKey'], value: drafts.exaKey.trim() });
-          if (drafts.perplexityKey.trim()) ops.push({ op: 'set', path: ['perplexity', 'apiKey'], value: drafts.perplexityKey.trim() });
-          if (drafts.customKey.trim()) ops.push({ op: 'set', path: ['custom', 'apiKey'], value: drafts.customKey.trim() });
-          if (drafts.customBaseURL !== null && drafts.customBaseURL.trim() !== customBaseURL) ops.push({ op: 'set', path: ['custom', 'baseURL'], value: drafts.customBaseURL.trim() });
-          if (ops.length === 0) return { changed: false };
+          const fields = {};
+          if (drafts.deepseekKey.trim()) fields['deepseek.apiKey'] = drafts.deepseekKey.trim();
+          if (drafts.exaKey.trim()) fields['exa.apiKey'] = drafts.exaKey.trim();
+          if (drafts.perplexityKey.trim()) fields['perplexity.apiKey'] = drafts.perplexityKey.trim();
+          if (drafts.customKey.trim()) fields['custom.apiKey'] = drafts.customKey.trim();
+          if (drafts.customBaseURL !== null && drafts.customBaseURL.trim() !== customBaseURL) fields['custom.baseURL'] = drafts.customBaseURL.trim();
+          if (Object.keys(fields).length === 0) return { changed: false };
           try {
-            await scope.mutate(ops);
+            const response = await fetch(SETTINGS_PATH, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', accept: 'application/json' },
+              body: JSON.stringify({ fields }),
+            });
+            const value = await response.json().catch(() => null);
+            if (!response.ok || value?.ok !== true) throw new Error(value?.reason || value?.error || `HTTP ${response.status}`);
           } catch (error) {
-            diagnostics.warn('settings.save', { fields: ops.length }, error);
+            diagnostics.warn('settings.save', { fields: Object.keys(fields).length }, error);
             throw error;
           }
           return { changed: true };

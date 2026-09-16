@@ -71,17 +71,22 @@ test('registers only the settings section, with a replace-safe registration', ()
   assert.match(code, /const scope = ctx\.settingsScope\.bind\(\{ namespace: SETTINGS_NAMESPACE \}\);/);
 });
 
-test('writes keys as path-addressed secrets and never binds a stored key into the form', () => {
+test('writes keys through the host route (the browser scope cannot address nested fields)', () => {
   // Keys are `role('secret')`: the client can only write them, never render them.
   for (const engine of ['deepseek', 'exa', 'perplexity', 'custom']) {
-    assert.match(code, new RegExp(`\\{ op: 'set', path: \\['${engine}', 'apiKey'\\]`));
+    assert.match(code, new RegExp(`fields\\['${engine}\\.apiKey'\\]`));
   }
-  assert.match(code, /\{ op: 'set', path: \['custom', 'baseURL'\]/);
-  assert.match(code, /await scope\.mutate\(ops\);/);
+  assert.match(code, /fields\['custom\.baseURL'\]/);
+  assert.match(code, /await fetch\(SETTINGS_PATH, \{/);
+  // 镜像 scope 没有 mutate（宿主侧 API）：保存路径里再出现就是恒定的「保存失败」。
+  // 断言只看保存函数体——常量区的说明注释里正当地提到了这个名字。
+  const saveSource = code.slice(code.indexOf('save: async (drafts)'), code.indexOf('const configured = form.stored'));
+  assert.ok(saveSource.length > 0, '保存函数体必须能定位');
+  assert.doesNotMatch(saveSource, /scope\.mutate/);
   // An untouched (empty) draft writes nothing, so saving never clears a stored secret.
-  assert.match(code, /if \(drafts\.deepseekKey\.trim\(\)\) ops\.push/);
+  assert.match(code, /if \(drafts\.deepseekKey\.trim\(\)\) fields\['deepseek\.apiKey'\]/);
   // 「没有需要保存的改动。」由套件出：没有 op 就报 `changed: false`，文案只在 ASK_TEXT 里。
-  assert.match(code, /if \(ops\.length === 0\) return \{ changed: false \};/);
+  assert.match(code, /if \(Object\.keys\(fields\)\.length === 0\) return \{ changed: false \};/);
   // Password rows are ask-kit AskText controlled by the draft only — never by the snapshot.
   const passwordRows = code.match(/type: 'password'[\s\S]{0,600}?value: form\.draft\.\w+/g) ?? [];
   assert.equal(passwordRows.length, 4);
@@ -126,15 +131,46 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   const effects = [];
   const slots = new Map();
   const fetches = [];
-  // A minimal hook harness: render once, then inspect the tree (state updates are
-  // not reconciled, matching the repo's existing client-bundle tests).
+  // A minimal but **stateful** hook harness: hook cells persist across renders and a setter
+  // re-renders the slot, so an interaction (typing into a field, then saving) is observable.
+  const hookCells = [];
+  let hookCursor = 0;
+  let currentTree = null;
+  // 与真 React 对齐的两条最小语义：渲染期间同步 setState 不就地重入，同值不重渲染。
+  // 缺了这两条，套件里「渲染期同步 setState」的路径会把朴素 harness 自激成死循环。
+  let rendering = false;
+  const renderSlot = () => {
+    if (rendering) return;
+    rendering = true;
+    try {
+      hookCursor = 0;
+      const element = slots.get('fairy-search').component();
+      currentTree = renderTree(element.type(element.props));
+    } finally {
+      rendering = false;
+    }
+  };
   const React = {
-    useState(initial) { return [typeof initial === 'function' ? initial() : initial, () => {}]; },
-    useRef(initial) { return { current: initial }; },
-    useCallback(callback) { return callback; },
-    useEffect(callback) { effects.push(callback); },
-    useLayoutEffect(callback) { effects.push(callback); },
-    useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
+    useState(initial) {
+      const index = hookCursor++;
+      if (!(index in hookCells)) hookCells[index] = typeof initial === 'function' ? initial() : initial;
+      return [hookCells[index], (next) => {
+        if (rendering) return;
+        const value = typeof next === 'function' ? next(hookCells[index]) : next;
+        if (Object.is(value, hookCells[index])) return;
+        hookCells[index] = value;
+        renderSlot();
+      }];
+    },
+    useRef(initial) {
+      const index = hookCursor++;
+      if (!(index in hookCells)) hookCells[index] = { current: initial };
+      return hookCells[index];
+    },
+    useCallback(callback) { hookCursor++; return callback; },
+    useEffect(callback) { hookCursor++; effects.push(callback); },
+    useLayoutEffect(callback) { hookCursor++; effects.push(callback); },
+    useSyncExternalStore(_subscribe, getSnapshot) { hookCursor++; return getSnapshot(); },
   };
   const jsxRuntime = {
     jsx(type, props) { return { type, props: props || {} }; },
@@ -145,6 +181,9 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   function StateDotAtom(props) { return { type: 'state-dot', props: props || {} }; }
   const fetchStub = async (url, init = {}) => {
     fetches.push({ url: String(url), method: init.method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined });
+    if (String(url) === '/fairy-search/settings') {
+      return { ok: true, status: 200, async json() { return { ok: true, changed: true }; } };
+    }
     if (String(url) === '/fairy-search/state') {
       return { ok: true, status: 200, async json() { return { provider: 'deepseek-official', configured: { deepseek: true, exa: false, perplexity: false, custom: false } }; } };
     }
@@ -190,7 +229,7 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
     getSnapshot() { return { status: this.status, writable: this.writable, value: this.value }; }
     subscribe() { return () => {}; }
     async set(field, value) { writes.push({ op: 'set', path: [field], value }); }
-    async mutate(ops) { writes.push(...ops); }
+    // 真实镜像**没有** mutate：假 scope 也不给，否则「保存恒定失败」这类回归测不出来。
   }
   const scope = new FakeSettingsScope();
   plugin.apply({
@@ -205,6 +244,7 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   const registered = slots.get('fairy-search');
   assert.equal(registered.definition.order, 28);
   assert.equal(registered.definition.label(), '搜索引擎');
+  hookCursor = 0;
   const element = registered.component();
   const tree = renderTree(element.type(element.props));
   const rendered = JSON.stringify(tree);
@@ -249,7 +289,16 @@ test('the settings card renders engines, secret inputs, probe actions, and the M
   // Saving with untouched fields issues no write at all.
   const saveButton = findNode(tree, (node) => node.type === 'button-atom' && node.props.children === ASK_TEXT.save);
   await saveButton.props.onClick();
-  assert.deepEqual(writes, []);
+  assert.deepEqual(writes, [], '未改动不写 scope');
+  assert.equal(fetches.some((call) => call.url === '/fairy-search/settings'), false, '未改动也不该发写请求');
+
+  // 填入一条密钥：写请求只带用户真改过的字段（未编辑的地址不上报 ⇒ 服务端不会覆盖它）。
+  await passwordInputs[1].props.onChange({ target: { value: 'exa-typed-key' } });
+  await findNode(currentTree, (node) => node.type === 'button-atom' && node.props.children === ASK_TEXT.save).props.onClick();
+  const saveCall = fetches.find((call) => call.url === '/fairy-search/settings');
+  assert.ok(saveCall, '保存必须打到宿主写路由（镜像 scope 没有 mutate）');
+  assert.equal(saveCall.method, 'POST');
+  assert.deepEqual(saveCall.body, { fields: { 'exa.apiKey': 'exa-typed-key' } }, '只带改过的字段；地址未改则不上报，服务端合并写入不会覆盖它');
 
   // 只读会话：按钮停用，状态用套件那句 ASK_TEXT.readOnly。
   const readOnlyScope = new FakeSettingsScope();

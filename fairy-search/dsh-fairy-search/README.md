@@ -2,7 +2,7 @@
 
 Fairy 的搜索引擎中枢与设置面板。双面插件：
 
-- **宿主**（`lib/index.js`）向 `ctx.web` 注册一个元搜索提供方 `fairy-search-hub`，每次请求按当前设置路由到所选引擎，并暴露两个控制端点。
+- **宿主**（`lib/index.js`）向 `ctx.web` 注册一个元搜索提供方 `fairy-search-hub`，每次请求按当前设置路由到所选引擎，并暴露三个控制端点。
 - **客户端**（`lib/client.js`）在「设置 → 搜索引擎」卡片里选择引擎、填写密钥、一键测试，并说明 MCP 服务器的接入方式。
 
 模型侧仍然使用官方 `web_search` 工具与其结果卡片，本插件不重建结果展示，也不注册任何会话头部条目。
@@ -59,9 +59,11 @@ Fairy 的搜索引擎中枢与设置面板。双面插件：
 | --- | --- | --- | --- |
 | `POST` | `/fairy-search/test` | `{ provider? }`（省略则用当前设置） | `{ ok: true, latencyMs, sources: [{ title, url }] }` 或 `{ ok: false, error }` |
 | `GET` | `/fairy-search/state` | — | `{ provider, configured: { deepseek, exa, perplexity, custom } }` |
+| `POST` | `/fairy-search/settings` | `{ fields: { 'custom.baseURL': 'https://…', 'exa.apiKey': '…' } }`（只带用户改过的字段） | `{ ok: true, changed }` 或 `{ error, reason }` |
 
 - 测试用固定查询 `DeepSeek`，宿主侧 15 秒超时（超时映射为「搜索请求超时（15 秒）。」）；请求格式错误或未知引擎返回 HTTP 400，引擎自身失败返回 HTTP 200 + `ok:false`，便于卡片内联展示。
 - `state` 只返回布尔值，永不返回密钥；失败信息与诊断日志都会把已配置的密钥替换为 `[redacted]`。
+- `settings` 是设置卡的写路径：浏览器侧的设置 scope 只有 `set(field, value)`（**顶层标量**），`custom.baseURL` 这类嵌套字段在页面上根本寻址不到（`scope.mutate` 是宿主 API，镜像上没有——曾因此每次保存都失败「scope.mutate is not a function」）。卡片把平面字段名 POST 过来、宿主用自己的 scope **合并**写入：没提交的字段原样保留，**空密钥一律不写**（未编辑的密钥不会被清掉）。未知字段/非字符串值 400，命名空间未注册 503，写入失败 500。
 
 ## 客户端槽位
 

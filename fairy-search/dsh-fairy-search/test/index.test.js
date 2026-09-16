@@ -355,9 +355,9 @@ test('the test route takes its engine from settings for a body-less POST', async
 });
 
 test('apply wires the settings namespace, the hub provider, and both control routes', async () => {
-  const registered = { namespaces: [], providers: [], routes: [], cleanups: [] };
+  const registered = { namespaces: [], providers: [], routes: [], cleanups: [], patches: [] };
   const section = { provider: 'custom', custom: { baseURL: 'https://gw.example/v1' } };
-  const scope = { get: () => section };
+  const scope = { get: () => section, update: async (patch) => { registered.patches.push(patch); } };
   const services = {
     settings: {
       register: (ns, schema) => {
@@ -405,12 +405,21 @@ test('apply wires the settings namespace, the hub provider, and both control rou
   assert.deepEqual(registered.routes.map((route) => [route.kind, route.path]), [
     ['exact', '/fairy-search/test'],
     ['exact', '/fairy-search/state'],
+    ['exact', '/fairy-search/settings'],
   ]);
   assert.equal(registered.routes.every((route) => typeof route.handler === 'function'), true);
 
   const state = await dispatch(registered.routes.find((route) => route.path === '/fairy-search/state').handler, new EventEmitter());
   assert.equal(state.body.provider, 'custom');
   assert.equal(state.body.configured.custom, true);
+
+  // 写路由确实落到注册的命名空间 scope 上（`update` 合并写，不是镜像那套 set/mutate）。
+  const write = await dispatch(
+    registered.routes.find((route) => route.path === '/fairy-search/settings').handler,
+    requestWithJson({ fields: { 'exa.apiKey': 'exa-typed' } }),
+  );
+  assert.equal(write.statusCode, 200);
+  assert.deepEqual(registered.patches, [{ exa: { apiKey: 'exa-typed' } }]);
 
   // Disposing the plugin's effects releases the registrations.
   for (const cleanup of registered.cleanups) if (typeof cleanup === 'function') cleanup();
@@ -430,4 +439,54 @@ test('handler disposal aborts in-flight probes', async () => {
     assert.equal(response.body.ok, false);
     assert.equal(response.body.error, '请求已取消。');
   });
+});
+
+test('the settings route merges only the posted fields and never clears an untouched secret', async () => {
+  const written = [];
+  const handlers = createFairySearchHandlers({
+    getSettings: () => ({ provider: 'custom', custom: { baseURL: 'https://gw.example/v1', apiKey: 'gw-key' } }),
+    env: {},
+    writeSettings: async (patch) => { written.push(patch); },
+  });
+
+  const empty = await dispatch(handlers.config, requestWithJson({ fields: {} }));
+  assert.equal(empty.statusCode, 200);
+  assert.deepEqual(empty.body, { ok: true, changed: false });
+  assert.deepEqual(written, [], '空提交不落盘');
+
+  const saved = await dispatch(handlers.config, requestWithJson({ fields: { 'custom.baseURL': ' https://api.anysearch.com/v1/ ', 'exa.apiKey': 'exa-typed' } }));
+  assert.equal(saved.statusCode, 200);
+  assert.deepEqual(saved.body, { ok: true, changed: true });
+  // 合并 patch 只含提交字段（trim 后）：没提交的 `custom.apiKey` 原样留在文档里。
+  assert.deepEqual(written, [{ exa: { apiKey: 'exa-typed' }, custom: { baseURL: 'https://api.anysearch.com/v1/' } }]);
+
+  // 空密钥从不下发（用户核心诉求：密钥不得被空串清掉）；地址是普通字段，允许清空。
+  await dispatch(handlers.config, requestWithJson({ fields: { 'exa.apiKey': '   ', 'custom.baseURL': '' } }));
+  assert.deepEqual(written[1], { custom: { baseURL: '' } });
+});
+
+test('the settings route rejects unknown fields and unusable input', async () => {
+  const handlers = createFairySearchHandlers({ writeSettings: async () => {} });
+  const unknown = await dispatch(handlers.config, requestWithJson({ fields: { 'custom.model': 'x' } }));
+  assert.equal(unknown.statusCode, 400);
+  assert.equal(unknown.body.error, 'settings-field-unknown');
+  const badType = await dispatch(handlers.config, requestWithJson({ fields: { 'exa.apiKey': 42 } }));
+  assert.equal(badType.statusCode, 400);
+  assert.equal(badType.body.error, 'settings-value-invalid');
+  const malformed = await dispatch(handlers.config, requestWithBody('{oops'));
+  assert.equal(malformed.statusCode, 400);
+  const missing = await dispatch(handlers.config, requestWithJson({ fields: undefined }));
+  assert.equal(missing.statusCode, 400);
+  assert.equal(missing.body.error, 'settings-patch-invalid');
+});
+
+test('the settings route reports an unavailable or failing writer instead of a silent success', async () => {
+  const unavailable = await dispatch(createFairySearchHandlers({}).config, requestWithJson({ fields: { provider: 'exa' } }));
+  assert.equal(unavailable.statusCode, 503, '命名空间没注册时不能回 200');
+  const failing = await dispatch(
+    createFairySearchHandlers({ writeSettings: async () => { throw new Error('settings provider is read-only'); } }).config,
+    requestWithJson({ fields: { provider: 'exa' } }),
+  );
+  assert.equal(failing.statusCode, 500);
+  assert.equal(failing.body.error, 'settings-write-failed');
 });

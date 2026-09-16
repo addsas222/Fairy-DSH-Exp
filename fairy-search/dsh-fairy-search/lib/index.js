@@ -130,6 +130,48 @@ export function resolveFairySearchSettings(value) {
   };
 }
 
+/**
+ * Flat field names the settings card may write, mapped to whether an empty string is a
+ * legitimate value. Secret rows are `false`: an empty input never clears a stored key.
+ */
+const WRITABLE_SETTINGS_FIELDS = new Map([
+  ['provider', true],
+  ['deepseek.apiKey', false],
+  ['exa.apiKey', false],
+  ['perplexity.apiKey', false],
+  ['custom.baseURL', true],
+  ['custom.apiKey', false],
+]);
+
+/**
+ * Turn the flat field map posted by the settings card into a nested merge patch.
+ *
+ * The browser mirror of a settings scope only writes top-level scalars (`set(field, value)`), so
+ * a nested row such as `custom.baseURL` cannot be addressed from the page at all; the card posts
+ * flat names to this plugin's own route instead and the host merges them. A merge patch leaves
+ * every field the card did not send untouched, which is what keeps an unedited secret alive.
+ *
+ * @param fields - `{ 'custom.baseURL': 'https://…' }` from the request body.
+ * @returns `{ patch, changed }`, or `{ error, detail }` when the input is unusable.
+ */
+export function resolveSettingsPatch(fields) {
+  if (fields === null || typeof fields !== 'object' || Array.isArray(fields)) return { error: 'settings-patch-invalid' };
+  const patch = {};
+  let changed = false;
+  for (const [name, raw] of Object.entries(fields)) {
+    const allowEmpty = WRITABLE_SETTINGS_FIELDS.get(name);
+    if (allowEmpty === undefined) return { error: 'settings-field-unknown', detail: name };
+    if (typeof raw !== 'string') return { error: 'settings-value-invalid', detail: name };
+    const value = raw.trim();
+    if (value.length === 0 && !allowEmpty) continue;
+    const [group, field] = name.split('.');
+    if (field === undefined) patch[group] = value;
+    else patch[group] = { ...(patch[group] ?? {}), [field]: value };
+    changed = true;
+  }
+  return { patch, changed };
+}
+
 /** Availability-key of one engine id (`deepseek-official` reports under `deepseek`). */
 export function availabilityKeyFor(provider) {
   return provider === 'deepseek-official' ? DEEPSEEK_SETTINGS_KEY : provider;
@@ -481,6 +523,7 @@ export function testFailureMessage(code, error, settings, env) {
  */
 export function createFairySearchHandlers({
   getSettings = () => undefined,
+  writeSettings,
   env = process.env,
   fetchImpl = fetch,
   timeoutMs = FAIRY_SEARCH_TEST_TIMEOUT_MS,
@@ -505,6 +548,39 @@ export function createFairySearchHandlers({
           custom: availability.custom.available,
         },
       });
+    },
+    /** POST /fairy-search/settings — merge the fields the card typed; empty secrets never clear. */
+    config: async (req, res) => {
+      let body;
+      try {
+        body = await readJson(req);
+      } catch (error) {
+        sendJson(res, 400, { error: error?.code || 'invalid-json' });
+        return;
+      }
+      const resolved = resolveSettingsPatch(body?.fields);
+      if (resolved.error !== undefined) {
+        diagnostics.warn('settings.patch', { code: resolved.error }, new Error(resolved.detail || resolved.error));
+        sendJson(res, 400, { error: resolved.error, reason: resolved.detail ?? resolved.error });
+        return;
+      }
+      if (resolved.changed) {
+        // No writer means the host never registered the namespace: report it instead of
+        // answering 200, or the card would claim a save that never reached the document.
+        if (typeof writeSettings !== 'function') {
+          sendJson(res, 503, { error: 'settings-unavailable', reason: '设置命名空间不可写。' });
+          return;
+        }
+        try {
+          await writeSettings(resolved.patch);
+        } catch (error) {
+          const unavailable = error?.code === 'settings-unavailable';
+          if (!unavailable) diagnostics.warn('settings.write', {}, redactedError(error, resolveFairySearchSettings(getSettings()), env));
+          sendJson(res, unavailable ? 503 : 500, { error: unavailable ? 'settings-unavailable' : 'settings-write-failed', reason: describeError(error) });
+          return;
+        }
+      }
+      sendJson(res, 200, { ok: true, changed: resolved.changed });
     },
     /** POST /fairy-search/test — one probe search with `provider` overriding the selection. */
     test: async (req, res) => {
@@ -558,22 +634,33 @@ export function createFairySearchHandlers({
 export function apply(ctx) {
   return diagnostics.guard('apply', () => {
     let readSettings = () => undefined;
+    let writeSettings;
     ctx.inject(['settings'], (settingsCtx) => {
       const scope = settingsCtx.settings.register(FAIRY_SEARCH_SETTINGS, FairySearchSettings);
       readSettings = () => scope.get();
+      writeSettings = (patch) => scope.update(patch);
     });
     ctx.inject(['web'], (webCtx) => {
       const unregister = webCtx.web.registerSearchProvider(createFairySearchHub({ getSettings: () => readSettings() }));
       webCtx.effect(() => () => unregister(), 'dsh-fairy-search web provider');
     });
-    const handlers = createFairySearchHandlers({ getSettings: () => readSettings() });
+    const handlers = createFairySearchHandlers({
+      getSettings: () => readSettings(),
+      // The namespace registers asynchronously; until then the route answers 503 instead of
+      // pretending a save landed.
+      writeSettings: (patch) => writeSettings === undefined
+        ? Promise.reject(Object.assign(new Error('fairy-search 设置命名空间尚未注册。'), { code: 'settings-unavailable' }))
+        : writeSettings(patch),
+    });
     ctx.inject(['webServer'], (ws) => ws.effect(() => {
       const unregisterTest = ws.webServer.register({ kind: 'exact', path: '/fairy-search/test', handler: handlers.test });
       const unregisterState = ws.webServer.register({ kind: 'exact', path: '/fairy-search/state', handler: handlers.state });
+      const unregisterSettings = ws.webServer.register({ kind: 'exact', path: '/fairy-search/settings', handler: handlers.config });
       return () => {
         handlers.dispose();
         unregisterTest?.();
         unregisterState?.();
+        unregisterSettings?.();
       };
     }));
   }, { surface: 'host' });
