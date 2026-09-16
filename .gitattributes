@@ -19,3 +19,8 @@
 # Hash-pinned artifacts: the pinned hash is over these exact bytes, so git must
 # never rewrite them for a platform (and drift by an editor is then visible).
 profiles/web/patches/*.patch -text
+
+# 批处理文件必须 CRLF：cmd.exe 对 LF-only 的 .cmd 会错解析（实测每行吃掉开头 1-2 个字符）。
+# 仓库内按 text 归一化为 LF，检出时转 CRLF——与全局 eol=lf 约定并存。
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -39,10 +39,34 @@
 | **隔离实例**（推荐，fairy 只能在它上面跑全） | 自用、实验 | 独立 `DSH_HOME`（如 `~/.dsh-fairy`）+ 独立 runtime 安装（本机用 0.1.1-rc.2），不碰日常 GUI |
 | **主 profile**（`~/.dsh`） | 日常使用 | 走宿主自己的 runtime（本机已是 0.1.5-rc.2）；fairy 的**客户端面孔**在 0.1.2+ 已不存在（见 §3） |
 
-一键部署（POSIX sh，Windows 上用 `sh` 调用）：
+一键部署（三平台同一入口；落位本身仍全部在 `deploy-live.sh`，安装器只解决它管不到的三件事）：
+
+| 平台 | 入口 |
+| --- | --- |
+| Windows | 双击 `install.cmd`，或 `node scripts\install.mjs` |
+| macOS / Linux | `./install.sh`（macOS 也可在 Finder 里双击 `install.command`） |
 
 ```sh
 git clone https://github.com/addsas222/Fairy-DSH-Exp.git fairy-dsh && cd fairy-dsh
+./install.sh --home "$HOME/.dsh-fairy"          # Windows: install.cmd --home D:\dsh-fairy
+```
+
+`scripts/install.mjs` 做的三件事（都是别的机器/别的平台上实测踩过的坑）：
+
+1. **找对 shell**：`deploy-live.sh` 是 POSIX sh 脚本。Windows 上**只认 Git 自带的 bash**
+   （`C:\Program Files\Git\bin\bash.exe`），刻意不认 WSL 的——WSL 里 `C:/…` 路径不存在，
+   会把文件落到 Linux 子系统而用户毫无察觉；认不出来就给出装 Git 的指引，绝不猜。
+2. **找对运行时**：按 `--runtime` → `<home>/runtime` → 常见位置依次探测 `@deepseek-ai/dsh`；
+   都没有时用 `--install-runtime [版本]` 装到 `<home>/runtime`。底座线（0.1.1 → `011`、
+   0.1.5 → `015`）由版本号**第三段**推出，并写进启动器，不靠用户记环境变量。
+3. **把启动器写进 home**：`start-fairy.cmd` / `start-fairy.sh` 每次部署按本次解析的运行时重写
+   （内容不同才写，旧版先备份 `.bak`）。仓库里那份 `start-fairy.cmd` 只是**参考副本**、
+   落位不会更新它——手抄的旧副本会静默丢掉新行为（2026-09-16 实测：抓取通道按底座条件挂载后，
+   手抄启动器不带 `DSH_FAIRY_BASE`，0.1.1 侧会悄悄少一个 provider）。
+
+也可直接用 `deploy-live.sh`（安装器就是它的跨平台前端）：
+
+```sh
 sh scripts/deploy-live.sh --home "$HOME/.dsh"          # 或 --home /path/to/DSH_HOME
 ```
 
