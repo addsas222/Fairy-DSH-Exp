@@ -38,7 +38,10 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
    仅在弹层打开期间把卡片抬到工作区芯片行(z=4)之上（卡片自身相对定位 + 自带上下文，抬它等于把内部弹层一起抬）；关闭即恢复，避免常态下遮住芯片 8.39% 像素并挡掉它的点击。
    该区域内卡片是透明的（HDD 玻璃由 z=0 的 material 层画），芯片不会被遮：改动前后芯片区域像素差 0.00%。
    注意：z-index 对 static 元素无效——先前对 composer-row 写 z-index 是 no-op，实测无效才找到这条。 */
-html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"][data-dsh-fairy-composer-popover="true"] [data-composer-card]{z-index:5!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-bar-root="true"]{position:absolute!important;inset:0!important}`);
+html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"][data-dsh-fairy-composer-popover="true"] [data-composer-card]{z-index:5!important}
+/* 同上：拖拽把手是 12px 高的全宽条（z=20，压在卡片之上），弹层贴着它展开时会被它吞掉点击
+   （网格扫描 144 点里 16 点在菜单顶部被它命中）。弹层打开期间让它指针穿透即可，不必改 z。 */
+html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"][data-dsh-fairy-composer-popover="true"] .dsh-fairy-composer-resizer{pointer-events:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-bar-root="true"]{position:absolute!important;inset:0!important}`);
   appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"]{min-height:0!important;max-height:100dvh!important;overflow:hidden!important;box-sizing:border-box!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-stack="true"]{overflow:hidden!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-bar-host="true"]{position:static!important;flex:1 1 auto!important;display:block!important;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-bar-root="true"]{position:static!important;width:100%!important;height:100%!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-workspace="true"]{width:max-content!important;height:auto!important}`);
   // The official slot reserves composer height in normal layout. Fairy's
   // composer is fixed, so anchor the native control to the actual overlap

@@ -1146,3 +1146,9 @@ test('官方弹层必须画在 HDD 工作区芯片之上（层叠上下文陷阱
   assert.match(composerDockSource, /syncComposerPopoverLayer\(\);/, "同步函数必须被调用");
   assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\] \[data-dsh-fairy-composer-workspace="true"\]\{position:absolute!important;z-index:4!important/, '工作区芯片行 z=4 是既有契约（5 严格大于它）');
 });
+
+test('弹层打开期间：拖拽把手不得吞掉菜单点击（网格扫描发现的第二处遮挡）', () => {
+  // 网格扫描（菜单矩形每 10px 一点，144 点）实测 16 点被 .dsh-fairy-composer-resizer 命中，
+  // 全部集中在菜单顶部 12px 带（把手 z=20，压在卡片之上）。让它在弹层打开期间指针穿透即可。
+  assert.match(styleSource, /\[data-dsh-fairy-composer-popover="true"\] \.dsh-fairy-composer-resizer\{pointer-events:none!important\}/, '弹层打开期间把手必须指针穿透');
+});
