@@ -1111,13 +1111,17 @@ test('键帽风格走 token：配方只定义一处，规则不再内联字面�
 });
 
 test('全页 800 字重不得命中官方弹层；合成粗体另设全局兜底', () => {
-  // 实机诊断修正（2026-09-16）：先前的「faux-bold 双重描边」结论**已被证伪**——注入 font-synthesis:none
-  // 前后截图逐字节相同（0 像素差），且用户原图与本机截图的自相关都只有笔画/字距周期、没有恒定偏移次级峰。
-  // 客观差异只有一处：官方弹层被全页 800 压得过实（实机图笔画/字高比 0.263 vs 本机 0.11-0.15）。
+  // 实机诊断修正（2026-09-16）：先前「faux-bold 双重描边」结论**已被证伪**——注入 font-synthesis:none
+  // 前后截图 sha 一致、0 像素差；用户原图与本机截图的自相关都只有笔画/字距周期峰，没有恒定偏移次级峰。
+  // 站得住的差异只有一处：官方弹层被全页 800 强制过实（官方字重实测 400），修复前后像素差 12.2%。
   // 因此：①弹层不吃 800（恢复官方字重）②synthesis 兜底独立成全局规则，避免枚举遗漏。
-  assert.match(styleSource, /html\[data-dsh-fairy-visual\] body,html\[data-dsh-fairy-visual\] body :where\(\*\):not\(\[role="menu"\], \[role="menu"\] \*, \[role="listbox"\], \[role="listbox"\] \*, \[role="dialog"\], \[role="dialog"\] \*, \[data-radix-popper-content-wrapper\] \*\)\{font-weight:800!important\}/, '800 字重必须排除官方弹层');
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\] body,html\[data-dsh-fairy-visual\] body :where\(\*\):not\(:where\(\[role="menu"\], \[role="menu"\] \*, \[role="listbox"\], \[role="listbox"\] \*, \[role="dialog"\], \[role="dialog"\] \*, \[data-radix-popper-content-wrapper\] \*\)\)\{font-weight:800!important\}/, '800 字重必须排除官方弹层，且排除项须包在 :where() 里（否则 :not() 抬高特异度压掉 750 特例）');
   assert.match(styleSource, /html\[data-dsh-fairy-visual\] body :where\(\*\)\{font-synthesis-weight:none!important\}/, '合成粗体兜底必须是全局规则（不枚举弹层）');
   // 继承泄漏：font-weight 是继承属性，:not() 只挡直接命中，body 的 800 仍会漏进弹层
   // （实测：设置对话框/模型菜单里无显式字重的文字算出 800）。弹层根必须自己把基线拉回 400。
   assert.match(styleSource, /html\[data-dsh-fairy-visual\] body :where\(\[role="menu"\], \[role="listbox"\], \[role="dialog"\], \[data-radix-popper-content-wrapper\]\)\{font-weight:400!important\}/, '弹层根必须重置继承基线');
+  // 盲点：fairy 自建的会话统计面板就是 role=dialog，会被上面两条连带降重（实测 400）。
+  // 自建表面属 HDD 表面 → 显式兜回 800，且必须写在 750 特例之前。
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\] body :where\(\.dsh-fairy-session-metrics-panel,\.dsh-fairy-session-metrics-item\)\{font-weight:800!important\}/, 'fairy 自建弹层必须显式兜回 800');
+  assert.ok(styleSource.indexOf('.dsh-fairy-session-metrics-panel,.dsh-fairy-session-metrics-item') < styleSource.indexOf('.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle'), '自建表面 800 必须写在 750 特例之前');
 });
