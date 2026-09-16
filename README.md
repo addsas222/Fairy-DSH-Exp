@@ -37,7 +37,7 @@
 | 形态 | 面向 | 关键差异 |
 | --- | --- | --- |
 | **隔离实例**（推荐，fairy 只能在它上面跑全） | 自用、实验 | 独立 `DSH_HOME`（如 `~/.dsh-fairy`）+ 独立 runtime 安装（本机用 0.1.1-rc.2），不碰日常 GUI |
-| **主 profile**（`~/.dsh`） | 日常使用 | 走宿主自己的 runtime（本机已是 0.1.5-rc.2）；fairy 的**客户端面孔**在 0.1.2+ 已不存在（见 §3） |
+| **主 profile**（`~/.dsh`） | 日常使用 | 走宿主自己的 runtime（本机已是 0.1.5-rc.2）；客户端 bundle 能加载（2026-09-16 实测），composer 适配在途（见 §3） |
 
 一键部署（三平台同一入口；落位本身仍全部在 `deploy-live.sh`，安装器只解决它管不到的三件事）：
 
@@ -90,10 +90,12 @@ sh scripts/deploy-live.sh --home "$HOME/.dsh"          # 或 --home /path/to/DSH
 结论：
 
 - **宿主侧（工具、段落、预设发现、world-core 检索）按特征探测跨代可用**——本仓库新增的部分都属于这一层。
-- **客户端面孔**（设置卡、会话头 chip、侧栏）：10 个插件的 `dsh.client.inject` 仍列 `dsh-client-runtime` / `dsh-client-ui-slots` / `dsh-client-ui-primitives`。核查结果（不是推测）：
-  - `@deepseek-ai/dsh-client-ui-primitives` 这个 **module specifier 在 0.1.5 里仍然活着**——0.1.5 自己的 36 个官方客户端包（`ui-chat` / `ui-conversation` / `ui-approval` …）照样 `require("@deepseek-ai/dsh-client-ui-primitives")`，`dsh-client-ui-renderer/README` 明写「React、React DOM、Cordis、ui-slots 与 ui-primitives 通过 Web 外壳的**静态模块表**保持同一浏览器身份」。它只是不再作为 npm 包装在顶层，运行期由外壳提供。**所以 bundle 里那条 require 不是硬失败点**，不要为迁就它改写 bundle。
-  - 未验的是另外两件：`inject` 里那两个**包名**（`dsh-client-runtime` / `dsh-client-ui-slots`）在预取解析不到时是静默还是告警；以及浏览器里是否真的加载成功（需真机页面 + 控制台）。
-  - 目前能说的：`inject` 在 0.1.5 客户端里是**加载/预取元数据**（源码注释：「informational (loading/prefetch metadata, never apply sequencing)」），不是运行期硬依赖；**真机验证尚未做**，迁移前不要当成已兼容。
+- **客户端面孔**（设置卡、会话头 chip、侧栏）：0.1.5 移除了 `dsh-client-runtime`、`dsh-client-ui-slots` 这三个**包名**，而 10 个插件的 `dsh.client.inject` 仍列着它们。2026-09-16 在 0.1.5-rc.1 隔离实例上的**实测结论**（不是推测）：
+  - **客户端 bundle 能加载**：设置面板打开正常、7 个分区（搜索/语音×2/记忆/角色扮演/HDD/模式）全渲染、侧栏层与品牌标记/几何标记齐全、**零控制台错误**；
+  - `inject` 是**声明性**的加载/预取元数据（官方源码注释：「informational (loading/prefetch sequencing; never apply sequencing)」），包名缺失**不拦加载**——不要为迁就它改写 bundle；
+  - `@deepseek-ai/dsh-client-ui-primitives` 这个 **specifier 在 0.1.5 里仍然活着**：官方自己的 36 个客户端包照样 require 它，只是不再作为 npm 包装在顶层，由 Web 外壳的静态模块表提供；
+  - **真正的硬活是 composer 层**：0.1.5 把槽位改名（`conversation` → `main.conversation` / `conversation.composer`、`conversation.composer.dock` → `conversation.input.dock`），并把输入框从 `textarea` 换成 contenteditable（`data-composer-input` / `data-lexical-editor`）。适配层已按**双形态**改好（会话面并集 + 输入双选择器，`fairy-visual` 147/147），锚点解析在 0.1.5 上已验证（seat 标记恢复）；材料挖洞/芯片/附件/高度这些依赖会话态的投影**待验**——需要先有工作区的会话态。
+  - 顺带一条运维前提：**两个底座不要共用一个 home**。0.1.5 跑过之后 0.1.1 实例会报 `boot manifest batches must be an array`（同一 home 被两代运行时互相改写，实测复现）。
 - **插件装载方式**：插件不列在 `dsh.profile.bundles`，而是 profile patch 的 `insert` 行 + `inject: [clientModules]`；列进 bundles 会要求该包声明 `dsh.bundle`，本仓库的包没有这个声明（两代 cohort 均报 `declares no dsh.bundle`）。
 
 **实测阻断（本机 0.1.5 环境）**：目标宿主自身的安装是**混版**的——顶层 `@deepseek-ai/dsh-session-query` 仍是 `0.1.2-rc.1`，而 `dsh-session-query-sqlite` 已是 `0.1.5-rc.2`，前者缺少后者 import 的导出名：
