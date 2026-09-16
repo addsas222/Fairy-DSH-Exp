@@ -907,8 +907,8 @@ test('keeps the sidebar hardware above the composer edge in every session', () =
   assert.match(styleSource, /\[data-dsh-fairy-composer-stack="true"\]\{position:relative!important;display:flex!important;flex-direction:column!important;gap:0!important;padding:0!important/, 'stack 必须是列向流式且不带官方内边距/间距：条占自己的高度，卡片不被一起抬高');
   assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
-  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:1!important/);
-  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/);
+  assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:22!important/, 'dock 必须压过官方对话覆盖层（代码块/产物卡在 20 层）');
+  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:24!important/, '侧栏硬件仍要压过 dock 左沿');
 });
 
 test('keeps the composer edge inside the card stacking context below nested control popovers', () => {
@@ -1080,4 +1080,11 @@ test('任务条参与材料挖洞的并集，卡片顶到洞顶不再露出框�
   // 卡片顶那条 10px 的框材亮带消失，::after 玻璃顺势上移与条接成一块。
   assert.match(composerDockSource, /const visibleInputDock = inputDock && inputDock\.getBoundingClientRect\?\.\(\)\.height > 0 \? inputDock : null;/, '只并入可见的条（空槽 rect 全 0 会把洞拽到左上角）');
   assert.match(composerDockSource, /syncMaterialLayerModule\(layer, inputScroll\(card\), \[attachmentRail\(attachmentSlot\(card\)\), visibleInputDock\]\)/);
+});
+
+test('dock 必须压过官方对话覆盖层（代码块/产物卡的 20 层），否则它们盖住输入框', () => {
+  // 官方 pI_x6G_overlayLayer 是全屏 z-index:20，承载消息级覆盖（代码块复制按钮、产物卡…）；
+  // dock 原来是 1，于是这些层画在输入框之上（实机：代码块压在 composer 上）。
+  // dock=22：压过 overlay(20)/舞台(10)/滚动条(4)，仍低于回溯按钮(30)/弹窗(1000)/过渡层。
+  assert.match(styleSource, /\[data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:22!important;/, 'dock 的层级必须高于官方对话覆盖层');
 });
