@@ -7,8 +7,11 @@ node_modules/
 logs/
 sessions/
 runtime/
-# …但 .agent-presets/fairy-lite/runtime/{index.js,safety-gate.js} 是**显式 -f 跟踪**的例外：
-# 它们是公开语料（style/*.json + behavior/*.json）的产物，随仓分发以便任何机器部署后即可跑完整模式。
+# …但 .agent-presets/fairy-lite/runtime/{index.js,safety-gate.js,package.json} 是**显式 -f 跟踪**的例外：
+# 两个 .js 是公开语料（style/*.json + behavior/*.json）的产物，随仓分发以便任何机器部署后即可跑完整模式；
+# package.json 只声明 `{"type":"module"}`——让 Node 在该目录按 ESM 直接解析这两个文件，
+# 不再按 CJS 试错重解析（用户实机曾报 MODULE_TYPELESS_PACKAGE_JSON 警告）。
+# 作用域特意只放 runtime/ 内：提到 preset 根会把整个 preset（含 home 侧 world-core）都标成 ESM。
 #
 # 三条边界要分清（改这里前务必读完——写错会让人以为私有真身很安全）：
 #   对账 check/prune：无害。 SKIP_POLICY 有 `.agent-presets/fairy-lite/runtime` 前缀项，
