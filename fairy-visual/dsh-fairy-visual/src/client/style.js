@@ -61,11 +61,19 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
   // #dsh-fairy-root child. Move that rendered projection, not the outer stage
   // geometry box used for sidebar alignment and lifecycle ownership.
   appendSection(`.dsh-fairy-stage>[data-dsh-fairy-mascot-root="true"]{top:-20px}`);
-  appendSection(`/* 全页 800 字重（HDD 控制台感）有两个例外/约束：
-   ① 官方弹层（菜单/列表/对话框）不属于 HDD 表面：不吃这条规则，保持它们自己的字重；
-   ② 其余处一并声明 font-synthesis-weight:none——字体没有 800 字面时浏览器会「合成粗体」，
-      合成粗体在小字号下会画成双重描边/重影（2026-09-16 实机：访问菜单文字重影，A/B 定因）。 */
-html[data-dsh-fairy-visual] body,html[data-dsh-fairy-visual] body :where(*):not([role="menu"], [role="menu"] *, [role="listbox"], [role="listbox"] *, [role="dialog"], [role="dialog"] *, [data-radix-popper-content-wrapper] *){font-weight:800!important;font-synthesis-weight:none!important}html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp),html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp) *{font-weight:400!important}html[data-dsh-fairy-visual] body :where(.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle){font-weight:750!important}`);
+  appendSection(`/* 全页 800 字重（HDD 控制台感），弹层例外：官方弹层（菜单/列表/对话框）不是 HDD 表面，
+   不吃这条规则、保持它们自己的字重。依据（2026-09-16）：访问菜单实机投诉图里文字「糊成一坨」，
+   墨迹测量其笔画/字高比 0.263（本机同字号 800 版 0.11-0.15）＝小字号被 800 压得过实；
+   弹层恢复官方字重后同区域像素差 12.2%（真实可见差异）。
+   注意：曾怀疑是「合成粗体（faux-bold）双重描边」，实测证伪——注入 font-synthesis-weight:none
+   前后截图逐字节相同（sha 一致、0 像素差），且两图自相关均无恒定偏移的次级峰。 */
+html[data-dsh-fairy-visual] body,html[data-dsh-fairy-visual] body :where(*):not([role="menu"], [role="menu"] *, [role="listbox"], [role="listbox"] *, [role="dialog"], [role="dialog"] *, [data-radix-popper-content-wrapper] *){font-weight:800!important}
+/* 兜底：任何字体缺目标字面时不要走合成粗体（本机字体栈实测不触发，作为跨字体/字号保险）。 */
+/* 弹层根：font-weight 是继承属性——:not() 只挡「直接命中」，body 的 800 仍会沿继承链
+   漏进弹层（实测：设置对话框/模型菜单里无显式字重的文字仍算出 800）。这里把弹层根的继承基线拉回 400，
+   弹层内没有自己声明的文字即回到官方观感；有自己声明的（官方 500/600、fairy 键帽 750/800）不受影响。 */
+html[data-dsh-fairy-visual] body :where([role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper]){font-weight:400!important}
+html[data-dsh-fairy-visual] body :where(*){font-synthesis-weight:none!important}html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp),html[data-dsh-fairy-visual] body :where(pre,code,kbd,samp) *{font-weight:400!important}html[data-dsh-fairy-visual] body :where(.dsh-fairy-hero-main,.dsh-fairy-mark-title,.dsh-fairy-toggle){font-weight:750!important}`);
 
   appendSection(`html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar{width:12px!important;transition:opacity 180ms cubic-bezier(.22,.61,.36,1)}html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar-thumb{width:6px!important}html[data-dsh-fairy-visual] .dsh-history-overlay-scrollbar[data-idle="true"]{opacity:0;pointer-events:none;transition-timing-function:cubic-bezier(.4,0,.2,1)}`);
 
