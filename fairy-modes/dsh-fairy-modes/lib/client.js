@@ -345,6 +345,8 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
      * without polling. */
     const EVENT_CHANGED = 'fairy-modes-changed';
     const CHIP_LABELS = { explore: '探查', ptc: 'PTC', create: '创造', roleplay: '角色', off: '空闲' };
+    /* 预设未挂模式引擎时芯片的文案：宁可禁用并说清楚，也不要给一个点了必失败的活件。 */
+    const UNAVAILABLE_LABEL = '模式不可用';
     const MENU = [
       { value: 'plan', label: '探查·极简（官方）' },
       { value: 'explore', label: '探查·只读（流水线）' },
@@ -500,7 +502,15 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         const load = async () => {
           try {
             const response = await fetch(`${STATE_URL}?sessionId=${encodeURIComponent(sessionId)}`);
-            if (!response.ok) return;
+            if (!response.ok) {
+              /* 503 = 该会话的 preset 没挂模式引擎（bridge 的 UNMOUNTED）。此前这里静默回落成
+               * `off`，于是下拉能点开、点完必然失败——把死件当活件。记下来让芯片禁用并说明原因。 */
+              if (live && response.status === 503) {
+                const body = await response.json().catch(() => null);
+                setState({ unavailable: true, reason: typeof body?.error === 'string' && body.error ? body.error : '本会话的预设未挂载模式引擎' });
+              }
+              return;
+            }
             const value = await response.json();
             if (!live) return;
             setState(value);
@@ -542,6 +552,7 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
         };
       }, [open]);
 
+      const unavailable = bridged?.unavailable === true;
       const mode = projectedMode?.mode ?? bridged?.mode ?? 'off';
       const plan = projectedPlan ?? bridged?.plan ?? null;
       // Plan mode's own wire view: a pending selection is what the NEXT step
@@ -582,6 +593,25 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       };
 
       const checked = (value) => (value === 'plan' ? planActive : mode === value);
+      if (unavailable) {
+        /* 引擎不在这个会话的 preset 里：任何切换都会 503。禁用 + 写明原因，
+         * 而不是给一个「能点开、点完失败」的下拉。 */
+        const reason = typeof bridged.reason === 'string' && bridged.reason ? bridged.reason : '本会话的预设未挂载模式引擎';
+        return jsx('span', {
+          'data-dsh-fairy-modes-chip': 'true',
+          'data-dsh-fairy-modes-unavailable': 'true',
+          title: reason,
+          style: { position: 'relative', display: 'inline-flex' },
+          children: jsx('button', {
+            type: 'button',
+            'aria-disabled': 'true',
+            'aria-label': `会话模式不可用：${reason}`,
+            disabled: true,
+            style: { ...chipButton, opacity: '.55', cursor: 'not-allowed' },
+            children: UNAVAILABLE_LABEL,
+          }),
+        });
+      }
       return jsx('span', {
         ref: rootRef,
         'data-dsh-fairy-modes-chip': 'true',

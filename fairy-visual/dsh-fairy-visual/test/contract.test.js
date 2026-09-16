@@ -903,7 +903,9 @@ test('anchors the original content mask to the stationary conversation viewport'
 
 test('keeps the sidebar hardware above the composer edge in every session', () => {
   assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]\{display:none!important\}/);
-  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:absolute!important;left:0!important;right:0!important;bottom:100%!important;display:block!important;pointer-events:auto!important\}/, 'todo/queue 条必须浮在 seat 上方且可点');
+  assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background:#0a1c30!important;border:1px solid rgba\(126,220,255,\.28\)!important;border-bottom:0!important;margin:0!important;padding:6px 12px 2px!important\}/, 'todo/queue 条必须回流到 seat 内并带卡片底材');
+  assert.match(styleSource, /\[data-dsh-fairy-composer-stack="true"\]\{position:relative!important;display:flex!important;flex-direction:column!important;gap:0!important;padding:0!important/, 'stack 必须是列向流式且不带官方内边距/间距：条占自己的高度，卡片不被一起抬高');
+  assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
   assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:1!important/);
   assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/);

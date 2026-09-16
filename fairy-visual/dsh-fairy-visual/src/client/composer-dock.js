@@ -229,7 +229,7 @@ function mountComposerDock(controller) {
         else seat.style.removeProperty(name);
       });
     } else {
-      ['left', 'width', 'height', 'bottom', 'top', 'position', 'z-index', '--dsh-fairy-composer-height'].forEach((name) => seat.style.removeProperty(name));
+      ['left', 'width', 'height', 'bottom', 'top', 'position', 'z-index', '--dsh-fairy-composer-height', '--dsh-fairy-card-height'].forEach((name) => seat.style.removeProperty(name));
     }
     previousSeatStyle = null;
     removeHandle();
@@ -393,7 +393,7 @@ function mountComposerDock(controller) {
       card = currentCard;
       removeLegacyVoiceDensityMarker();
       previousSeatStyle = {};
-      ['left', 'width', 'height', 'bottom', 'top', 'position', 'z-index', '--dsh-fairy-composer-height'].forEach((name) => {
+      ['left', 'width', 'height', 'bottom', 'top', 'position', 'z-index', '--dsh-fairy-composer-height', '--dsh-fairy-card-height'].forEach((name) => {
         previousSeatStyle[name] = {
           value: seat.style.getPropertyValue(name),
           priority: seat.style.getPropertyPriority(name),
@@ -452,6 +452,8 @@ function mountComposerDock(controller) {
       const displayHeight = renderedHeight();
       seat.style.setProperty('height', `${Math.round(displayHeight)}px`);
       seat.style.setProperty('--dsh-fairy-composer-height', `${Math.round(displayHeight)}px`);
+      // 卡片只占「配置高度 + 附件行」：任务条占它自己的band，不许把输入区一起抬高。
+      seat.style.setProperty('--dsh-fairy-card-height', `${Math.round(attachmentDockHeight(height, attachmentRailHeight(attachmentSlot(card)), HEIGHT_MIN, maximumDockHeight()))}px`);
     }
     syncMaterialLayer();
     insetSynchronizer.flush();

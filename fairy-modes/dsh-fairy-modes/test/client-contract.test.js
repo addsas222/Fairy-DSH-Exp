@@ -381,3 +381,23 @@ test('a manual chip selection owns its session, but 极简 does not', async () =
   assert.equal(bundle.events.at(-1).type, 'fairy-modes-changed');
   assert.equal(bundle.events.at(-1).detail.mode, 'create');
 });
+
+test('preset 未挂模式引擎（503）时芯片禁用并写明原因，不再当活件', async () => {
+  const bundle = loadBundle();
+  const slots = register(bundle);
+  const chip = slots.get('fairy-modes-chip').component;
+  const reason = '该会话的 preset 未挂载 dsh-fairy-modes：模式服务不可用。';
+  bundle.onFetch(async () => ({ ok: false, status: 503, json: async () => ({ ok: false, error: reason }) }));
+  bundle.driver.render(chip, { sessionId: 's-unmounted' });
+  await bundle.settle();
+
+  const root = bundle.driver.tree();
+  assert.equal(root.props['data-dsh-fairy-modes-unavailable'], 'true', '必须带不可用标记');
+  assert.equal(root.props.title, reason, 'tooltip 要给出真实原因');
+  const button = root.props.children;
+  assert.equal(button.props.disabled, true);
+  assert.equal(button.props['aria-disabled'], 'true');
+  assert.match(button.props['aria-label'], /会话模式不可用/);
+  assert.deepEqual(texts(button), ['模式不可用']);
+  assert.equal(setRequests(bundle).length, 0, '禁用态不得发出切换请求');
+});

@@ -74,6 +74,12 @@ test('measures the input dock height from the union of its strip entries', () =>
   assert.equal(inputDockRailHeight(slot), 30);
   slot.append(strip(136, 24));
   assert.equal(inputDockRailHeight(slot), 60, '多条（todo+queue）取并集而非求和');
+  // 槽自身有盒（Fairy 给它是 block + 内边距）时，以槽的 border-box 为准：
+  // 漏掉自身内边距会让 seat 少算几像素，卡片正好被抬起来那几像素。
+  const boxed = new FakeNode();
+  boxed.getBoundingClientRect = () => ({ top: 700, bottom: 735, height: 35 });
+  boxed.append(strip(706, 26));
+  assert.equal(inputDockRailHeight(boxed), 35, '槽有盒时按自身高度（含内边距/边框）');
 });
 
 test('attachment slots receive their own marker and never become generic accessories', () => {

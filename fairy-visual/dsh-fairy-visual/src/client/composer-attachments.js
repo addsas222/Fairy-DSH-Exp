@@ -19,9 +19,13 @@ function attachmentDockHeight(baseHeight, railHeight, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, baseHeight + railHeight));
 }
 
-// The input dock slot is a display:contents wrapper; its own box has no height,
-// so the strip height comes from the union of the rendered entries (todo/queue).
+// The input dock slot is styled as a real box inside the dock, so its own
+// border-box height is the space the strip needs. A display:contents wrapper
+// (official shape without Fairy's override) has no box: fall back to the union
+// of the rendered entries (todo/queue).
 function inputDockRailHeight(slot) {
+  const box = slot?.getBoundingClientRect?.();
+  if (box && box.height > 0) return Math.max(0, Math.ceil(box.height));
   const children = slot?.children ? [...slot.children] : [];
   if (!children.length) return 0;
   const rects = children.map((node) => node.getBoundingClientRect?.()).filter((rect) => rect && rect.height > 0);
