@@ -50,6 +50,16 @@
     openAt: first-search
 
 - insert:
+    # 抓取通道本体:0.1.5 起底座自带此行与依赖(且默认 fetchProvider: http / tool-web.fetch: true),
+    # 0.1.1 底座则**只能**由我们挂 —— 所以按底座条件启用,两边都不重复、也都不缺。
+    # 判据用启动器导出的环境变量:scripts/start-fairy.cmd 会设 DSH_FAIRY_BASE=011。
+    # 行 id 特意**不用** base 的 `web-fetch-http`:cordis 的 loader 在注册期按 id 查重,
+    # `disabled: true` 也照报 duplicate loader entry(2026-09-16 实测) —— 只有换 id + 条件禁用
+    # 才能既在 0.1.1 上挂上、又不在 0.1.5 上撞车。两行同时启用的情况不存在
+    # (0.1.1 无 base 行 / 0.1.5 本行 disabled),所以不会出现 WEB_DUPLICATE_PROVIDER。
+    - id: fairy-web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+      disabled: !!js process.env.DSH_FAIRY_BASE !== '011'
     - id: mcp-playwright
       name: '@deepseek-ai/dsh-mcp-client'
       config:

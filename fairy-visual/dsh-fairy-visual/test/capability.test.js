@@ -168,7 +168,7 @@ test('resolves the composer pipeline on the 0.1.5 slot vocabulary', () => {
   });
   const adapter = loadAdapter(documentRef);
   const missing = adapter.reportMissingCapabilities(undefined, { report: () => {} });
-  assert.equal(missing.some(({ name, required }) => required && name !== 'conversation'), false, '除会话面外不应有必需能力缺失');
+  assert.equal(missing.some(({ required }) => required), false, '0.1.5 形状下不应有必需能力缺失（含会话面）');
   assert.equal(adapter.conversation(documentRef), conversation, 'main.conversation 必须被认作会话面');
   assert.equal(adapter.composerSeat(conversation), seat);
   assert.equal(adapter.composerCard(seat), card);
