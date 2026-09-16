@@ -136,7 +136,7 @@ function clearHoleContactGeometry(card) {
   ].forEach((name) => card?.style?.removeProperty(name));
 }
 
-function syncMaterialLayer(layer, input, relatedInputs = [], clampValue = clamp) {
+function syncMaterialLayer(layer, input, relatedInputs = [], clampValue = clamp, options = {}) {
   if (typeof relatedInputs === 'function') {
     clampValue = relatedInputs;
     relatedInputs = [];
@@ -145,6 +145,13 @@ function syncMaterialLayer(layer, input, relatedInputs = [], clampValue = clamp)
   const layerRect = layer.getBoundingClientRect();
   const inputRect = unionRect([input, ...relatedInputs]);
   if (!inputRect) return;
+  // 任务条在卡片上方时：只把洞的**顶**推到卡片顶沿（去掉卡片顶那条框材亮带），
+  // 洞的左右仍按输入区——否则全宽的条会把洞扩到整张卡片、把玻璃面整块挖空（卡片变薄变透）。
+  if (options.extendTop && Number.isFinite(inputRect.top)) {
+    const card = options.extendTop === true ? layer.closest?.('[data-composer-card="true"]') : options.extendTop;
+    const cardRect = card?.getBoundingClientRect?.();
+    if (cardRect && Number.isFinite(cardRect.top) && cardRect.top < inputRect.top) inputRect.top = cardRect.top;
+  }
   const left = clampValue(inputRect.left - layerRect.left, 0, layerRect.width);
   const top = clampValue(inputRect.top - layerRect.top, 0, layerRect.height);
   const right = clampValue(inputRect.right - layerRect.left, left, layerRect.width);

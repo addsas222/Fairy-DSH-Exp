@@ -1075,11 +1075,12 @@ test('任务条与卡片读作一块版面：顶边高光在 dock 顶沿，条�
   assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\][^}]*background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, '条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
 });
 
-test('任务条参与材料挖洞的并集，卡片顶到洞顶不再露出框材', () => {
-  // 条在卡片上方：把「可见的」条并入 material 的 union 后，洞顶被夹到卡片顶沿，
-  // 卡片顶那条 10px 的框材亮带消失，::after 玻璃顺势上移与条接成一块。
-  assert.match(composerDockSource, /const visibleInputDock = inputDock && inputDock\.getBoundingClientRect\?\.\(\)\.height > 0 \? inputDock : null;/, '只并入可见的条（空槽 rect 全 0 会把洞拽到左上角）');
-  assert.match(composerDockSource, /syncMaterialLayerModule\(layer, inputScroll\(card\), \[attachmentRail\(attachmentSlot\(card\)\), visibleInputDock\]\)/);
+test('任务条只扩展材料挖洞的顶部，不参与并集宽度', () => {
+  // 条在卡片上方：只把洞顶推到卡片顶沿（去掉卡片顶那条框材亮带）。
+  // 别把全宽的条并进 union——那会把洞撑到整卡宽，material 的玻璃面被整块挖空，
+  // 卡片就会「变薄变透」（2026-09-16 实机：含任务条时输入框颜色丢失）。
+  assert.match(composerDockSource, /const visibleInputDock = Boolean\(inputDock && inputDock\.getBoundingClientRect\?\.\(\)\.height > 0\)/, '只把可见的条当信号（空槽 rect 全 0）');
+  assert.match(composerDockSource, /syncMaterialLayerModule\(layer, inputScroll\(card\), \[attachmentRail\(attachmentSlot\(card\)\)\], undefined, \{ extendTop: visibleInputDock \}\)/, '条只扩展洞顶、不并进并集（全宽会把洞撑满整卡、挖空玻璃面）');
 });
 
 test('dock 必须压过官方对话覆盖层（代码块/产物卡的 20 层），否则它们盖住输入框', () => {

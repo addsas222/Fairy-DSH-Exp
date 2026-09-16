@@ -2391,7 +2391,7 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 				"--dsh-fairy-composer-hole-contact-height"
 			].forEach((name) => card?.style?.removeProperty(name));
 		}
-		function syncMaterialLayer(layer, input, relatedInputs = [], clampValue = clamp) {
+		function syncMaterialLayer(layer, input, relatedInputs = [], clampValue = clamp, options = {}) {
 			if (typeof relatedInputs === "function") {
 				clampValue = relatedInputs;
 				relatedInputs = [];
@@ -2400,6 +2400,10 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 			const layerRect = layer.getBoundingClientRect();
 			const inputRect = unionRect([input, ...relatedInputs]);
 			if (!inputRect) return;
+			if (options.extendTop && Number.isFinite(inputRect.top)) {
+				const cardRect = (options.extendTop === true ? layer.closest?.("[data-composer-card=\"true\"]") : options.extendTop)?.getBoundingClientRect?.();
+				if (cardRect && Number.isFinite(cardRect.top) && cardRect.top < inputRect.top) inputRect.top = cardRect.top;
+			}
 			const left = clampValue(inputRect.left - layerRect.left, 0, layerRect.width);
 			const top = clampValue(inputRect.top - layerRect.top, 0, layerRect.height);
 			const right = clampValue(inputRect.right - layerRect.left, left, layerRect.width);
@@ -3680,8 +3684,8 @@ html[data-dsh-fairy-visual],html[data-dsh-fairy-visual] body{color-scheme:dark}h
 			const syncMaterialLayer = () => {
 				const layer = ensureMaterialLayer();
 				const inputDock = composerInputDockSlot(seat);
-				const visibleInputDock = inputDock && inputDock.getBoundingClientRect?.().height > 0 ? inputDock : null;
-				syncMaterialLayerModule(layer, inputScroll(card), [attachmentRail(attachmentSlot(card)), visibleInputDock]);
+				const visibleInputDock = Boolean(inputDock && inputDock.getBoundingClientRect?.().height > 0);
+				syncMaterialLayerModule(layer, inputScroll(card), [attachmentRail(attachmentSlot(card))], void 0, { extendTop: visibleInputDock });
 			};
 			const restoreSeat = ({ clearWorkspaceTemplate = false } = {}) => {
 				contentAnchor.clear();
