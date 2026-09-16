@@ -901,14 +901,14 @@ test('anchors the original content mask to the stationary conversation viewport'
   assert.doesNotMatch(clientSource, /data-dsh-fairy-chat-surface/);
 });
 
-test('keeps the sidebar hardware above the composer edge in every session', () => {
+test('侧栏层必须留在官方覆盖层之下（HDD 宿主挂在那里）；dock 高于官方覆盖层但不等高侧栏', () => {
   assert.match(styleSource, /\[data-slot="conversation\.composer\.dock"\]\{display:none!important\}/);
   assert.match(styleSource, /\[data-slot="conversation\.input\.dock"\]\{position:static!important;flex:0 0 auto!important;display:block!important;pointer-events:auto!important;box-sizing:border-box!important;background-color:var\(--dsh-input-substrate\)!important;background-image:var\(--dsh-input-substrate-image\)!important;background-attachment:fixed!important/, 'todo/queue 条必须与卡片同一块玻璃底材（固定定位纹理跨元素对齐）');
   assert.match(styleSource, /\[data-dsh-fairy-composer-stack="true"\]\{position:relative!important;display:flex!important;flex-direction:column!important;gap:0!important;padding:0!important/, 'stack 必须是列向流式且不带官方内边距/间距：条占自己的高度，卡片不被一起抬高');
   assert.match(styleSource, /\[data-dsh-fairy-composer-bar-host="true"\]\{position:static!important;flex:1 1 auto!important/, 'bar 取余量高度而不是绝对铺满整个 seat');
   assert.match(styleSource, /\[data-slot="conversation\.composer"\]>:not\(\[data-chain-overlay-fallback\]\)\{pointer-events:auto!important\}/, '提问/选项卡（chain overlay 当选条目）必须可点');
   assert.match(styleSource, /data-dsh-fairy-composer-dock="true"\]\{position:fixed!important;bottom:0!important;box-sizing:border-box!important;z-index:22!important/, 'dock 必须压过官方对话覆盖层（代码块/产物卡在 20 层）');
-  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/, '侧栏层保持低位：实测侧栏列与 dock 零重叠，抬高会盖住挂在官方覆盖层里的 HDD 装饰（品牌标记等）');
+  assert.match(styleSource, /data-dsh-fairy-sidebar-layer="true"\]\{position:relative!important;z-index:2!important/, '侧栏层必须 <20：抬高会把挂在官方覆盖层里的 HDD 宿主（品牌标记/英雄切换）整层盖住');
 });
 
 test('keeps the composer edge inside the card stacking context below nested control popovers', () => {
