@@ -96,12 +96,19 @@ function workshopStatus() {
     for (const preset of readdirSync(presetsRoot, { withFileTypes: true })) {
       if (!preset.isDirectory()) continue;
       const skillsDir = join(presetsRoot, preset.name, 'skills');
-      for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+      // 没有 skills 槽位的 preset 很常见；单个目录缺槽位不能让整表扫描中断。
+      let entries;
+      try {
+        entries = readdirSync(skillsDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (existsSync(join(skillsDir, entry.name, 'SKILL.md'))) skills.push(entry.name);
       }
     }
-  } catch { /* 技能槽位不存在时返回空表 */ }
+  } catch { /* presets 根不存在时返回空表 */ }
   return {
     home,
     pen: { installed: Boolean(penPath), path: penPath },
