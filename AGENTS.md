@@ -38,7 +38,7 @@
 | `fairy-contracts/` | 跨插件契约与诊断边界；各插件以 `link:` 依赖它 |
 | `fairy-system/` | 验证/预检/审计工具：`doctor.mjs`（**只读体检**：混版/残留安装进程/宿主可运行性/npm 工程根/仓库与部署/测试门前提，一次跑完并给可执行下一步）、`verify-build.js`、`image-manifest.js`（清单 prune + 镜像 vs 源对账）、`repo-update.mjs`（本仓自身更新：远端比对 + 落位）、`host-align.js`（官方安装的版本一致性）、`agent-providers.mjs`（外部 agent provider 四环就绪体检：bundle 同线 / 宿主行 / 原生 CLI / preset 行；`--json` + 诚实退出码，启用步骤见 `AGENT-PROVIDERS.md`）、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js` |
 | `persona-packs/{fairy,standard}/` | 内置人格包（`persona.yml` + `prompt.md` + `tone.json`） |
-| `.agent-presets/fairy-full/` | 全集预设（**公开入口**；modes/memory/roleplay 的 agent 面 shim + 语音核心/安全闸门/世界知识三行 + workflow/ralph 与两个停用的外部 agent 占位行）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源）。设计技能（花叔Design、OpenDesign 系，供「创作工坊」用）同为本机安装、手工同步进同一槽位 |
+| `.agent-presets/fairy-full/` | 全集预设（**公开入口**；modes/memory/roleplay 的 agent 面 shim + 语音核心/安全闸门/世界知识三行 + workflow/ralph 与两个停用的外部 agent 占位行）。ponytail 规则技能按上游 MIT **本机安装**、不入库；部署时由 `deploy-live.sh` 从本机技能根同步进 preset 的 `skills/` 槽位（槽位在跳过策略里，不参与对账/prune；可用 `DSH_FAIRY_SKILLS_DIR` 指定来源）。设计技能（花叔Design、OpenDesign 系，供「创作工坊」用）与本槽位同策略：由 `deploy-live.sh` 按白名单从 `$DSH_FAIRY_SKILLS_DIR` 或 `~/.omp/agent/skills` 同步（清空后重填，手工拷贝会被下次落位清掉） |
 | `.agent-presets/fairy-lite/` | 纯语音核心预设（无模式/记忆/角色扮演引擎）：人格文本 + 语料（`behavior`/`personality`/`canon`/`style`）+ 三个插件行；语音核心与安全闸门 shim 与 fairy-full 逐字一致。**公开仓库可正常挂载**——`runtime/{index.js,safety-gate.js}` 是随仓分发的公开语料引擎（2026-09 起），不再依赖未公开资产 |
 | `profiles/web/` | Web profile：组合各插件、pin 搜索 provider、接管部署 persona |
 | `scripts/` | `deploy-live.sh`（部署）、`test-isolated.sh`（本地回路） |
@@ -136,13 +136,20 @@ rm -rf "$DSH_HOME/.agent-presets/fairy" "$DSH_HOME/.agent-presets/ponytail"   # 
 ```sh
 REPO=$PWD; DSH_HOME=$HOME/.dsh
 
-# 1) ponytail 规则技能（第三方 MIT，不入库）：从本机技能根同步进 preset 的 skills/ 槽位。
+# 1) 规则/设计技能（不入库）：从本机技能根同步进 preset 的 skills/ 槽位。
 #    槽位在 image-manifest 的跳过策略里（既不删也不报），所以必须在**对账之前**同步。
+#    脚本同一步做的是「清空槽位 → 只拷白名单」：ponytail* + huashu-design + open-design*；
+#    下面是等价的最小手工拷贝（不清空；重复部署请直接走脚本，手工拷贝会被它清掉）。
 SKILLS_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills/_ponytail-vendor}"
+DESIGN_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills}"
 if [ -d "$SKILLS_SRC" ]; then
   mkdir -p "$DSH_HOME/.agent-presets/fairy-full/skills"
   cp -R "$SKILLS_SRC/." "$DSH_HOME/.agent-presets/fairy-full/skills/"
 fi
+for dir in "$DESIGN_SRC"/huashu-design "$DESIGN_SRC"/open-design*; do
+  [ -d "$dir" ] || continue
+  cp -R "$dir" "$DSH_HOME/.agent-presets/fairy-full/skills/"
+done
 
 # 2) 对账：删掉受控路径下「提交里已经没有」的文件（收敛语义的关键一步；
 #    落位只新增/覆盖，从不删除，少了这步上游删过的文件会永远留在镜像里）
