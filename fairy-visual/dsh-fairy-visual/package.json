@@ -32,7 +32,7 @@
     "tsdown": "^0.22.14"
   },
   "scripts": {
-    "bundle": "tsdown && cp lib/index.iife.js lib/client.js.tmp && mv -f lib/client.js.tmp lib/client.js && cp src/index.js lib/index.js.tmp && mv -f lib/index.js.tmp lib/index.js",
+    "bundle": "tsdown && cp lib/index.iife.js lib/client.js.tmp && mv -f lib/client.js.tmp lib/client.js && cp src/index.js lib/index.js.tmp && mv -f lib/index.js.tmp lib/index.js && rm -f lib/index.iife.js",
     "test": "node --test test/*.test.js",
     "verify:build": "node ../../fairy-system/verify-build.js",
     "watch": "tsdown --watch"
