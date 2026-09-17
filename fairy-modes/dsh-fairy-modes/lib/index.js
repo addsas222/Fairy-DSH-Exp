@@ -2,14 +2,21 @@
  * Agent half of dsh-fairy-modes: the per-session Build&Work (PTC),
  * Memory&Dream (create), and Roleplay modes.
  *
- * A mode is logged collaboration state, not a process switch. The four modes are
- * also the stations of a pipeline (roleplay → explore → ptc → create → roleplay)
- * that `mode_pipeline` advances — see `./pipeline.js`. `set()` appends
- * the log-only `fairy/mode` event and moves two live effects for that session:
- * the `fairy:mode-ptc` / `fairy:mode-create` prompt section, and — for PTC —
- * the scoped `ctx.tools.presentAs('ptc')` declaration held as its own disposer.
- * Because the state lives in the session log, resume and fork restore it: `get()`
- * reconciles the live effects against the logged mode.
+ * A mode is per-session collaboration state, not a process switch. The four
+ * modes are also the stations of a pipeline (roleplay → explore → ptc → create
+ * → roleplay) that `mode_pipeline` advances — see `./pipeline.js`. `set()`
+ * records the mode in the session mirror (`./store.js`, one row per session
+ * id) and moves two live effects for that session: the `fairy:mode-ptc` /
+ * `fairy:mode-create` prompt section, and — for PTC — the scoped
+ * `ctx.tools.presentAs('ptc')` declaration held as its own disposer. A restart
+ * restores the mode (`get()` reconciles the live effects against the mirror);
+ * a fork starts at `off`, because a fork is a new session id.
+ *
+ * The mirror replaced the historical `fairy/mode` log event: that event is
+ * out-of-vocabulary for every harness cohort and `session.append` cannot mark
+ * it `ignorable`, so writing it poisoned the whole session log for every line
+ * (the read path refuses unknown unmarked types). The event and its projection
+ * stay registered only so pre-existing logs still fold; nothing appends them.
  *
  * The official plan mode (探索/极简) is orthogonal and stays in
  * `@deepseek-ai/dsh-plan-mode`; this package never reads or writes plan state
@@ -40,6 +47,7 @@ import {
   modeSectionOrder,
   normalizeFairyMode,
 } from './contract.js';
+import { readMode, writeMode } from './store.js';
 import { createSessionRecallTool } from './recall.js';
 import { PIPELINE_SECTION_TEXT, createModePipelineTool } from './pipeline.js';
 
@@ -78,9 +86,11 @@ const MODE_SECTIONS = {
 const MODE_LABELS = { off: '默认（关闭）模式', explore: '探查模式（只读）', ptc: 'PTC 建造模式', create: '创造模式', roleplay: '角色扮演模式' };
 
 /**
- * Fold `fairy/mode` into the `{ mode }` projection. `wire` is what the browser
- * chip reads through `useProjection('fairyMode')`; the host bridge reads the
- * same value through the projection registry.
+ * Legacy fold of the historical `fairy/mode` event into the `{ mode }`
+ * projection. Nothing appends that event any more (see the module doc), so this
+ * unit only keeps pre-existing logs readable: `loggedMode()` falls back to it
+ * when the mirror holds no row, and `wire` still serves the browser chip for
+ * such sessions.
  */
 export const fairyModeProjectionDefinition = {
   key: FAIRY_MODE_PROJECTION,
@@ -139,11 +149,11 @@ export class FairyModeService {
 
   /**
    * Read this session's mode and reconcile the live effects with it. Reconcile
-   * is the resume/fork path: the log carries the mode while a fresh realm holds
+   * is the restart path: the mirror carries the mode while a fresh realm holds
    * no section or presentation yet.
    *
    * @param agent - the agent whose session is read.
-   * @returns The logged mode.
+   * @returns The effective mode.
    */
   get(agent) {
     const mode = this.loggedMode(agent.session);
@@ -152,11 +162,13 @@ export class FairyModeService {
   }
 
   /**
-   * Select this session's mode, appending the log event and moving its live effects.
+   * Select this session's mode, recording it in the mirror and moving its live
+   * effects. The session log is deliberately untouched — see `./store.js` for
+   * why an out-of-vocabulary log event may not be written.
    *
    * @param agent - the agent to switch.
-   * @param value - `off`, `ptc`, or `create` (case and blanks tolerated).
-   * @returns `committed` when the log changed, `noop` when it already matched.
+   * @param value - `off`, `explore`, `ptc`, `create`, or `roleplay` (case and blanks tolerated).
+   * @returns `committed` when the mode changed, `noop` when it already matched.
    * @throws {Error} when the request names no known mode.
    */
   set(agent, value) {
@@ -169,7 +181,7 @@ export class FairyModeService {
       this.#apply(session, mode);
       return 'noop';
     }
-    session.append(FAIRY_MODE_EVENT, { mode });
+    writeMode(session.id, mode);
     this.#apply(session, mode);
     return 'committed';
   }
@@ -201,12 +213,15 @@ export class FairyModeService {
   }
 
   /**
-   * The session's logged mode, read from the projection fold.
+   * This session's mode: the mirror first, then the legacy log fold (a
+   * `fairy/mode` event written before the mirror existed), then `off`.
    *
    * @param session - the session to read.
-   * @returns The logged mode, `off` before any event.
+   * @returns The effective mode, `off` before any record.
    */
   loggedMode(session) {
+    const mirrored = readMode(session.id);
+    if (mirrored !== undefined) return mirrored;
     const state = this.ctx.sessionProjections.stateOf(session, FAIRY_MODE_PROJECTION);
     return state?.mode ?? 'off';
   }
@@ -248,7 +263,8 @@ export class FairyModeService {
 
 /**
  * Required services: the tool registry (PTC presentation), the prompt sections,
- * and the projection registry the mode is folded into.
+ * and the projection registry (whose legacy `fairyMode` fold seed-reads older
+ * logs).
  */
 export const inject = ['tools', 'systemPrompt', 'sessionProjections'];
 

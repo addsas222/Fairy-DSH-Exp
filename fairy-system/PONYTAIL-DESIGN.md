@@ -121,8 +121,8 @@ interface SttProvider {
 | 模式 | 语义 | 实现 |
 | --- | --- | --- |
 | 极简 Explore&Check | 探查并制定方案，不改文件 | 复用 plan-mode;chip 读 `plan` 投影；切换 = 发 `/plan` 命令 |
-| PTC Build&Work | 执行系列脚本（run_code 编排） | `fairyMode` 服务 `set(agent,'ptc')` → `ctx.tools.presentAs('ptc')`（持 disposer)+ prompt section + `fairy/mode` 事件 + `fairyMode` 投影 |
-| 创造 Memory&Dream | 回忆一切作为；制作/审查 skill 与插件；冗余合并删除 | 同上服务 `set(agent,'create')` → prompt section（强制先用 session_search 回忆、技能/插件脚手架指引、运行 skill-audit)+ 事件 + 投影 |
+| PTC Build&Work | 执行系列脚本（run_code 编排） | `fairyMode` 服务 `set(agent,'ptc')` → `ctx.tools.presentAs('ptc')`（持 disposer)+ prompt section + 模式镜像行（`$DSH_HOME/fairy-modes/modes.json`） |
+| 创造 Memory&Dream | 回忆一切作为；制作/审查 skill 与插件；冗余合并删除 | 同上服务 `set(agent,'create')` → prompt section（强制先用 session_search 回忆、技能/插件脚手架指引、运行 skill-audit)+ 模式镜像行 |
 
 - 服务隔离：`isolate: { fairyMode: true }`，每会话私有控制器（仿 plan-mode)。
 - ptс 与 create 互斥（同一枚举）;plan 独立正交，chip 组合显示。

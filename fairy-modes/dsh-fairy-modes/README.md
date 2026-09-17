@@ -1,23 +1,27 @@
 # dsh-fairy-modes
 
-Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式（空闲 / 探查 / 建造 / 创造 / 角色扮演）记进会话日志，并驱动对应的提示词段落与工具呈现；四站**模式流水线**（扮演→探查→建造→创造→回到扮演）由 `mode_pipeline` 工具推进，进探查站会尝试打开官方 plan 审批闸门。主会话头部的模式 chip 由本包的浏览器一半提供。
+Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式（空闲 / 探查 / 建造 / 创造 / 角色扮演）记进会话模式镜像（`$DSH_HOME/fairy-modes/modes.json`），并驱动对应的提示词段落与工具呈现；四站**模式流水线**（扮演→探查→建造→创造→回到扮演）由 `mode_pipeline` 工具推进，进探查站会尝试打开官方 plan 审批闸门。主会话头部的模式 chip 由本包的浏览器一半提供。
+
+> 为什么不是会话日志：`fairy/mode` 对所有 harness 线都是**词表外事件**，而持久化读路径拒绝"未知类型且未带 `ignorable` 标记"的日志——该标记在 0.1.1 / 0.1.6-alpha.1 的 `session.append` 里**无法设置**（信封只透传 `surfaceOp`/`sourceEventSeqs`）。写进去等于让整段日志在每条线上都不可读（2026-09-17 实测：`SessionFormatUnsupportedError … not marked ignorable`）。镜像换掉了这条写入路径；旧日志的折叠读取保留为只读兼容。
 
 ## 五种模式
 
 | 模式 | 语义 | 谁实现 |
 | --- | --- | --- |
 | 极简（Explore&Check） | 探查并定案，不改文件 | 官方 `@deepseek-ai/dsh-plan-mode` 原样复用：`plan/mode` 事件、`plan` 投影、`/plan` 命令、`exit_plan_mode` 工具。本包**不重实现**，chip 只读它的投影并代发 `/plan` |
-| `ptc`（Build&Work） | 用 `run_code` 编排脚本系列，一次调用完成多步执行 | 本包：`ctx.tools.presentAs('ptc')` + `fairy:mode-ptc` 段落 + `fairy/mode` 事件 |
-| `create`（Memory&Dream） | 先 `session_recall` 回忆全部历史；制作/审查 skill 与插件；冗余合并删除 | 本包：`fairy:mode-create` 段落 + `session_recall` 工具 + `fairy/mode` 事件 |
-| `explore`（探查·只读） | 只读代码/配置/检索，产出可审阅的方案，不改任何文件 | 本包：`fairy:mode-explore` 段落 + `fairy/mode` 事件；流水线进站时另外尝试打开官方 plan 闸门 |
+| `ptc`（Build&Work） | 用 `run_code` 编排脚本系列，一次调用完成多步执行 | 本包：`ctx.tools.presentAs('ptc')` + `fairy:mode-ptc` 段落 + 模式镜像行 |
+| `create`（Memory&Dream） | 先 `session_recall` 回忆全部历史；制作/审查 skill 与插件；冗余合并删除 | 本包：`fairy:mode-create` 段落 + `session_recall` 工具 + 模式镜像行 |
+| `explore`（探查·只读） | 只读代码/配置/检索，产出可审阅的方案，不改任何文件 | 本包：`fairy:mode-explore` 段落 + 模式镜像行；流水线进站时另外尝试打开官方 plan 闸门 |
 | `roleplay`（角色扮演） | 以绑定人格为第一人称对话；去AI味自检（`roleplay_check`）与风格库（`roleplay_style`） | 本包：`fairy:mode-roleplay` 段落 + `dsh-fairy-roleplay` 的工具 |
 | `off` | 默认（空闲，不在流水线内） | 本包：撤销以上全部 |
 
-官方极简（plan-mode）与五个 `fairy/mode` 值**正交**：chip 在 plan 生效时优先显示「极简」，两条轴的勾选各自独立。流水线的探查站同时写 `fairyMode=explore` 并（能解析到控制器时）请求 plan 开启，所以批准前后阶段都停在「探查」——离开探查一律走官方 `exit_plan_mode` 审批，本包不替用户关闸门。
+官方极简（plan-mode）与五个 fairy 模式值**正交**：chip 在 plan 生效时优先显示「极简」，两条轴的勾选各自独立。流水线的探查站同时写 `fairyMode=explore` 并（能解析到控制器时）请求 plan 开启，所以批准前后阶段都停在「探查」——离开探查一律走官方 `exit_plan_mode` 审批，本包不替用户关闸门。
 
 ## 契约
 
-**会话事件**：`fairy/mode`，载荷 `{ mode: 'off' | 'explore' | 'ptc' | 'create' | 'roleplay' }`（log-only、非 surface、整值替换，最后一条生效）。
+**模式镜像**：`$DSH_HOME/fairy-modes/modes.json`，形如 `{ "<sessionId>": "ptc" }`（原子写：临时文件 + rename）。读取顺序 = 镜像 → 旧日志折叠 → `off`；fork 是新 session id，因此**不携带**模式（从 `off` 起）。
+
+**旧会话事件（只读兼容）**：`fairy/mode`，载荷 `{ mode }`。新代码不再写入它（见文首说明），仅保留投影折叠与 `loggedMode()` 的回退读取。
 
 **投影**：键 `fairyMode`，`stateVersion: 1`，折叠为 `{ mode }`；带 `wire` 视图，浏览器侧可 `useProjection('fairyMode')`。
 
@@ -109,4 +113,4 @@ Fairy-DSH 的**会话模式引擎**（双面孔插件）：把五个协作模式
 pnpm install --ignore-scripts && pnpm test
 ```
 
-`test/modes.test.js`（事件与投影折叠、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）、`test/pipeline.test.js`（站点映射与环、`mode_pipeline` 四个动作、plan 闸门的解析/排队/降级三态、被挡住时不切站且不误报目标站、`advanced` 只认 committed/queued）、`test/client-contract.test.js`（chip 与设置卡契约：模式清单与术语、设置卡没有裸提问件、新会话默认值经归一化提问件落盘（草稿 → 保存 → 复读）与保存失败上报、会话归属、极简走官方 `/plan`）。
+`test/modes.test.js`（镜像读写与日志零写入、重启恢复、旧日志折叠回退、presentAs 互斥与还原、段落注册/撤销、命令解析、工具目录跨模式稳定）、`test/bridge.test.js`（200/400/422/503、plan 视图、冷会话经 session-controller 解析）、`test/client.test.js`（bundle 身份、槽位注册、标签与勾选、POST 载荷与事件、极简命令、无投影回落）、`test/recall.test.js`（零 harness 依赖、裸定义 schema 形状、返回值按 `output.schema` 校验、索引投影、索引禁用/后端缺席的降级、标题扫描上界、参数拒绝与 limit 边界）、`test/pipeline.test.js`（站点映射与环、`mode_pipeline` 四个动作、plan 闸门的解析/排队/降级三态、被挡住时不切站且不误报目标站、`advanced` 只认 committed/queued）、`test/client-contract.test.js`（chip 与设置卡契约：模式清单与术语、设置卡没有裸提问件、新会话默认值经归一化提问件落盘（草稿 → 保存 → 复读）与保存失败上报、会话归属、极简走官方 `/plan`）。

@@ -456,16 +456,15 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
     /**
      * Apply the configured new-session default, once per session.
      *
-     * The bridge state carries the folded fairyMode projection, where `off` is
-     * both "never chosen" and "chosen off": the fold keeps no event count, so
-     * that value is the only observable the browser has. A session already
-     * handled in this tab is left alone by its own mark, which a manual chip
-     * selection sets too.
+     * The bridge state carries the host mirror, where `off` is both "never
+     * chosen" and "chosen off": the payload keeps no row marker, so that value
+     * is the only observable the browser has. A session already handled in this
+     * tab is left alone by its own mark, which a manual chip selection sets too.
      *
      * @param sessionId - the session the chip is showing.
      * @param state - the `/fairy-modes/state` payload the chip just read.
      */
-    // ponytail: `off` 无法区分「从未设置」与「显式关闭」，当次会话的手动选择由本地已应用标记兜住；升级路径：让 /fairy-modes/state 返回事件计数（需改 bridge）。
+    // ponytail: `off` 无法区分「从未设置」与「显式关闭」，当次会话的手动选择由本地已应用标记兜住；升级路径：让 /fairy-modes/state 返回镜像是否命中该会话（需改 bridge）。
     async function applyDefaultMode(sessionId, state) {
       if (typeof sessionId !== 'string' || sessionId === '') return;
       if ((state?.mode ?? 'off') !== 'off') return;
@@ -553,7 +552,10 @@ module.exports = { FAIRY_LOG_PREFIX, createFairyDiagnostics };
       }, [open]);
 
       const unavailable = bridged?.unavailable === true;
-      const mode = projectedMode?.mode ?? bridged?.mode ?? 'off';
+      // The bridge is the owner of a session's mode (the host mirror behind it);
+      // the projection is the legacy fold of pre-mirror `fairy/mode` log events
+      // and only decides while the bridge read has not landed yet.
+      const mode = bridged?.mode ?? projectedMode?.mode ?? 'off';
       const plan = projectedPlan ?? bridged?.plan ?? null;
       // Plan mode's own wire view: a pending selection is what the NEXT step
       // will use, so it wins while it differs from the committed state.

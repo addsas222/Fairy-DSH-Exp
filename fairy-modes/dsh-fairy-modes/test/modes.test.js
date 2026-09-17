@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   FairyModeService, apply, fairyModeProjectionDefinition,
 } from '../lib/index.js';
+import { readMode } from '../lib/store.js';
+
+/* The mirror resolves `$DSH_HOME/fairy-modes/modes.json` per call, so pointing
+ * DSH_HOME at a fresh temp dir per test keeps every assertion isolated and
+ * leaves the developer's real home untouched. */
+const ORIGINAL_HOME = process.env.DSH_HOME;
+let mirrorHome;
+test.beforeEach(() => {
+  mirrorHome = mkdtempSync(join(tmpdir(), 'fairy-modes-test-'));
+  process.env.DSH_HOME = mirrorHome;
+});
+test.afterEach(() => {
+  if (ORIGINAL_HOME === undefined) delete process.env.DSH_HOME;
+  else process.env.DSH_HOME = ORIGINAL_HOME;
+  rmSync(mirrorHome, { recursive: true, force: true });
+});
 
 /** A session double: the log plus the append the engine writes through. */
 function fakeSession(id = 'session-1') {
@@ -140,15 +159,21 @@ test('registers the recall tool in every mode for a stable tool catalog', () => 
   assert.equal(calls.tools[0], registered);
 });
 
-test('set appends the mode event and the projection folds the latest mode', () => {
+test('set records the mode in the mirror and never writes the log', () => {
   const { service, agent, session } = mount();
   assert.equal(service.set(agent, 'ptc'), 'committed');
-  assert.deepEqual(session.log.map(event => [event.type, event.data]), [['fairy/mode', { mode: 'ptc' }]]);
+  assert.equal(readMode('session-1'), 'ptc');
+  assert.equal(session.log.length, 0, 'an out-of-vocabulary event must never enter the log');
 
   assert.equal(service.set(agent, 'create'), 'committed');
+  assert.equal(readMode('session-1'), 'create');
+  assert.equal(session.log.length, 0);
+
+  // The legacy projection unit survives as the read-only compatibility path
+  // for logs written before the mirror: applying it by hand still folds.
   const folded = fairyModeProjectionDefinition.apply(
     fairyModeProjectionDefinition.init(),
-    session.log.at(-1),
+    { type: 'fairy/mode', data: { mode: 'create' } },
   );
   assert.deepEqual(folded, { mode: 'create' });
   assert.deepEqual(fairyModeProjectionDefinition.wire.view(folded), { mode: 'create' });
@@ -159,7 +184,6 @@ test('set appends the mode event and the projection folds the latest mode', () =
     fairyModeProjectionDefinition.apply({ mode: 'ptc' }, { type: 'fairy/mode', data: { mode: 'bogus' } }),
     { mode: 'ptc' },
   );
-  assert.equal(session.log.length, 2);
 });
 
 test('ptc drives the scoped presentation and the prompt section, and off restores both', () => {
@@ -199,20 +223,22 @@ test('a scope that already declared a presentation still records the mode', () =
   assert.deepEqual([...sections.keys()], ['fairy:pipeline', 'fairy:mode-ptc']);
 });
 
-test('repeat selection is a noop and never duplicates log or section entries', () => {
+test('repeat selection is a noop and never duplicates mirror or section entries', () => {
   const { service, agent, session, sections } = mount();
   service.set(agent, 'ptc');
   assert.equal(service.set(agent, 'ptc'), 'noop');
-  assert.equal(session.log.length, 1);
+  assert.equal(readMode('session-1'), 'ptc');
+  assert.equal(session.log.length, 0, 'noop leaves the log alone');
   assert.equal(sections.size, 2, '流水线段落 + 当前模式段落');
   assert.equal(service.set(agent, 'off'), 'committed');
   assert.equal(service.set(agent, 'off'), 'noop');
-  assert.equal(session.log.length, 2);
+  assert.equal(readMode('session-1'), 'off');
+  assert.equal(session.log.length, 0);
 });
 
-test('get() reconciles a mode carried by the session log (resume and fork)', () => {
+test('get() reconciles a legacy log-carried mode (sessions written before the mirror)', () => {
   const { service, agent, session, sections, presentationOf } = mount();
-  // A resumed log already holds the mode while the realm holds no effect.
+  // A resumed pre-mirror log already holds the mode while the realm holds no effect.
   session.append('fairy/mode', { mode: 'ptc' });
   assert.deepEqual(service.get(agent), { mode: 'ptc' });
   assert.equal(presentationOf(), 'code');
@@ -221,6 +247,17 @@ test('get() reconciles a mode carried by the session log (resume and fork)', () 
   const registered = sections.get('fairy:mode-ptc');
   assert.deepEqual(service.get(agent), { mode: 'ptc' });
   assert.equal(sections.get('fairy:mode-ptc'), registered);
+});
+
+test('a fresh service instance reads the mode back from the mirror (restart)', () => {
+  const first = mount();
+  assert.equal(first.service.set(first.agent, 'ptc'), 'committed');
+  // A new realm over the same home and session id: nothing in memory, the
+  // mirror file is the only carrier.
+  const second = mount();
+  assert.deepEqual(second.service.get(second.agent), { mode: 'ptc' });
+  assert.equal(second.presentationOf(), 'code', 'the live effects reconcile from the mirror');
+  assert.deepEqual([...second.sections.keys()], ['fairy:pipeline', 'fairy:mode-ptc']);
 });
 
 test('an unknown mode is rejected without touching the log', () => {
@@ -236,11 +273,14 @@ test('/mode parses ptc|create|off and reports usage otherwise', () => {
   assert.equal(calls.commands.name, 'mode');
 
   assert.deepEqual(service.command(agent, 'ptc'), { kind: 'success', text: '已切换到PTC 建造模式。' });
+  assert.equal(readMode('session-1'), 'ptc');
   assert.deepEqual(service.command(agent, ' create '), { kind: 'success', text: '已切换到创造模式。' });
+  assert.equal(readMode('session-1'), 'create');
   assert.deepEqual(service.command(agent, 'off'), { kind: 'success', text: '已切换到默认（关闭）模式。' });
+  assert.equal(readMode('session-1'), 'off');
   assert.deepEqual(service.command(agent, ''), { kind: 'error', text: '用法：/mode explore|ptc|create|roleplay|off' });
   assert.deepEqual(service.command(agent, 'nope'), { kind: 'error', text: '未知模式 "nope"；可用：explore、ptc、create、roleplay、off。' });
-  assert.deepEqual(session.log.map(event => event.data.mode), ['ptc', 'create', 'off']);
+  assert.equal(session.log.length, 0, 'the log stays clean across /mode');
 
   // The handler the registry holds is the same body, and says so when the
   // selected mode is already in force.
@@ -280,5 +320,6 @@ test('the mounted pipeline tool resolves the official plan controller by name', 
   assert.equal(asked, 'agentPresets', 'the resolver asks the preset registry');
   assert.deepEqual(gate, [true], 'the official plan gate is opened through the resolver');
   assert.equal(result.stage, 'explore');
-  assert.equal(session.log.at(-1).data.mode, 'explore', 'and the read-only station is logged');
+  assert.equal(readMode('session-1'), 'explore', 'and the read-only station is mirrored');
+  assert.equal(session.log.length, 0, 'the station switch stays out of the log');
 });

@@ -1,14 +1,16 @@
 /**
  * The one cross-face contract of dsh-fairy-modes: the mode vocabulary, the
- * session event that records it, and the projection key that folds it. Both
- * faces (agent service, host bridge) and the browser chip answer to these
- * names, so they live apart from either implementation.
+ * legacy session event, and the projection key that folds it. Both faces
+ * (agent service, host bridge) and the browser chip answer to these names, so
+ * they live apart from either implementation. The mode itself is mirrored under
+ * `$DSH_HOME/fairy-modes/modes.json` (see `./store.js`); the event and its
+ * projection survive only to read logs written before the mirror existed.
  */
 
-/** Log-only session event carrying the selected mode; the last one wins. */
+/** Legacy log-only session event that used to carry the selected mode; nothing appends it any more. */
 export const FAIRY_MODE_EVENT = 'fairy/mode';
 
-/** Session projection key folding {@link FAIRY_MODE_EVENT} into `{ mode }`. */
+/** Session projection key folding the legacy {@link FAIRY_MODE_EVENT} into `{ mode }`. */
 export const FAIRY_MODE_PROJECTION = 'fairyMode';
 
 /** Every selectable mode, in UI order. Plan mode (探索/极简) is official and orthogonal. */
