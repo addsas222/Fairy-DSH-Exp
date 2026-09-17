@@ -1,0 +1,19 @@
+{
+  "name": "dsh-fairy-eval",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./engine": "./lib/engine.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "dsh-fairy-contracts": "link:../../fairy-contracts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "example": "node examples/triage.mjs"
+  }
+}
