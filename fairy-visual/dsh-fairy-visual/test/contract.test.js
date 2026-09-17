@@ -39,6 +39,7 @@ const [clientEntrySource, constantsSource, utilsSource, styleSource, composerDoc
 const selectionGuardSource = await read('../src/client/selection-guard.js');
 const mascotScaleSource = await read('../src/client/mascot-scale-control.js');
 const speedControlSource = await read('../src/client/mascot-animation-speed-control.js');
+const workshopSource = await read('../src/client/workshop.js');
 const settingsWriteSource = await read('../src/client/settings-write.js');
 const observerManagerSource = await read('../src/client/dom-observer-manager.js');
 const semanticManagerSource = await read('../src/client/semantic-markers-manager.js');
@@ -64,6 +65,8 @@ test('keeps the client entrypoint and extracted managers within their module bud
   assert.ok(mascotEffectsSvgSource.split('\n').length < 120);
   assert.ok(mascotEyeSvgSource.split('\n').length < 180);
   assert.ok(mascotGeometrySource.split('\n').length < 100);
+  assert.ok(workshopSource.split('\n').length < 200);
+  assert.match(clientEntrySource, /require\('\.\/workshop\.js'\)/);
   assert.match(mascotRuntimeSource, /require\('\.\/mascot-assets\.js'\)/);
   assert.doesNotMatch(mascotRuntimeSource, /const CSS = `|<svg class="dsh-fairy-eye"/);
   assert.match(mascotAssetsSource, /require\('\.\/mascot-style\.js'\)/);

@@ -6589,7 +6589,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				}, "workshop-pen"));
 				rows.push(jsx$1(AskResult, {
 					ok: Boolean(status.mcp?.wired),
-					text: status.mcp?.wired ? "MCP：已接入 web profile，设计会话直接可用" : "MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）"
+					text: status.mcp?.wired ? "MCP：已接入 web profile（用前：Pen 在运行且打开着 .pen）" : "MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）"
 				}, "workshop-mcp"));
 				rows.push(jsx$1(AskResult, {
 					ok: skills.includes("huashu-design"),

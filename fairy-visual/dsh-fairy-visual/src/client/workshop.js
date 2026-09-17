@@ -44,7 +44,7 @@ function Workshop() {
   } else {
     const skills = Array.isArray(status.skills) ? status.skills : [];
     rows.push(jsx(AskResult, { ok: Boolean(status.pen?.installed), text: status.pen?.installed ? `pen.dev：已安装（${status.pen.path}）` : 'pen.dev：未安装——先到 pen.dev 官网安装' }, 'workshop-pen'));
-    rows.push(jsx(AskResult, { ok: Boolean(status.mcp?.wired), text: status.mcp?.wired ? 'MCP：已接入 web profile，设计会话直接可用' : 'MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）' }, 'workshop-mcp'));
+    rows.push(jsx(AskResult, { ok: Boolean(status.mcp?.wired), text: status.mcp?.wired ? 'MCP：已接入 web profile（用前：Pen 在运行且打开着 .pen）' : 'MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）' }, 'workshop-mcp'));
     rows.push(jsx(AskResult, { ok: skills.includes('huashu-design'), text: `设计技能：${skills.length ? skills.join('、') : '技能槽位为空'}` }, 'workshop-skills'));
   }
   return jsxs(AskSection, {
