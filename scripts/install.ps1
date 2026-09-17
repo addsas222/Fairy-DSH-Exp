@@ -39,72 +39,12 @@ if (Test-Tool 'node') {
 } else {
   if (Test-Tool 'winget') {
     Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install nodejs-lts'
   elseif (Test-Tool 'scoop') {
     Invoke-Step 'scoop install nodejs-lts'
   } else {
     Write-Log '无法自动安装 tool:node：没有可用的安装器'
   }
 }
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
 # 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
 #   原因：需要管理员权限：只写文档，不自动执行
 # 手动命令：手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
@@ -117,10 +57,6 @@ if (Test-Tool 'pnpm') {
 } else {
   if (Test-Tool 'winget') {
     Invoke-Step 'winget install --id pnpm.pnpm --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id pnpm.pnpm --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install pnpm'
   elseif (Test-Tool 'scoop') {
     Invoke-Step 'scoop install pnpm'
   } else {
@@ -137,10 +73,6 @@ if (Test-Tool 'package-deps') {
 } else {
   if ($true) {
     Invoke-Step 'Set-Location (Join-Path $RepoRoot ''.'') ; node "scripts/checks/lib/deps-install.mjs" --repo .'
-  elseif ($true) {
-    Invoke-Step 'Set-Location (Join-Path $RepoRoot ''.'') ; node "scripts/checks/lib/deps-install.mjs" --repo .'
-  elseif ($true) {
-    Invoke-Step 'Set-Location (Join-Path $RepoRoot ''.'') ; node "scripts/checks/lib/deps-install.mjs" --repo .'
   } else {
     Write-Log '无法自动安装 tool:package-deps：没有可用的安装器'
   }
@@ -155,48 +87,12 @@ if (Test-Tool 'git') {
 } else {
   if (Test-Tool 'winget') {
     Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'winget') {
-    Invoke-Step 'winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
-  elseif (Test-Tool 'scoop') {
-    Invoke-Step 'scoop install git'
   elseif (Test-Tool 'scoop') {
     Invoke-Step 'scoop install git'
   } else {
     Write-Log '无法自动安装 tool:git：没有可用的安装器'
   }
 }
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
 # 需人工执行（choco，需要管理员权限）：choco install git -y
 #   原因：需要管理员权限：只写文档，不自动执行
 # 手动命令：手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）

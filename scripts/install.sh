@@ -35,72 +35,12 @@ if have node; then
 else
   if have winget; then
     run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id OpenJS.NodeJS.LTS --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
-  elif have scoop; then
-    run "scoop install nodejs-lts"
   elif have scoop; then
     run "scoop install nodejs-lts"
   else
     log "无法自动安装 tool:node：没有可用的安装器"
   fi
 fi
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
-#   原因：需要管理员权限：只写文档，不自动执行
 # 需人工执行（choco，需要管理员权限）：choco install nodejs-lts -y
 #   原因：需要管理员权限：只写文档，不自动执行
 # 手动命令：手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
@@ -113,10 +53,6 @@ if have pnpm; then
 else
   if have winget; then
     run "winget install --id pnpm.pnpm --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id pnpm.pnpm --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have scoop; then
-    run "scoop install pnpm"
   elif have scoop; then
     run "scoop install pnpm"
   else
@@ -133,10 +69,6 @@ if have package-deps; then
 else
   if true; then
     run "cd \"$REPO_ROOT\" && node \"scripts/checks/lib/deps-install.mjs\" --repo ."
-  elif true; then
-    run "cd \"$REPO_ROOT\" && node \"scripts/checks/lib/deps-install.mjs\" --repo ."
-  elif true; then
-    run "cd \"$REPO_ROOT\" && node \"scripts/checks/lib/deps-install.mjs\" --repo ."
   else
     log "无法自动安装 tool:package-deps：没有可用的安装器"
   fi
@@ -151,48 +83,12 @@ if have git; then
 else
   if have winget; then
     run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have winget; then
-    run "winget install --id Git.Git --source winget --accept-source-agreements --accept-package-agreements --scope user"
-  elif have scoop; then
-    run "scoop install git"
-  elif have scoop; then
-    run "scoop install git"
-  elif have scoop; then
-    run "scoop install git"
-  elif have scoop; then
-    run "scoop install git"
-  elif have scoop; then
-    run "scoop install git"
-  elif have scoop; then
-    run "scoop install git"
   elif have scoop; then
     run "scoop install git"
   else
     log "无法自动安装 tool:git：没有可用的安装器"
   fi
 fi
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
-# 需人工执行（choco，需要管理员权限）：choco install git -y
-#   原因：需要管理员权限：只写文档，不自动执行
 # 需人工执行（choco，需要管理员权限）：choco install git -y
 #   原因：需要管理员权限：只写文档，不自动执行
 # 手动命令：手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）

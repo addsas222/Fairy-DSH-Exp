@@ -18,8 +18,6 @@ function collectRequirements(checks, config) {
   for (const check of checks) {
     for (const req of check.requires || []) {
       const key = `${req.kind}:${req.name || req.env || req.path || req.id || ''}`;
-      const installSteps = [...(req.install || [])];
-      // 检查项自带的 install 段（不挂在某条 require 上）也纳入：作为该检查项的前置安装
       if (!entries.has(key)) {
         entries.set(key, {
           key, req, checks: [], steps: [], manual: req.manual || '',
@@ -27,10 +25,14 @@ function collectRequirements(checks, config) {
       }
       const entry = entries.get(key);
       if (!entry.checks.includes(check.id)) entry.checks.push(check.id);
-      entry.steps.push(...installSteps);
-      for (const step of check.install || []) {
+      // 同一条 require 由多个检查项声明（11 个检查项的 node/pnpm/git 安装矩阵逐字相同），
+      // 步骤按 (strategy, command) 去重，只保留首个 —— 重复步骤只会生成重复分支，行为完全相同。
+      const addStep = (step) => {
         if (!entry.steps.some((s) => s.command === step.command && s.strategy === step.strategy)) entry.steps.push(step);
-      }
+      };
+      for (const step of req.install || []) addStep(step);
+      // 检查项自带的 install 段（不挂在某条 require 上）也纳入：作为该检查项的前置安装
+      for (const step of check.install || []) addStep(step);
     }
   }
   const order = config?.install?.strategy_order || ['local', 'winget', 'scoop', 'choco', 'manual'];
