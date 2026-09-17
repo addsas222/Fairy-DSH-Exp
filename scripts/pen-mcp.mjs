@@ -156,7 +156,7 @@ function main() {
   // ~/.pencil/mcp/<variant>/ 下的只能配同名（visual_studio_code 等）。配错会得到
   // 「装了但连不上」的 MCP（实测报 failed to connect to running Pencil app）。
   const appId = appIdFor(mcpPath);
-  log(`找到 Pen MCP：${mcpPath}（-app ${appId}${variant ? '，编辑器变体' : '，桌面版'}）`);
+  log(`找到 Pen MCP：${mcpPath}（-app ${appId}${appId === 'desktop' ? '，桌面版' : '，编辑器变体'}）`);
   if (options.mode === 'check') {
     log('（--check：未做改动）');
     return;
