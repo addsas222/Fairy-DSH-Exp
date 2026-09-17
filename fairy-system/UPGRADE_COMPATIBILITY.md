@@ -11,7 +11,7 @@ not authorize an install, lockfile refresh, package change, or runtime patch.
 | Fairy Visual host settings | `@deepseek-ai/dsh-settings` exactly `0.1.1-rc.2` | The host alone imports `settingsNamespace` and registers its schema through `ctx.inject(['settings'])` / `settings.register`. |
 | Fairy Visual client settings | Official runtime `0.1.1-rc.2` | The client uses `ctx.settingsScope.bind`; it must not import or bundle `@deepseek-ai/dsh-settings`. |
 | `dsh-reasoning-effort` | `github:HanaAyane/dsh-reasoning-effort#main`, resolved lock version `0.6.2` | The current lock pin is commit `83bc8c548749d7156a03d11d875d8117e9b5d994` plus patch hash `9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5`. |
-| `dsh-message-edit` | exact `0.2.3` | The current lock patch hash is `6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb`. |
+| `dsh-message-edit` | exact `0.2.3` | The current lock patch hash is `2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c`. |
 
 ## Peer API Risks
 
@@ -71,3 +71,39 @@ node fairy-system/upgrade-preflight.js \
 - Browser evidence is required for normal/HDD, Light/Dark, historical-session,
   composer-replacement, sidebar-transition, and console-error cases before a
   new runtime can be approved.
+
+## 2026-09-17 dual-line home isolation
+
+Two base lines must not share one DSH home. The `<home>/profiles/node_modules`
+module fallback farm (built by the profile install, healed additively at boot by
+`healProfilesModuleFallback`) holds exactly one link per package, so whichever
+line re-links it decides for every future cold boot. Failure modes observed that
+day, all traced to one shared home:
+
+- 0.1.1 boot crash `WorkspaceRegistry.indexHeader ... reading 'id'`: the farm
+  had been re-linked during the 0.1.6 deployment and the 0.1.1 loader resolved
+  `@deepseek-ai/dsh-workspace` from the 0.1.6 global installation.
+- 0.1.6 boot crash `Package subpath './model-selection-settings' is not defined`:
+  the same farm resolved `@deepseek-ai/dsh-tool-subagent` to a 0.1.1 copy, so
+  `dsh-web-app`'s row could not import.
+- 0.1.6 client `Failed to load plugins ... import failed`: client modules are
+  resolved through the farm at request time, so flipping the farm breaks asset
+  delivery on an already-running server.
+- `WEB_DUPLICATE_PROVIDER` (`web provider with id "http" is already registered`)
+  on 0.1.6: the launch was missing `DSH_FAIRY_BASE`, so `cordis.patch.yml` kept
+  the `fairy-web-fetch-http` row enabled that 0.1.5+ must disable.
+
+Rules:
+
+- One base line per home: `.dsh-test-home` is 0.1.1, `.dsh-test-home-015` and
+  `.dsh-test-home-016` are their own lines. Deploy with
+  `scripts/deploy-live.sh --home <home>`.
+- Start through the generated launcher or replicate its full environment:
+  `DSH_HOME`, `DSH_FAIRY_BASE`, `DSH_FAIRY_REPO_ROOT`, `DSH_FAIRY_TEST_HOME`,
+  `DSH_FAIRY_PROFILE_ROOT`. Missing `DSH_FAIRY_BASE` faults loudly by design;
+  missing `DSH_HOME` silently falls back to `~/.dsh` and boots the wrong profile.
+- Never run `pnpm install` by hand inside a home, and never hand-edit the farm.
+  A non-frozen install re-resolves and re-links it; the boot heal only adds
+  missing links and rejects non-symlink entries (`mklink /J` junctions fail with
+  `exists and is not a symlink`). Recovering a poisoned home means re-pointing
+  the links or redeploying, not reinstalling the profile ad hoc.

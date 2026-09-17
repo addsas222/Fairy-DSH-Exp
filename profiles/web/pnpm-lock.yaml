@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  dsh-message-edit@0.2.3: 1525f7e93d6f3f3572a0e0510cb7e937cd84c4bc8431d82cc7e45d05e1e87007
+  dsh-message-edit@0.2.3: 2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c
   dsh-reasoning-effort@0.6.2: 9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5
 
 importers:
@@ -56,7 +56,7 @@ importers:
         version: link:../../fairy-voice/dsh-fairy-voice
       dsh-message-edit:
         specifier: 0.2.3
-        version: 0.2.3(patch_hash=6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb)
+        version: 0.2.3(patch_hash=2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c)
       dsh-reasoning-effort:
         specifier: github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994
         version: https://codeload.github.com/HanaAyane/dsh-reasoning-effort/tar.gz/83bc8c548749d7156a03d11d875d8117e9b5d994(patch_hash=9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5)
@@ -603,7 +603,7 @@ snapshots:
 
   depd@2.0.0: {}
 
-  dsh-message-edit@0.2.3(patch_hash=6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb): {}
+  dsh-message-edit@0.2.3(patch_hash=2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c): {}
 
   dsh-reasoning-effort@https://codeload.github.com/HanaAyane/dsh-reasoning-effort/tar.gz/83bc8c548749d7156a03d11d875d8117e9b5d994(patch_hash=9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5):
     dependencies:

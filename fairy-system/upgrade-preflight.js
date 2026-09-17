@@ -27,7 +27,7 @@ const REASONING_SOURCE = 'github:HanaAyane/dsh-reasoning-effort#83bc8c548749d715
 const REASONING_LOCK_SOURCE = 'https://codeload.github.com/HanaAyane/dsh-reasoning-effort/tar.gz/83bc8c548749d7156a03d11d875d8117e9b5d994';
 const REASONING_PATCH_HASH = '9cbcceae243982ca0241cd41471317da9112c3e61e345b3b32f205d90aec18b5';
 const MESSAGE_EDIT_VERSION = '0.2.3';
-const MESSAGE_EDIT_PATCH_HASH = '6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb';
+const MESSAGE_EDIT_PATCH_HASH = '2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c';
 const CAPABILITY_MATRIX_PATH = process.env.DSH_CAPABILITY_MATRIX
   || path.join(os.homedir(), '.dsh', 'fairy-system', 'capability-matrix.json');
 

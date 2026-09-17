@@ -25,8 +25,8 @@ const APPROVED = Object.freeze({
     'dsh-message-edit': Object.freeze({
       version: '0.2.3',
       specifier: '0.2.3',
-      importerVersion: '0.2.3(patch_hash=6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb)',
-      patchHash: '6365b2e53f9a2f366898ef2d78648c34823df11e9bfc2a47162e6626803763cb',
+      importerVersion: '0.2.3(patch_hash=2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c)',
+      patchHash: '2ff69549d829fc326b1f34b2d2d869e5680e784bcbc45304ff431776bfc29c6c',
       packageKey: 'dsh-message-edit@0.2.3',
       patchFile: 'dsh-message-edit@0.2.3.patch',
     }),
