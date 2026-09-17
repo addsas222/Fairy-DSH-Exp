@@ -119,8 +119,17 @@ function ensureProfileRow(patchPath, mcpPath, appId, agent, dryRun) {
     '    - id: mcp-pen',
     `      name: '@deepseek-ai/dsh-mcp-client'`,
     '      config:',
+    // serverName/transport 是 dsh-mcp-client 的必填项（0.1.1 起校验；缺了整棵插件树
+    // 都起不来，实测报 invalid config）；failOnStartupError=false 让 Pen 没开时只降级、不炸启动。
+    '        serverName: pen',
+    '        transport: stdio',
     `        command: '${command}'`,
-    `        args: ['-app', 'desktop', '-agent', '${agent}']`,
+    '        args:',
+    `          - '-app'`,
+    `          - '${appId}'`,
+    `          - '-agent'`,
+    `          - '${agent}'`,
+    '        failOnStartupError: false',
     '',
   ].join('\n');
   if (!/^- insert:\s*$/m.test(text)) {
