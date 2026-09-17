@@ -1,0 +1,94 @@
+# 检查项 gherkin：真实的行为用例运行器（自解析 .feature + 执行 step 定义）。
+#
+# 机制：features/**/*.feature 解析（Feature/Background/Scenario/Scenario Outline+Examples/
+#       标签/注释）→ 加载 features/steps/*.mjs 的 step 定义（支持 {string}/{int}/{word}
+#       占位符与 /正则/）→ 逐场景执行：未匹配记 undefined、{pending:true} 记 pending。
+# 阈值：failed=0、pending=0、undefined=0、ambiguous=0、语法错误=0。
+# 扩展：新增行为用例只加 features/ 下的文件与 step 定义，不需要动主入口。
+schema_version: 1
+
+id: gherkin
+title: Gherkin 行为用例
+stage: test
+type: gherkin
+enabled: true
+required: true
+tags:
+  - test
+  - gherkin
+command: 'node "${repo}/scripts/checks/gherkin.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\gherkin.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/gherkin.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 900
+threshold:
+  enforce: true
+  metrics:
+    - name: failed
+      max: 0
+      label: 失败场景
+    - name: undefined_steps
+      max: 0
+      label: 未定义步骤
+    - name: pending
+      max: 0
+      label: pending 步骤
+    - name: ambiguous
+      max: 0
+      label: 歧义步骤
+    - name: syntax_errors
+      max: 0
+      label: 特性文件语法错误
+    - name: scenarios
+      label: 场景数
+artifacts:
+  - reports/artifacts/gherkin.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+install: []
+docs: docs/quality/gherkin.md
+owner: quality-framework
+allow_failure: false
+scope:
+  features_dir: features
+  steps_dir: features/steps
+  feature_globs:
+    - "**/*.feature"
+  steps_globs:
+    - "**/*.mjs"
+  skip_tag: "@skip"

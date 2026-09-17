@@ -1,0 +1,141 @@
+# 检查项 coverage：V8 原始覆盖率 + 变更行口径（真实门禁）。
+#
+# 机制：NODE_V8_COVERAGE 收集真实执行数据（packages 目标 = 各包 node --test；
+#       harness 目标 = 跑一轮 verify.mjs，被它拉起的检查脚本继承环境变量因而同样被计量）
+#       → 按 V8 语义合并区间（同区间取 count 最大值；行取覆盖行首偏移的**最内层**区间）
+#       → 变更口径 = git diff 新增行 ∪ 未跟踪文件全部行。
+# 口径校准：与 node --experimental-test-coverage 逐文件对比过，见 docs/quality/coverage.md 的实测表。
+# 阈值：全量行 ≥90%、全量块 ≥75%（存量地板）；变更行 ≥90%、变更块 ≥85%（B.md 默认，仅在
+#       存在变更行时生效）。blocks 是"分支"的 V8 代理口径。
+schema_version: 1
+
+id: coverage
+title: 覆盖率（全量 + 变更行/变更块）
+stage: verify
+type: coverage
+enabled: true
+required: true
+tags:
+  - verify
+  - coverage
+command: 'node "${repo}/scripts/checks/coverage.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\coverage.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/coverage.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 1800
+threshold:
+  enforce: true
+  metrics:
+    # ── 产品代码（各插件包）——B.md 的默认标准按这个目标判 ─────────────────────────
+    - name: packages_lines_pct
+      min: 90
+      label: 产品代码全量行覆盖（%，B.md 默认 90）
+    - name: packages_blocks_pct
+      min: 75
+      label: 产品代码全量块覆盖（存量地板；本仓历史分支覆盖在 78% 上下）
+    - name: packages_changed_lines_pct
+      min: 90
+      optional: true
+      label: 产品代码**变更行**覆盖（%，B.md 默认 90；无变更行时该项不出现）
+    - name: packages_changed_blocks_pct
+      min: 85
+      optional: true
+      label: 产品代码**变更块**覆盖（%，B.md 默认 85；无变更行时该项不出现）
+    # ── 质量体系自身（scripts/）——实测值低于 90/85，用"记录基线 + 棘轮"落地 ────────
+    # 实测 2026-09-17：harness 行 85.80% / 块 63.02%（32 个 Gherkin 场景 + 7 个 e2e 场景驱动）。
+    # 与 B.md 默认 90/85 的差距已如实写进 docs/quality/coverage.md 的"差距与下一步"：
+    # 剩下的未覆盖分支集中在 CLI 级错误处理与 schema 校验器的畸形输入分支。
+    # 这里设棘轮地板（不许下降），目标值仍是 90/85——先把真实数字钉住，再逐步抬。
+    - name: harness_lines_pct
+      min: 84
+      label: 质量体系自身行覆盖（棘轮地板；实测 85.80，目标 90）
+    - name: harness_blocks_pct
+      min: 60
+      label: 质量体系自身块覆盖（棘轮地板；实测 63.02，目标 85）
+    # ── 负载与观测 ───────────────────────────────────────────────────────────────
+    - name: workload_failures
+      max: 0
+      label: 覆盖率负载失败数（负载没跑完成，覆盖率没有意义）
+    - name: files_measured
+      label: 计量文件数（观测）
+    - name: unexecuted_production_files
+      label: 未被任何负载加载的生产文件（观测，逐个列在产物 JSON 里）
+artifacts:
+  - reports/artifacts/coverage.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: pnpm
+    probe: pnpm --version
+    min_version: "11"
+    reason: 各包自带 lockfile，依赖必须用 pnpm 逐包安装（AGENTS.md §1.1）
+    install:
+      - strategy: winget
+        command: winget install --id pnpm.pnpm --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install pnpm
+        admin: false
+    manual: 手动启用 pnpm：corepack enable pnpm（Node 自带 corepack）或 npm install -g pnpm
+  - kind: tool
+    name: package-deps
+    probe: node "${repo}/scripts/checks/lib/deps-probe.mjs" --repo "${repo}"
+    reason: 各包通过 link: 依赖 dsh-fairy-contracts，必须先逐包安装依赖（否则 ERR_MODULE_NOT_FOUND）
+    install:
+      - strategy: local
+        command: node "scripts/checks/lib/deps-install.mjs" --repo .
+        admin: false
+        reason: 项目本地安装：逐包 pnpm install --frozen-lockfile --ignore-scripts（免提权，已装的包自动跳过）
+    manual: node scripts/checks/lib/deps-install.mjs --repo .
+install: []
+docs: docs/quality/coverage.md
+owner: quality-framework
+allow_failure: false
+scope:
+  package_globs:
+    - "*/dsh-*/package.json"
+  targets:
+    - name: packages
+      kind: packages
+      roots:
+        - "lib/"
+        - "src/"
+        - "scripts/"
+      exclude:
+        - "test/"
+        - "node_modules/"
+      retries: 1
+      test_timeout_ms: 45000
+      package_timeout_seconds: 600
+    - name: harness
+      kind: command
+      command: 'node "${repo}/scripts/verify.mjs" --repo "${repo}" --only format,lint,secret-scan,repo-contracts,gherkin,integration,e2e --report-dir "${report_dir}" --allow-partial'
+      command_timeout_seconds: 900
+      roots:
+        - "scripts/"
+      exclude:
+        - "scripts/checks/coverage.mjs"
+        - "scripts/checks/mutation.mjs"
+  diff:
+    base_candidates:
+      - "origin/main"
+      - "main"

@@ -24,3 +24,13 @@ profiles/web/patches/*.patch -text
 # 仓库内按 text 归一化为 LF，检出时转 CRLF——与全局 eol=lf 约定并存。
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# ── 质量体系（2026-09-17 追加，不改动上面的既有规则）──────────────────────────────
+# 平台专属脚本的行尾必须与平台约定一致，否则是真实故障而不是风格问题：
+#   .sh  → LF（CRLF 会让 POSIX sh 在 `#!` 与 `set -u` 行上因 \r 报错）
+#   .ps1/.cmd/.bat → CRLF（PS 5.1 与 cmd.exe 对 LF-only 的解析见 AGENTS.md 第 6 节；
+#                        另外 .ps1 还必须是 UTF-8 with BOM，这一点 gitattributes 表达不了，
+#                        由 scripts/checks/format.mjs 作为门禁强制）
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.mjs text eol=lf

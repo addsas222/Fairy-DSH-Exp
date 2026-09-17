@@ -1,0 +1,57 @@
+# 检查项 typecheck：**未启用**（enabled: false）。
+#
+# 仓库现状：没有 tsconfig.json、没有 typescript 依赖；TS 输入只有两个包的 tsdown.config.ts 与
+# fairy-contracts/types.d.ts，其正确性目前由各包构建/契约测试间接覆盖。
+# 这里不做"恒过"的假 typecheck——那只是装饰门禁。真实验步骤见 docs/quality/typecheck.md：
+# 落地 tsconfig + 安装 typescript 后把 enabled 改成 true；scripts/checks/typecheck.mjs 已就位，
+# 缺编译器时会明确报错（exit 2），不会静默通过。
+schema_version: 1
+
+id: typecheck
+title: TypeScript 类型检查
+stage: static
+type: typecheck
+enabled: false
+enabled_reason: 仓库没有可用的 TypeScript 编译器（根级无 TS 依赖；唯一的 TS 输入是两个包的 tsdown.config.ts 与 fairy-contracts/types.d.ts），无法做真实类型检查。启用步骤见 docs/quality/typecheck.md
+required: true
+tags:
+  - static
+  - typescript
+  - disabled
+command: 'node "${repo}/scripts/checks/typecheck.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\typecheck.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/typecheck.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 600
+threshold:
+  enforce: true
+  metrics:
+    - name: errors
+      max: 0
+      label: 类型错误
+artifacts:
+  - reports/artifacts/typecheck.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+install: []
+docs: docs/quality/typecheck.md
+owner: quality-framework
+allow_failure: false

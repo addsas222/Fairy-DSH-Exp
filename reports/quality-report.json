@@ -1,0 +1,834 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-17T04:55:38.908Z",
+  "finished_at": "2026-09-17T04:56:38.447Z",
+  "repo": "C:\\tmp\\fairy-dsh",
+  "platform": "windows",
+  "node_version": "v26.7.0",
+  "config_path": "C:\\tmp\\fairy-dsh\\.agent\\quality.yaml",
+  "config": {
+    "stages": [
+      {
+        "id": "static",
+        "title": "静态检查",
+        "order": 10
+      },
+      {
+        "id": "test",
+        "title": "测试",
+        "order": 20
+      },
+      {
+        "id": "verify",
+        "title": "验证",
+        "order": 30
+      },
+      {
+        "id": "deep",
+        "title": "深度验证",
+        "order": 40
+      }
+    ],
+    "gate": {
+      "fail_on": [
+        "failed",
+        "error",
+        "timeout",
+        "blocked"
+      ],
+      "warn_on": [
+        "skipped",
+        "disabled"
+      ],
+      "min_enabled_checks": 8,
+      "max_disabled_checks": 3,
+      "allow_failure_downgrades": true
+    },
+    "checks_dir": ".agent/checks"
+  },
+  "git": {
+    "commit": "84bfa0b",
+    "branch": "main",
+    "dirty": true
+  },
+  "selection": {
+    "stages": [],
+    "only": [],
+    "tags": []
+  },
+  "checks": [
+    {
+      "id": "format",
+      "title": "文本形态（行尾/BOM/空行）",
+      "stage": "static",
+      "type": "format",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "static",
+        "cross-platform"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/format.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 1248,
+      "exit_code": 0,
+      "metrics": {
+        "files_scanned": 420,
+        "errors": 0,
+        "error_rate": 0,
+        "advisories": 0,
+        "baseline_exemptions": 12
+      },
+      "threshold_results": [
+        {
+          "name": "errors",
+          "label": "错误级违规",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "files_scanned",
+          "label": "扫描文件数",
+          "ok": true,
+          "missing": false,
+          "value": 420,
+          "unit": ""
+        },
+        {
+          "name": "advisories",
+          "label": "提示级违规（不计门禁）",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\format.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\format.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\format.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\format.log"
+    },
+    {
+      "id": "lint",
+      "title": "语法解析与项目规则",
+      "stage": "static",
+      "type": "lint",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "static",
+        "node"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/lint.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 1337,
+      "exit_code": 0,
+      "metrics": {
+        "files_scanned": 273,
+        "errors": 0,
+        "parse_errors": 0,
+        "rule_findings": 11,
+        "advisories": 11,
+        "error_rate": 0
+      },
+      "threshold_results": [
+        {
+          "name": "errors",
+          "label": "错误级问题",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "parse_errors",
+          "label": "解析错误",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "files_scanned",
+          "label": "扫描文件数",
+          "ok": true,
+          "missing": false,
+          "value": 273,
+          "unit": ""
+        },
+        {
+          "name": "advisories",
+          "label": "提示级问题（不计门禁）",
+          "ok": true,
+          "missing": false,
+          "value": 11,
+          "unit": ""
+        }
+      ],
+      "command": "node --experimental-vm-modules \"C:\\tmp\\fairy-dsh\\scripts\\checks\\lint.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\lint.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\lint.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\lint.log"
+    },
+    {
+      "id": "repo-contracts",
+      "title": "质量体系自洽与仓库契约",
+      "stage": "static",
+      "type": "meta",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "static",
+        "meta"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/repo-contracts.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 1095,
+      "exit_code": 0,
+      "metrics": {
+        "errors": 0,
+        "checks_scanned": 11,
+        "docs_scanned": 11,
+        "packages_checked": 11,
+        "error_rate": 0
+      },
+      "threshold_results": [
+        {
+          "name": "errors",
+          "label": "契约违规",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "checks_scanned",
+          "label": "校验的检查项数",
+          "ok": true,
+          "missing": false,
+          "value": 11,
+          "unit": ""
+        },
+        {
+          "name": "docs_scanned",
+          "label": "校验的检查项文档数",
+          "ok": true,
+          "missing": false,
+          "value": 11,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\repo-contracts.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\repo-contracts.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\repo-contracts.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\repo-contracts.log"
+    },
+    {
+      "id": "secret-scan",
+      "title": "密钥/凭据扫描",
+      "stage": "static",
+      "type": "scan",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "static",
+        "security"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/secret-scan.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 1254,
+      "exit_code": 0,
+      "metrics": {
+        "files_scanned": 426,
+        "findings": 0,
+        "advisories": 1,
+        "allowed": 17,
+        "finding_rate": 0
+      },
+      "threshold_results": [
+        {
+          "name": "findings",
+          "label": "疑似密钥命中（错误级）",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "advisories",
+          "label": "提示级命中（测试/夹具路径下的通用赋值）",
+          "ok": true,
+          "missing": false,
+          "value": 1,
+          "unit": ""
+        },
+        {
+          "name": "files_scanned",
+          "label": "扫描文件数",
+          "ok": true,
+          "missing": false,
+          "value": 426,
+          "unit": ""
+        },
+        {
+          "name": "allowed",
+          "label": "已登记豁免",
+          "ok": true,
+          "missing": false,
+          "value": 17,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\secret-scan.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\secret-scan.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\secret-scan.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\secret-scan.log"
+    },
+    {
+      "id": "typecheck",
+      "title": "TypeScript 类型检查",
+      "stage": "static",
+      "type": "typecheck",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "static",
+        "typescript",
+        "disabled"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/typecheck.md",
+      "description": "",
+      "status": "disabled",
+      "duration_ms": 0,
+      "metrics": {},
+      "threshold_results": [],
+      "note": "仓库没有可用的 TypeScript 编译器（根级无 TS 依赖；唯一的 TS 输入是两个包的 tsdown.config.ts 与 fairy-contracts/types.d.ts），无法做真实类型检查。启用步骤见 docs/quality/typecheck.md",
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\typecheck.log"
+    },
+    {
+      "id": "gherkin",
+      "title": "Gherkin 行为用例",
+      "stage": "test",
+      "type": "gherkin",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "test",
+        "gherkin"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/gherkin.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 5039,
+      "exit_code": 0,
+      "metrics": {
+        "features": 3,
+        "scenarios": 32,
+        "passed": 32,
+        "failed": 0,
+        "pending": 0,
+        "undefined_steps": 0,
+        "ambiguous": 0,
+        "skipped": 2,
+        "pass_rate": 100,
+        "syntax_errors": 0
+      },
+      "threshold_results": [
+        {
+          "name": "failed",
+          "label": "失败场景",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "undefined_steps",
+          "label": "未定义步骤",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "pending",
+          "label": "pending 步骤",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "ambiguous",
+          "label": "歧义步骤",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "syntax_errors",
+          "label": "特性文件语法错误",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "scenarios",
+          "label": "场景数",
+          "ok": true,
+          "missing": false,
+          "value": 32,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\gherkin.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\gherkin.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\gherkin.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\gherkin.log"
+    },
+    {
+      "id": "unit",
+      "title": "单元测试（全量 node --test）",
+      "stage": "test",
+      "type": "unit",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "test",
+        "node",
+        "all-packages"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/unit.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 15340,
+      "exit_code": 0,
+      "metrics": {
+        "packages": 11,
+        "packages_failed": 0,
+        "tests": 533,
+        "passed": 533,
+        "failed": 0,
+        "skipped": 0,
+        "todo": 0,
+        "pass_rate": 100,
+        "flaky_packages": 0,
+        "flaky_rate": 0
+      },
+      "threshold_results": [
+        {
+          "name": "failed",
+          "label": "失败用例",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "packages_failed",
+          "label": "失败包数",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "pass_rate",
+          "label": "通过率（跳过不计分母，%）",
+          "ok": true,
+          "missing": false,
+          "value": 100,
+          "min": 100,
+          "unit": ""
+        },
+        {
+          "name": "tests",
+          "label": "用例总数",
+          "ok": true,
+          "missing": false,
+          "value": 533,
+          "unit": ""
+        },
+        {
+          "name": "flaky_rate",
+          "label": "flaky 包占比（%，重试一次后通过才算）",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 1,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\unit.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\unit.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\unit.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\unit.log"
+    },
+    {
+      "id": "coverage",
+      "title": "覆盖率（全量 + 变更行/变更块）",
+      "stage": "verify",
+      "type": "coverage",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "verify",
+        "coverage"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/coverage.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 29814,
+      "exit_code": 0,
+      "metrics": {
+        "scope_changed_lines": 1,
+        "lines_pct": 90.25,
+        "blocks_pct": 73.49,
+        "changed_lines_pct": 84.79,
+        "changed_blocks_pct": 61.01,
+        "files_measured": 76,
+        "unexecuted_production_files": 78,
+        "workload_failures": 0,
+        "packages_lines_pct": 92.19,
+        "packages_blocks_pct": 77.87,
+        "packages_files_measured": 63,
+        "packages_changed_files": 0,
+        "harness_lines_pct": 84.79,
+        "harness_blocks_pct": 63.12,
+        "harness_files_measured": 13,
+        "harness_changed_files": 13,
+        "harness_changed_lines_pct": 84.79,
+        "harness_changed_blocks_pct": 61.01,
+        "flaky_workloads": 0,
+        "flaky_rate": 0,
+        "command_workload_exit_code": 0
+      },
+      "threshold_results": [
+        {
+          "name": "packages_lines_pct",
+          "label": "产品代码全量行覆盖（%，B.md 默认 90）",
+          "ok": true,
+          "missing": false,
+          "value": 92.19,
+          "min": 90,
+          "unit": ""
+        },
+        {
+          "name": "packages_blocks_pct",
+          "label": "产品代码全量块覆盖（存量地板；本仓历史分支覆盖在 78% 上下）",
+          "ok": true,
+          "missing": false,
+          "value": 77.87,
+          "min": 75,
+          "unit": ""
+        },
+        {
+          "name": "packages_changed_lines_pct",
+          "label": "产品代码**变更行**覆盖（%，B.md 默认 90；无变更行时该项不出现）",
+          "ok": true,
+          "missing": true,
+          "value": null,
+          "min": 90
+        },
+        {
+          "name": "packages_changed_blocks_pct",
+          "label": "产品代码**变更块**覆盖（%，B.md 默认 85；无变更行时该项不出现）",
+          "ok": true,
+          "missing": true,
+          "value": null,
+          "min": 85
+        },
+        {
+          "name": "harness_lines_pct",
+          "label": "质量体系自身行覆盖（棘轮地板；实测 85.80，目标 90）",
+          "ok": true,
+          "missing": false,
+          "value": 84.79,
+          "min": 84,
+          "unit": ""
+        },
+        {
+          "name": "harness_blocks_pct",
+          "label": "质量体系自身块覆盖（棘轮地板；实测 63.02，目标 85）",
+          "ok": true,
+          "missing": false,
+          "value": 63.12,
+          "min": 60,
+          "unit": ""
+        },
+        {
+          "name": "workload_failures",
+          "label": "覆盖率负载失败数（负载没跑完成，覆盖率没有意义）",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "files_measured",
+          "label": "计量文件数（观测）",
+          "ok": true,
+          "missing": false,
+          "value": 76,
+          "unit": ""
+        },
+        {
+          "name": "unexecuted_production_files",
+          "label": "未被任何负载加载的生产文件（观测，逐个列在产物 JSON 里）",
+          "ok": true,
+          "missing": false,
+          "value": 78,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\coverage.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\coverage.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\coverage.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\coverage.log"
+    },
+    {
+      "id": "integration",
+      "title": "跨包/镜像集成与 fairy-system 套件",
+      "stage": "verify",
+      "type": "integration",
+      "required": true,
+      "allow_failure": true,
+      "tags": [
+        "verify",
+        "integration"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/integration.md",
+      "description": "",
+      "status": "passed",
+      "on_missing": "skip",
+      "duration_ms": 3948,
+      "exit_code": 0,
+      "metrics": {
+        "subchecks": 5,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 2,
+        "pass_rate": 100
+      },
+      "threshold_results": [
+        {
+          "name": "failed",
+          "label": "失败的子检查",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "passed",
+          "label": "通过的子检查",
+          "ok": true,
+          "missing": false,
+          "value": 3,
+          "unit": ""
+        },
+        {
+          "name": "skipped",
+          "label": "跳过（前提缺失）的子检查",
+          "ok": true,
+          "missing": false,
+          "value": 2,
+          "unit": ""
+        },
+        {
+          "name": "subchecks",
+          "label": "子检查总数",
+          "ok": true,
+          "missing": false,
+          "value": 5,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\integration.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\integration.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\integration.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\integration.log"
+    },
+    {
+      "id": "e2e",
+      "title": "端到端（夹具仓库跑真 CLI + 报告闭环）",
+      "stage": "deep",
+      "type": "e2e",
+      "required": true,
+      "allow_failure": false,
+      "tags": [
+        "deep",
+        "e2e"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/e2e.md",
+      "description": "",
+      "status": "passed",
+      "duration_ms": 2781,
+      "exit_code": 0,
+      "metrics": {
+        "scenarios": 7,
+        "passed": 7,
+        "failed": 0,
+        "pass_rate": 100
+      },
+      "threshold_results": [
+        {
+          "name": "failed",
+          "label": "失败场景",
+          "ok": true,
+          "missing": false,
+          "value": 0,
+          "max": 0,
+          "unit": ""
+        },
+        {
+          "name": "passed",
+          "label": "通过场景",
+          "ok": true,
+          "missing": false,
+          "value": 7,
+          "unit": ""
+        },
+        {
+          "name": "scenarios",
+          "label": "端到端场景数",
+          "ok": true,
+          "missing": false,
+          "value": 7,
+          "unit": ""
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\e2e.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\e2e.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\e2e.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\e2e.log"
+    },
+    {
+      "id": "mutation",
+      "title": "变异测试（变更文件，加载器替换，不落盘）",
+      "stage": "deep",
+      "type": "mutation",
+      "required": true,
+      "allow_failure": true,
+      "tags": [
+        "deep",
+        "mutation",
+        "slow"
+      ],
+      "owner": "quality-framework",
+      "docs": "docs/quality/mutation.md",
+      "description": "",
+      "status": "skipped",
+      "on_missing": "skip",
+      "duration_ms": 949,
+      "exit_code": 3,
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "本次变更里没有落在包生产目录（lib/ src/ scripts/）且带测试的 JS 文件",
+        "targets": 0
+      },
+      "threshold_results": [
+        {
+          "name": "mutation_score",
+          "label": "变更文件变异分数（%）",
+          "ok": false,
+          "missing": true,
+          "value": null,
+          "min": 80
+        },
+        {
+          "name": "survived",
+          "label": "存活变异体",
+          "ok": false,
+          "missing": true,
+          "value": null
+        },
+        {
+          "name": "killed",
+          "label": "被杀变异体",
+          "ok": false,
+          "missing": true,
+          "value": null
+        },
+        {
+          "name": "mutants_sampled",
+          "label": "采样的变异体数",
+          "ok": false,
+          "missing": true,
+          "value": null
+        }
+      ],
+      "command": "node \"C:\\tmp\\fairy-dsh\\scripts\\checks\\mutation.mjs\" --check \"C:\\tmp\\fairy-dsh\\.agent\\checks\\mutation.yaml\" --repo \"C:\\tmp\\fairy-dsh\" --report-dir \"C:\\tmp\\fairy-dsh\\reports\" --artifact \"C:\\tmp\\fairy-dsh\\reports\\artifacts\\mutation.json\"",
+      "cwd": "C:\\tmp\\fairy-dsh",
+      "note": "本次变更里没有落在包生产目录（lib/ src/ scripts/）且带测试的 JS 文件",
+      "next_steps": [],
+      "log": "C:\\tmp\\fairy-dsh\\reports\\artifacts\\mutation.log"
+    }
+  ],
+  "executed": 11,
+  "gate": {
+    "status": "pass",
+    "failures": [],
+    "warnings": [
+      {
+        "id": "typecheck",
+        "status": "disabled",
+        "reason": "仓库没有可用的 TypeScript 编译器（根级无 TS 依赖；唯一的 TS 输入是两个包的 tsdown.config.ts 与 fairy-contracts/types.d.ts），无法做真实类型检查。启用步骤见 docs/quality/typecheck.md"
+      },
+      {
+        "id": "mutation",
+        "status": "skipped",
+        "note": "本次变更里没有落在包生产目录（lib/ src/ scripts/）且带测试的 JS 文件",
+        "reason": "本次变更里没有落在包生产目录（lib/ src/ scripts/）且带测试的 JS 文件"
+      }
+    ],
+    "counts": {
+      "passed": 9,
+      "disabled": 1,
+      "skipped": 1
+    },
+    "enabled_checks": 10,
+    "disabled_checks": 1
+  }
+}

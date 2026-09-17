@@ -1,0 +1,96 @@
+# 检查项 unit：各插件包 node --test 全量执行。
+#
+# 机制：按 scope.package_globs 发现包 → 包内 test/**/*.test.js 显式列文件（不依赖 shell 通配，
+#       Windows 的 cmd 不展开 glob）→ TAP 解析汇总 → 失败包重试一次（区分 flaky 与真失败）。
+# 阈值：failed=0、packages_failed=0、通过率 100%（跳过不计分母）、flaky_rate ≤1%。
+# 注意：环境耦合的 fairy-system 套件不在本项（见 integration 检查项的 subchecks 说明）。
+schema_version: 1
+
+id: unit
+title: 单元测试（全量 node --test）
+stage: test
+type: unit
+enabled: true
+required: true
+tags:
+  - test
+  - node
+  - all-packages
+command: 'node "${repo}/scripts/checks/unit.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\unit.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/unit.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 1800
+threshold:
+  enforce: true
+  metrics:
+    - name: failed
+      max: 0
+      label: 失败用例
+    - name: packages_failed
+      max: 0
+      label: 失败包数
+    - name: pass_rate
+      min: 100
+      label: 通过率（跳过不计分母，%）
+    - name: tests
+      label: 用例总数
+    - name: flaky_rate
+      max: 1
+      label: flaky 包占比（%，重试一次后通过才算）
+artifacts:
+  - reports/artifacts/unit.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: pnpm
+    probe: pnpm --version
+    min_version: "11"
+    reason: 各包自带 lockfile，依赖必须用 pnpm 逐包安装（AGENTS.md §1.1）
+    install:
+      - strategy: winget
+        command: winget install --id pnpm.pnpm --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install pnpm
+        admin: false
+    manual: 手动启用 pnpm：corepack enable pnpm（Node 自带 corepack）或 npm install -g pnpm
+  - kind: tool
+    name: package-deps
+    probe: node "${repo}/scripts/checks/lib/deps-probe.mjs" --repo "${repo}"
+    reason: 各包通过 link: 依赖 dsh-fairy-contracts，必须先逐包安装依赖（否则 ERR_MODULE_NOT_FOUND）
+    install:
+      - strategy: local
+        command: node "scripts/checks/lib/deps-install.mjs" --repo .
+        admin: false
+        reason: 项目本地安装：逐包 pnpm install --frozen-lockfile --ignore-scripts（免提权，已装的包自动跳过）
+    manual: node scripts/checks/lib/deps-install.mjs --repo .
+install: []
+docs: docs/quality/unit.md
+owner: quality-framework
+allow_failure: false
+scope:
+  package_globs:
+    - "*/dsh-*/package.json"
+  package_timeout_seconds: 600
+  test_timeout_ms: 45000
+  retries: 1

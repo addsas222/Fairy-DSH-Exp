@@ -1,0 +1,59 @@
+# 检查项 e2e：端到端跑真正的 CLI（子进程），验证扩展闭环与报告产物。
+#
+# 机制：建临时夹具仓库 → 加入若干检查项（含故意失败的、阈值不满足的、平台不支持的）→ 真的起
+#       node scripts/verify.mjs --repo <夹具> 子进程 → 断言：发现的检查项、逐项状态与退出码、
+#       reports/quality-report.{json,md} 与 verify.log 真实落盘、JSON 结论与退出码一致。
+#       这就是"新增检查项 → 自动发现 → 真实执行"这条扩展闭环的机器可复核证明。
+# 阈值：failed 必须为 0。
+schema_version: 1
+
+id: e2e
+title: 端到端（夹具仓库跑真 CLI + 报告闭环）
+stage: deep
+type: e2e
+enabled: true
+required: true
+tags:
+  - deep
+  - e2e
+command: 'node "${repo}/scripts/checks/e2e.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\e2e.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/e2e.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 900
+threshold:
+  enforce: true
+  metrics:
+    - name: failed
+      max: 0
+      label: 失败场景
+    - name: passed
+      label: 通过场景
+    - name: scenarios
+      label: 端到端场景数
+artifacts:
+  - reports/artifacts/e2e.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+install: []
+docs: docs/quality/e2e.md
+owner: quality-framework
+allow_failure: false

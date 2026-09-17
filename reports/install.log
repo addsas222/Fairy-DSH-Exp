@@ -1,0 +1,6 @@
+2026-09-17T04:47:42Z == Fairy-DSH 质量体系安装脚本（POSIX sh）==
+2026-09-17T04:47:42Z tool:node 已就绪，跳过
+2026-09-17T04:47:42Z tool:pnpm 已就绪，跳过
+2026-09-17T04:47:42Z dry-run：cd "/c/tmp/fairy-dsh" && node "scripts/checks/lib/deps-install.mjs" --repo .
+2026-09-17T04:47:42Z tool:git 已就绪，跳过
+2026-09-17T04:47:43Z == 安装脚本结束：需要人工确认的步骤见上方注释与 docs/QUALITY.md ==

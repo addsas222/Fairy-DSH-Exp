@@ -1,0 +1,124 @@
+# 检查项 integration：跨包/镜像集成 + fairy-system 套件。
+#
+# 子检查（真实命令，逐个记录退出码与输出尾部）：
+#   1) fairy-system/verify-build.js                 构建契约（10 包；需要已部署的 DSH_HOME）
+#   2) fairy-system/image-manifest.js --self-test   镜像清单/prune 自检
+#   3) fairy-system/skill-audit.js --self-test      技能/插件冗余审计自检
+#   4) fairy-system/scaffold-plugin.js --self-test  插件脚手架自检
+#   5) fairy-system/test/*.test.js                  fairy-system 全量套件（需要官方制品与已部署 home 旋钮）
+# 前提缺失的子检查记 skipped 并打印真实的手动命令（不伪造结果）；已部署的机器上会自动全跑。
+# 阈值：failed 必须为 0。allow_failure=true（1) 与 5) 依赖外部制品；它们的失败/跳过一定会出现在
+#       报告的"跳过 / 阻塞项与前提"一节，不会被藏起来。
+schema_version: 1
+
+id: integration
+title: 跨包/镜像集成与 fairy-system 套件
+stage: verify
+type: integration
+enabled: true
+required: true
+tags:
+  - verify
+  - integration
+command: 'node "${repo}/scripts/checks/integration.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\integration.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/integration.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 1800
+threshold:
+  enforce: true
+  metrics:
+    - name: failed
+      max: 0
+      label: 失败的子检查
+    - name: passed
+      label: 通过的子检查
+    - name: skipped
+      label: 跳过（前提缺失）的子检查
+    - name: subchecks
+      label: 子检查总数
+artifacts:
+  - reports/artifacts/integration.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+install: []
+docs: docs/quality/integration.md
+owner: quality-framework
+allow_failure: true
+on_missing: skip
+scope:
+  home_candidates:
+    - "~/.dsh-fairy"
+    - "~/.dsh"
+  subchecks:
+    - id: image-manifest-self-test
+      title: 镜像清单/prune 自检
+      requires_home: false
+      command: 'node "fairy-system/image-manifest.js" --self-test'
+      manual: node fairy-system/image-manifest.js --self-test
+    - id: skill-audit-self-test
+      title: 技能/插件审计自检
+      requires_home: false
+      command: 'node "fairy-system/skill-audit.js" --self-test'
+      manual: node fairy-system/skill-audit.js --self-test
+    - id: scaffold-plugin-self-test
+      title: 插件脚手架自检
+      requires_home: false
+      command: 'node "fairy-system/scaffold-plugin.js" --self-test'
+      manual: node fairy-system/scaffold-plugin.js --self-test
+    - id: verify-build
+      title: 构建契约（fairy-system/verify-build.js）
+      requires_home: true
+      home_env: DSH_HOME
+      command: 'node "fairy-system/verify-build.js"'
+      manual: DSH_HOME=<已部署的 DSH_HOME> node fairy-system/verify-build.js
+    # 环境耦合的全量套件：官方制品 + 已部署 home 三个旋钮齐了才跑（AGENTS.md 第 3 节的"仓库自己的口子"）。
+    # 缺旋钮时记 skipped 并打印真实命令——这正是"整组不跑"的既有形态，不是把失败藏起来。
+    - id: fairy-system-suite
+      title: fairy-system 全量测试套件（需官方制品与已部署 home 旋钮）
+      requires_home: true
+      home_env: DSH_HOME
+      requires_env:
+        - DSH_OFFICIAL_PACKAGE
+        - DSH_OFFICIAL_RUNTIME
+      node_test:
+        directory: fairy-system/test
+        pattern: "**/*.test.js"
+        timeout_ms: 45000
+      timeout_seconds: 900
+      manual: DSH_HOME=<已部署 home> DSH_OFFICIAL_PACKAGE=<…>/package.json DSH_OFFICIAL_RUNTIME=<…>/lib/client.js node --test --test-timeout=45000 fairy-system/test/*.test.js

@@ -1,0 +1,131 @@
+[2026-09-17T04:36:54.599Z] run status=fail platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             0.9s files_scanned=334, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - failed   lint               0.9s files_scanned=229, errors=216, parse_errors=216, rule_findings=1, advisories=1, error_rate=94.32
+  - passed   repo-contracts     0.8s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=10, error_rate=0
+  - failed   secret-scan        0.9s files_scanned=334, findings=2, allowed=15, finding_rate=0.6
+  - disabled typecheck          0.0s 
+  - failed   gherkin            1.5s features=2, scenarios=10, passed=0, failed=7, pending=0, undefined_steps=3
+  - failed   unit               12.8s packages=10, packages_failed=1, tests=485, passed=484, failed=1, skipped=0
+  - failed   coverage           21.7s scope_changed_lines=1, lines_pct=88.74, blocks_pct=71.02, changed_lines_pct=81.96, changed_blocks_pct=54.36, files_measured=66
+  - passed   integration        3.4s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                2.6s scenarios=7, passed=7, failed=0, pass_rate=100
+  - failed   mutation           48.4s mutation_score=33.33, killed=8, survived=16, mutants_sampled=24, invalid_mutants=0, baseline_failures=0
+  ! FAIL lint: 错误级问题=216（要求 <=0）；解析错误=216（要求 <=0）
+  ! FAIL secret-scan: 疑似密钥命中=2（要求 <=0）
+  ! FAIL typecheck: required 检查项被禁用：仓库没有可用的 TypeScript 编译器（根级无 TS 依赖；唯一的 TS 输入是两个包的 tsdown.config.ts 与 fairy-contracts/types.d.ts），无法做真实类型检查。启用步骤见 docs/quality/typecheck.md
+  ! FAIL gherkin: 失败场景=7（要求 <=0）；未定义步骤=3（要求 <=0）
+  ! FAIL unit: 失败用例=1（要求 <=0）；失败包数=1（要求 <=0）；通过率（跳过不计分母，%）=99.79（要求 >=100）
+  ! FAIL coverage: 全量行覆盖（%）=88.74（要求 >=90）；全量块覆盖（存量地板，%）=71.02（要求 >=75）；变更行覆盖（%）=81.96（要求 >=90）；变更块覆盖（%）=54.36（要求 >=85）；覆盖率负载失败数=1（要求 <=0）
+[2026-09-17T04:46:58.881Z] run status=fail platform=windows node=v26.7.0 checks=11
+  selection stages=* only=coverage
+  - passed   coverage           37.9s scope_changed_lines=1, lines_pct=90.37, blocks_pct=73.7, changed_lines_pct=85.2, changed_blocks_pct=61.76, files_measured=76
+  - skipped  e2e                0.0s 
+  - skipped  format             0.0s 
+  - skipped  gherkin            0.0s 
+  - skipped  integration        0.0s 
+  - skipped  lint               0.0s 
+  - skipped  mutation           0.0s 
+  - skipped  repo-contracts     0.0s 
+  - skipped  secret-scan        0.0s 
+  - disabled typecheck          0.0s 
+  - skipped  unit               0.0s 
+  ! FAIL <gate>: 启用的检查项只有 1 个，少于门禁下限 8
+[2026-09-17T04:47:44.101Z] run status=fail platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - failed   format             1.5s files_scanned=420, errors=3, error_rate=0.71, advisories=0, baseline_exemptions=12
+  - failed   lint               1.6s files_scanned=273, errors=2, parse_errors=1, rule_findings=12, advisories=11, error_rate=0.73
+  - failed   repo-contracts     1.3s errors=6, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=54.55
+  - failed   secret-scan        1.5s files_scanned=426, findings=1, advisories=1, allowed=17, finding_rate=0.23
+  - disabled typecheck          0.0s 
+  - passed   gherkin            5.4s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               15.9s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           32.3s scope_changed_lines=1, lines_pct=90.37, blocks_pct=73.7, changed_lines_pct=85.2, changed_blocks_pct=61.76, files_measured=76
+  - passed   integration        4.4s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                3.2s scenarios=7, passed=7, failed=0, pass_rate=100
+  - failed   mutation           0.8s 
+  ! FAIL format: 错误级违规=3（要求 <=0）
+  ! FAIL lint: 错误级问题=2（要求 <=0）；解析错误=1（要求 <=0）
+  ! FAIL repo-contracts: 契约违规=6（要求 <=0）
+  ! FAIL secret-scan: 疑似密钥命中（错误级）=1（要求 <=0）
+[2026-09-17T04:50:57.456Z] run status=fail platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             1.7s files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - passed   lint               1.9s files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0
+  - passed   repo-contracts     1.5s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0
+  - passed   secret-scan        1.8s files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0
+  - disabled typecheck          0.0s 
+  - passed   gherkin            6.3s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               16.2s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           32.8s scope_changed_lines=1, lines_pct=90.25, blocks_pct=73.49, changed_lines_pct=84.75, changed_blocks_pct=60.95, files_measured=76
+  - passed   integration        4.2s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                3.2s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  mutation           1.1s skipped=true, targets=0
+  ! FAIL mutation: required 检查项处于 skipped：本次变更里没有落在包生产目录（lib/ src/ scripts/）且带测试的 JS 文件
+[2026-09-17T04:52:07.683Z] run status=pass platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             1.2s files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - passed   lint               1.3s files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0
+  - passed   repo-contracts     1.1s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0
+  - passed   secret-scan        1.2s files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0
+  - disabled typecheck          0.0s 
+  - passed   gherkin            5.3s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               14.4s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           34.1s scope_changed_lines=1, lines_pct=90.25, blocks_pct=73.49, changed_lines_pct=84.76, changed_blocks_pct=60.95, files_measured=76
+  - passed   integration        4.6s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                3.6s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  mutation           1.3s skipped=true, targets=0
+[2026-09-17T04:53:21.077Z] run status=fail platform=windows node=v26.7.0 checks=12
+  selection stages=* only=demo-extension
+  - passed   demo-extension     0.2s checks_discovered=12
+  - skipped  coverage           0.0s 
+  - skipped  e2e                0.0s 
+  - skipped  format             0.0s 
+  - skipped  gherkin            0.0s 
+  - skipped  integration        0.0s 
+  - skipped  lint               0.0s 
+  - skipped  mutation           0.0s 
+  - skipped  repo-contracts     0.0s 
+  - skipped  secret-scan        0.0s 
+  - disabled typecheck          0.0s 
+  - skipped  unit               0.0s 
+  ! FAIL <gate>: 启用的检查项只有 1 个，少于门禁下限 8
+[2026-09-17T04:53:27.012Z] run status=pass platform=windows node=v26.7.0 checks=11
+  selection stages=* only=e2e
+  - passed   e2e                3.1s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  coverage           0.0s 
+  - skipped  format             0.0s 
+  - skipped  gherkin            0.0s 
+  - skipped  integration        0.0s 
+  - skipped  lint               0.0s 
+  - skipped  mutation           0.0s 
+  - skipped  repo-contracts     0.0s 
+  - skipped  secret-scan        0.0s 
+  - disabled typecheck          0.0s 
+  - skipped  unit               0.0s 
+[2026-09-17T04:53:33.033Z] run status=pass platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             1.2s files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - passed   lint               1.3s files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0
+  - passed   repo-contracts     1.1s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0
+  - passed   secret-scan        1.2s files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0
+  - disabled typecheck          0.0s 
+  - passed   gherkin            4.9s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               15.1s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           32.3s scope_changed_lines=1, lines_pct=90.25, blocks_pct=73.49, changed_lines_pct=84.79, changed_blocks_pct=61.01, files_measured=76
+  - passed   integration        3.9s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                3.1s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  mutation           1.1s skipped=true, targets=0
+[2026-09-17T04:55:38.908Z] run status=pass platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             1.2s files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - passed   lint               1.3s files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0
+  - passed   repo-contracts     1.1s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0
+  - passed   secret-scan        1.3s files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0
+  - disabled typecheck          0.0s 
+  - passed   gherkin            5.0s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               15.3s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           29.8s scope_changed_lines=1, lines_pct=90.25, blocks_pct=73.49, changed_lines_pct=84.79, changed_blocks_pct=61.01, files_measured=76
+  - passed   integration        3.9s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                2.8s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  mutation           0.9s skipped=true, targets=0

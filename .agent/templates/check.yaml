@@ -1,0 +1,80 @@
+# 新检查项配置模板（复制到 .agent/checks/<id>.yaml 后替换所有 <...> 占位符）。
+#
+# 三步扩展（详见 docs/EXTENDING.md）：
+#   1) cp .agent/templates/check.yaml .agent/checks/<id>.yaml 并按下面的占位符改字段；
+#   2) cp scripts/checks/template.mjs scripts/checks/<id>.mjs 并实现真实检查；
+#   3) cp .agent/templates/check-doc.md docs/quality/<id>.md 并写清机制/阈值/启用步骤。
+# 之后 `node scripts/verify.mjs --list` 就能看到它——**不需要改主入口任何代码**。
+#
+# ${...} 是运行期变量（由主入口替换）：${repo} ${check} ${reportDir} ${artifact} ${node}
+# ${pnpm} ${python} ${os} ${tmp}，完整清单见 docs/EXTENDING.md。
+#
+# <...> 是人工占位符（一次性的，替换完就不该再存在）：<id> <title> <stage> <type>
+# <tag> <command> <owner>。
+
+schema_version: 1
+
+# 唯一 id：小写字母/数字/连字符；也是产物文件名与文档名的来源
+id: <id>
+
+# 一句话说明它在查什么（会出现在报告表格里）
+title: <title>
+
+# 阶段：必须是 .agent/quality.yaml 的 stages 里定义过的 id
+stage: <stage>
+
+# 类型：static | lint | format | typecheck | unit | coverage | gherkin | integration | e2e | mutation | scan | meta
+type: <type>
+
+# 是否参与本轮（false 时必须写 enabled_reason，并在 docs/quality/<id>.md 写启用步骤）
+enabled: true
+
+# required=true 时：失败/错误/超时/阻塞都会让门禁 FAIL（allow_failure 可降级为警告）
+required: true
+
+# 标签：便于 --tags 选择（如 node / windows / slow / optional）
+tags:
+  - <tag>
+
+# 三段命令：Windows 走 windows_command，其余平台走 unix_command，command 是可移植兜底。
+# 三处都要写（或用 platform_support 显式声明某平台不支持及原因）。
+command: '<command>'
+windows_command: '<command>'
+unix_command: '<command>'
+
+# 工作目录（默认仓库根）
+cwd: ${repo}
+
+# 追加到子进程的环境变量（值支持 ${...} 变量）
+env: {}
+
+# 超时（秒）。超时会整棵进程树被杀，状态记 timeout。
+timeout: 600
+
+# 阈值：对检查脚本输出的指标做 min/max 判定；不满足即该项失败
+threshold:
+  enforce: true
+  metrics:
+    - name: errors
+      max: 0
+      label: 错误数
+
+# 产物：仓库相对路径，报告里会列出来
+artifacts:
+  - reports/artifacts/<id>.json
+
+# 前提：kind=tool|env|path|check|home；缺失时 required 项默认阻塞、可选项跳过
+requires: []
+
+# 安装步骤：strategy=local|winget|scoop|choco|manual；由 scripts/verify.mjs
+# --generate-install 汇总成 scripts/install.ps1 与 scripts/install.sh（choco/需提权只写文档）
+install: []
+
+# 说明文档（必须存在，主入口会校验）
+docs: docs/quality/<id>.md
+
+# 责任人/归属（便于出问题时找到人）
+owner: <owner>
+
+# 允许失败：true 时失败降级为警告（仅用于确实无法在本仓修复的检查）
+allow_failure: false

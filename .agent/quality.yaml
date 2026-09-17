@@ -1,0 +1,87 @@
+# Fairy-DSH 质量体系总配置（配置驱动：主入口只读它 + .agent/checks/*.yaml）
+#
+# 结构由 .agent/quality.schema.json 校验（schema_version=1）。改结构先改 schema 并递增
+# schema_version，然后同步 docs/QUALITY.md 与 docs/EXTENDING.md。
+#
+# 主入口：scripts/verify.mjs（Windows 用 scripts/verify.cmd 或 scripts/verify.ps1，
+# POSIX 用 sh scripts/verify.sh）。主入口不做任何检查，只做四件事：
+#   读配置 → 自动发现 .agent/checks/*.yaml → 按阶段执行 → 汇总报告与门禁。
+
+schema_version: 1
+
+project:
+  name: fairy-dsh
+  repo_root: .
+  description: DSH 插件套件 monorepo（11 个包各自独立 lockfile、node --test）
+
+# 检查项缺省值：单文件没写的字段从这里继承（仍会被 schema 要求显式声明，缺省值只影响运行期语义）
+defaults:
+  timeout: 1800
+  on_missing: skip
+  env:
+    QUALITY_SCHEMA_VERSION: "1"
+
+discovery:
+  checks_dir: .agent/checks
+  pattern: "*.yaml"
+  exclude:
+    - template.yaml
+
+# 阶段定义：检查项的 stage 字段必须在此出现；执行顺序按 order 升序。
+stages:
+  - id: static
+    title: 静态检查
+    order: 10
+    concurrency: 4
+    description: 纯读文件的检查（格式、语法/规则 lint、密钥扫描、体系自检）
+  - id: test
+    title: 测试
+    order: 20
+    concurrency: 1
+    description: 单元测试与 Gherkin 行为用例（真实执行，不 mock 结果）
+  - id: verify
+    title: 验证
+    order: 30
+    concurrency: 1
+    description: 覆盖率与跨包/镜像集成门禁
+  - id: deep
+    title: 深度验证
+    order: 40
+    concurrency: 1
+    description: 端到端闭环与变异测试（耗时长，默认最后跑）
+
+# 门禁：required 检查项的终态决定整轮结果；allow_failure 的项降级为警告。
+gate:
+  fail_on:
+    - failed
+    - error
+    - timeout
+    - blocked
+  warn_on:
+    - skipped
+    - disabled
+  min_enabled_checks: 8
+  max_disabled_checks: 3
+  allow_failure_downgrades: true
+
+report:
+  dir: reports
+  markdown: quality-report.md
+  json: quality-report.json
+  log: verify.log
+  artifact_dir: reports/artifacts
+  keep_artifacts: 5
+
+install:
+  log: reports/install.log
+  strategy_order:
+    - local
+    - winget
+    - scoop
+    - choco
+  winget_flags:
+    - --accept-source-agreements
+    - --accept-package-agreements
+    - --scope user
+  never_elevate: true
+  choco_docs_only: true

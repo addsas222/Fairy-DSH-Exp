@@ -499,3 +499,39 @@ import 痕迹"是正常现象，不能读作"在跑降级"。这条此前在本�
   权限位断言（`chmod 0o600`）在 Windows 不可表达，各包已按平台跳过。
 - **MCP 行**（playwright/context7）会拉起子进程；隔离 home 缺 `@playwright/mcp`
   的 `.bin` 时对应行报 ENOENT，属环境耦合，不影响其余插件。
+
+## 7. 质量体系（配置驱动，2026-09-17 追加）
+
+本仓新增了一套**配置驱动、可插拔、跨平台、Windows 友好**的质量体系。它只做"读配置 → 自动发现
+检查项 → 按阶段执行 → 汇总报告与门禁"，**主入口不认识任何具体检查项**：新增检查项 = 加一个
+`.agent/checks/<id>.yaml` + 一个 `scripts/checks/<id>.mjs` + 一份 `docs/quality/<id>.md`，
+不用改主入口一行代码。
+
+- 入口（三平台等价）：Windows 用 `scripts\verify.cmd`（推荐，纯 ASCII + CRLF，避开 PS 5.1 的 AMSI
+  崩溃面）或 `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1`（UTF-8 with BOM + CRLF）；
+  Linux/CI 用 `sh scripts/verify.sh`；真正的主入口是 `node scripts/verify.mjs`。
+- 配置：`.agent/quality.yaml`（`schema_version: 1`、默认门禁、阶段、报告、安装策略）+
+  `.agent/quality.schema.json`（**真实生效**：主入口执行前用它校验配置）+ `.agent/checks/*.yaml`。
+- 报告：`reports/quality-report.md`（人读）、`reports/quality-report.json`（机器读结论）、
+  `reports/verify.log`（历史追加）、`reports/install.log`（安装动作）、`reports/artifacts/<id>.log|json`
+  （逐项完整输出，不入库）。
+- 安装：`scripts/install.ps1` / `scripts/install.sh` 由 `node scripts/verify.mjs --generate-install`
+  从各检查项的 `requires[].install` **生成**（勿手改）。优先级＝项目本地依赖 > winget `--scope user`
+  > scoop > choco（**只写文档，不执行**）；winget 一律带
+  `--accept-source-agreements --accept-package-agreements --scope user`；**永不 sudo / 永不自动提权**。
+- CI：`.github/workflows/quality.yml` 在 `windows-latest` 与 `ubuntu-latest` 上跑同一个门禁
+  （分别走 `scripts\verify.cmd` / `sh scripts/verify.sh`）。既有的 `candidate-tests`（`test.yml`）
+  保持原样，不删不弱化。
+- 文档：`docs/QUALITY.md`（用法/门禁语义/覆盖率口径/安装策略/跨平台规则）、
+  `docs/EXTENDING.md`（三步扩展 + 字段全表）、`docs/quality/<id>.md`（逐项机制与阈值）。
+- 行尾与编码：`.gitattributes`（追加，未改既有规则）固定 `*.sh`/`*.mjs` 为 LF、`*.ps1`/`*.cmd`/`*.bat`
+  为 CRLF；`scripts/checks/format.mjs` 把 `.ps1` 必须 UTF-8 with BOM、其它文本不得带 BOM、混合行尾、
+  NUL 字节都做成硬门禁（第 6 节那两条编码规矩从此有机器把关）。
+- **Windows 长路径**：本机 clone 请执行一次 `git config core.longpaths true`（本机配置，无法随仓分发；
+  `repo-contracts` 检查项会校验 `docs/QUALITY.md` 里写明这条约定）。
+- 纪律：不要为了让门禁变绿去 `enabled: false` / `allow_failure: true` / 删规则——`repo-contracts`
+  会校验文档与"阈值指标必须在脚本里真实出现"，门禁也有 `min_enabled_checks` 下限；关检查项必须在
+  `.agent/checks/<id>.yaml` 写 `enabled_reason` 并在 `docs/quality/<id>.md` 写清启用步骤。
+- 边界：本次质量体系只落在根级（`.agent/**`、`scripts/verify.*`、`scripts/checks/**`、`docs/**`、
+  `reports/**`、`features/**`、`tests/template.*`、`.gitattributes`、`.gitignore`、`.github/**`、
+  本文件追加节），**没有改动任何插件包目录**（仅以只读方式运行它们的既有测试）。

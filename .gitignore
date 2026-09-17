@@ -51,3 +51,8 @@ fairy-visual/dsh-fairy-visual/lib/index.iife.js
 
 # 隔离实例 home（0.1.5 验证用）：与 .dsh-test-home/ 同理，绝不入库。
 .dsh-test-home*/
+
+# 质量体系的运行产物：报告本体（quality-report.md/json、verify.log、install.log）入库便于复核，
+# 逐项产物日志与覆盖率的嵌套运行目录不入库（可重现，且会随每次运行变化）。
+reports/artifacts/
+reports/.harness-coverage/

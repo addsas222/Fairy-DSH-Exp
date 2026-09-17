@@ -1,0 +1,80 @@
+# 检查项 lint：语法解析 + 项目自定规则。
+#
+# 机制：对每个跟踪 .js/.mjs/.cjs 按真实模块类型解析（CJS 用 vm.Script，ESM 用
+#       vm.SourceTextModule，所以命令带 --experimental-vm-modules；无 type 字段的 .js 用
+#       Node 的模块语法探测兜底），再跑 5 条项目规则：debugger / 生产代码 eval /
+#       生产代码 console.log / 测试 .only / 空 catch（只作提示级——存量 10 处是有意的释放模式）。
+# 为什么不用 eslint：仓库没有 eslint，也不为此引根级依赖（口径说明见 docs/QUALITY.md）。
+# 阈值：错误级问题必须为 0。
+schema_version: 1
+
+id: lint
+title: 语法解析与项目规则
+stage: static
+type: lint
+enabled: true
+required: true
+tags:
+  - static
+  - node
+command: 'node --experimental-vm-modules "${repo}/scripts/checks/lint.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node --experimental-vm-modules "${repo}\scripts\checks\lint.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node --experimental-vm-modules "${repo}/scripts/checks/lint.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 300
+threshold:
+  enforce: true
+  metrics:
+    - name: errors
+      max: 0
+      label: 错误级问题
+    - name: parse_errors
+      max: 0
+      label: 解析错误
+    - name: files_scanned
+      label: 扫描文件数
+    - name: advisories
+      label: 提示级问题（不计门禁）
+artifacts:
+  - reports/artifacts/lint.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+install: []
+docs: docs/quality/lint.md
+owner: quality-framework
+allow_failure: false

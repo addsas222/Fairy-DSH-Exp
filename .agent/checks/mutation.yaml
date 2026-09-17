@@ -1,0 +1,97 @@
+# 检查项 mutation：真变异测试（**不修改工作树**）。
+#
+# 机制：只针对"本次变更且被测试实际执行"的文件，按 token 级规则生成变异体（比较运算取反、
+#       数值 ±1、布尔取反、逻辑运算符互换等）→ 变异体写到临时文件，用 Node 模块加载钩子
+#       （module.registerHooks / register）在解析阶段把被测模块路由到变异体 → 跑该包真实测试套件：
+#       套件失败 = 变异体被杀，通过 = 存活。分数 = 被杀 / (被杀 + 存活)。
+#       语法非法的变异体先用 node --check 过滤掉，**不会**算作被杀（否则分数是假的）。
+# 阈值：变异分数 ≥80%。allow_failure=true：本项耗时且依赖变更集，失败只降级为警告。
+schema_version: 1
+
+id: mutation
+title: 变异测试（变更文件，加载器替换，不落盘）
+stage: deep
+type: mutation
+enabled: true
+required: true
+tags:
+  - deep
+  - mutation
+  - slow
+command: 'node "${repo}/scripts/checks/mutation.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\mutation.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/mutation.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 2400
+threshold:
+  enforce: true
+  metrics:
+    - name: mutation_score
+      min: 80
+      label: 变更文件变异分数（%）
+    - name: survived
+      label: 存活变异体
+    - name: killed
+      label: 被杀变异体
+    - name: mutants_sampled
+      label: 采样的变异体数
+artifacts:
+  - reports/artifacts/mutation.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+  - kind: tool
+    name: package-deps
+    probe: node "${repo}/scripts/checks/lib/deps-probe.mjs" --repo "${repo}"
+    reason: 各包通过 link: 依赖 dsh-fairy-contracts，必须先逐包安装依赖（否则 ERR_MODULE_NOT_FOUND）
+    install:
+      - strategy: local
+        command: node "scripts/checks/lib/deps-install.mjs" --repo .
+        admin: false
+        reason: 项目本地安装：逐包 pnpm install --frozen-lockfile --ignore-scripts（免提权，已装的包自动跳过）
+    manual: node scripts/checks/lib/deps-install.mjs --repo .
+install: []
+docs: docs/quality/mutation.md
+owner: quality-framework
+allow_failure: true
+# 没有可变异目标时脚本会 exit 3（"没东西可测"不是失败）——显式声明 on_missing: skip，只记警告。
+on_missing: skip
+scope:
+  package_globs:
+    - "*/dsh-*/package.json"
+  max_mutants: 24
+  mutant_timeout_seconds: 240

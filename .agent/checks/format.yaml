@@ -1,0 +1,124 @@
+# 检查项 format：跨平台文本形态门禁。
+#
+# 机制：读 git ls-files 的跟踪文本文件，判定行尾（默认 LF；.cmd/.bat/.ps1 必须 CRLF）、
+#       .ps1 的 UTF-8 BOM、其它文件"不得有 BOM"、NUL 字节、混合行尾；
+#       行尾空白与文件末尾换行是**提示级**（存量债登记在下面的 scope.legacy_violations）。
+# 为什么是这些规则而不是"格式化风格"：它们都会让同一份提交在不同平台产生不同结果，是本仓
+#       真实踩过的坑（AGENTS.md 第 6 节：.ps1 无 BOM → PS 5.1 吞掉后续代码；.cmd 用 LF →
+#       cmd.exe 每行吃字符）。仓库没有 prettier，也不为此引根级依赖。
+# 阈值：错误级违规必须为 0；新增违规一律算错误，存量写在基线里（附原因）。
+schema_version: 1
+
+id: format
+title: 文本形态（行尾/BOM/空行）
+stage: static
+type: format
+enabled: true
+required: true
+tags:
+  - static
+  - cross-platform
+command: 'node "${repo}/scripts/checks/format.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\format.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/format.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 120
+threshold:
+  enforce: true
+  metrics:
+    - name: errors
+      max: 0
+      label: 错误级违规
+    - name: files_scanned
+      label: 扫描文件数
+    - name: advisories
+      label: 提示级违规（不计门禁）
+artifacts:
+  - reports/artifacts/format.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+install: []
+docs: docs/quality/format.md
+owner: quality-framework
+allow_failure: false
+scope:
+  # 存量违规：这些文件不在本次质量体系授权的改动范围内（属其它所有者 / 字节被哈希 pin），
+  # 因此登记为"已知存量"：命中只记 advisory。被修复后删掉对应条目即可。
+  legacy_violations:
+    - path: LICENSE
+      rules:
+        - eol-lf
+      reason: 根级法律文本，工作树是 CRLF 而 .gitattributes 要求 LF（需其所有者在受控提交里重规范化）
+    - path: NOTICE
+      rules:
+        - eol-lf
+      reason: 同上（第三方声明，属发布法务文本）
+    - path: TRADEMARKS.md
+      rules:
+        - eol-lf
+      reason: 同上（商标声明）
+    - path: RELEASE-CHECKLIST.md
+      rules:
+        - eol-lf
+      reason: 同上（发布清单）
+    - path: profiles/web/patches/dsh-reasoning-effort@0.6.2.patch
+      rules:
+        - trailing-whitespace
+      reason: patch 文件字节被哈希 pin（.gitattributes 标 -text），不允许改写
+    - path: fairy-visual/dsh-fairy-visual/lib/client.js
+      rules:
+        - trailing-whitespace
+        - final-newline
+      reason: 构建产物（tsdown 生成），字节由该包 bundle 脚本决定
+    - path: fairy-visual/dsh-fairy-visual/src/client/comfort-detector.js
+      rules:
+        - trailing-whitespace
+      reason: 该包源码，属 fairy-visual 所有者
+    - path: fairy-visual/dsh-fairy-visual/src/client/mascot-eye-svg.js
+      rules:
+        - trailing-whitespace
+      reason: 同上
+    - path: balance-meter/dsh-balance-meter/lib/client.js
+      rules:
+        - trailing-whitespace
+      reason: 手写客户端 bundle（该包所有者）
+    - path: browser-dock/dsh-browser-dock/lib/client.js
+      rules:
+        - trailing-whitespace
+        - final-newline
+      reason: 同上

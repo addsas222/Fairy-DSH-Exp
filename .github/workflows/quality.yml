@@ -1,0 +1,83 @@
+# 质量门禁 CI（配置驱动：跑的就是 scripts/verify.* → .agent/quality.yaml → .agent/checks/*.yaml）。
+#
+# 与既有的 candidate-tests 工作流的关系：
+#   - test.yml 仍按包跑 `pnpm test`（保持原样，不删不弱化）；
+#   - 本工作流跑的是**统一入口**：Windows 用 scripts/verify.cmd（并用 verify.ps1 复核 --list），
+#     Linux 用 sh scripts/verify.sh。两边跑同一份配置，所以门禁结论不会因平台而异。
+# 依赖安装：用仓库自己的跨平台安装器 scripts/checks/lib/deps-install.mjs（逐包 pnpm
+# --frozen-lockfile --ignore-scripts，与 AGENTS.md §1.1 的逐包安装一致），它也是
+# scripts/install.ps1 / install.sh 里那条 local 策略命令。
+name: quality-gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    name: quality-gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            profiles/web/pnpm-lock.yaml
+            fairy-visual/dsh-fairy-visual/pnpm-lock.yaml
+            fairy-voice/dsh-fairy-voice/pnpm-lock.yaml
+            fairy-startup/dsh-fairy-startup/pnpm-lock.yaml
+            browser-dock/dsh-browser-dock/pnpm-lock.yaml
+            balance-meter/dsh-balance-meter/pnpm-lock.yaml
+            fairy-persona/dsh-fairy-persona/pnpm-lock.yaml
+            fairy-modes/dsh-fairy-modes/pnpm-lock.yaml
+            fairy-search/dsh-fairy-search/pnpm-lock.yaml
+            fairy-memory/dsh-fairy-memory/pnpm-lock.yaml
+            fairy-roleplay/dsh-fairy-roleplay/pnpm-lock.yaml
+
+      # 各包的 link: 依赖必须先逐包安装，否则包测试会 ERR_MODULE_NOT_FOUND。
+      # 这一步用的就是 .agent/checks/unit.yaml 的 requires(package-deps) 的 local 安装命令。
+      - name: Install per-package dependencies (quality prerequisites)
+        run: node scripts/checks/lib/deps-install.mjs --repo .
+
+      # 先证明两个 Windows 包装脚本都能跑（verify.ps1 用 --list 快速自检，避免重复整轮门禁）。
+      - name: Windows wrapper self-check (verify.ps1 --list)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/verify.ps1 --list
+
+      - name: Run quality gate (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: scripts\verify.cmd
+
+      - name: Run quality gate (Linux)
+        if: runner.os == 'Linux'
+        run: sh scripts/verify.sh
+
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports-${{ matrix.os }}
+          path: |
+            reports/quality-report.json
+            reports/quality-report.md
+            reports/verify.log
+            reports/install.log
+            reports/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

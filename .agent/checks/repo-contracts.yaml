@@ -1,0 +1,93 @@
+# 检查项 repo-contracts：质量体系自身与仓库级契约。
+#
+# 机制（都是"配置 / 文档 / 脚本 / CI 必须彼此对齐"这类真实契约）：
+#       1) .agent/quality.yaml 与每个 .agent/checks/*.yaml 都能通过 .agent/quality.schema.json；
+#       2) 每个检查项：id 与文件名一致、stage 已定义、docs/quality/<id>.md 存在且不小于
+#          docs_min_bytes、windows_command 与 unix_command 都在（或显式声明平台不支持）、
+#          阈值里的每个指标名都能在检查脚本源码里找到（防止"阈值写了脚本从不输出"的假门禁）；
+#       3) 仓库级：.gitattributes 含必需规则、每个包有 lockfile、CI 工作流含
+#          windows-latest + ubuntu-latest 矩阵且分别调用 verify.ps1 / verify.sh。
+# 阈值：errors 必须为 0。
+schema_version: 1
+
+id: repo-contracts
+title: 质量体系自洽与仓库契约
+stage: static
+type: meta
+enabled: true
+required: true
+tags:
+  - static
+  - meta
+command: 'node "${repo}/scripts/checks/repo-contracts.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+windows_command: 'node "${repo}\scripts\checks\repo-contracts.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+unix_command: 'node "${repo}/scripts/checks/repo-contracts.mjs" --check "${check}" --repo "${repo}" --report-dir "${reportDir}" --artifact "${artifact}"'
+cwd: ${repo}
+env: {}
+timeout: 300
+threshold:
+  enforce: true
+  metrics:
+    - name: errors
+      max: 0
+      label: 契约违规
+    - name: checks_scanned
+      label: 校验的检查项数
+    - name: docs_scanned
+      label: 校验的检查项文档数
+artifacts:
+  - reports/artifacts/repo-contracts.json
+requires:
+  - kind: tool
+    name: node
+    probe: node --version
+    min_version: "22"
+    reason: 质量体系的检查脚本全部用 Node 内建能力（CI 固定 Node 22）
+    install:
+      - strategy: winget
+        command: winget install --id OpenJS.NodeJS.LTS --source winget
+        admin: false
+        reason: Windows 用户级安装（生成脚本会自动补 --accept-source-agreements --accept-package-agreements --scope user）
+      - strategy: scoop
+        command: scoop install nodejs-lts
+        admin: false
+      - strategy: choco
+        command: choco install nodejs-lts -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Node 22+（nodejs.org 安装包，或 winget install OpenJS.NodeJS.LTS --scope user）
+  - kind: tool
+    name: git
+    probe: git --version
+    reason: 检查脚本用 git ls-files / git diff 判定跟踪文件与变更行（只读）
+    install:
+      - strategy: winget
+        command: winget install --id Git.Git --source winget
+        admin: false
+        reason: Windows 用户级安装
+      - strategy: scoop
+        command: scoop install git
+        admin: false
+      - strategy: choco
+        command: choco install git -y
+        admin: true
+        reason: 需要管理员权限：只写文档，不自动执行
+    manual: 手动安装 Git（git-scm.com，或 winget install Git.Git --scope user）
+install: []
+docs: docs/quality/repo-contracts.md
+owner: quality-framework
+allow_failure: false
+scope:
+  required_gitattributes:
+    - "text=auto"
+    - "*.sh text eol=lf"
+    - "*.ps1 text eol=crlf"
+    - "*.cmd text eol=crlf"
+  docs_min_bytes: 400
+  required_ci_workflows:
+    - path: .github/workflows/quality.yml
+      must_contain:
+        - windows-latest
+        - ubuntu-latest
+        - scripts/verify.ps1
+        - scripts/verify.sh

@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/addsas222/Fairy-DSH/.agent/quality.schema.json",
+  "title": "Fairy-DSH 质量体系配置",
+  "description": "校验 .agent/quality.yaml（$defs/qualityConfig）与 .agent/checks/*.yaml（$defs/checkItem）。schema_version 随结构变更递增；主入口 scripts/verify.mjs 在执行前用 scripts/checks/lib/schema.mjs 真实校验本文件描述的规则。",
+  "$defs": {
+    "metricThreshold": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "unit": { "type": "string" },
+        "label": { "type": "string" },
+        "optional": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "threshold": {
+      "type": "object",
+      "properties": {
+        "enforce": { "type": "boolean" },
+        "metrics": { "type": "array", "items": { "$ref": "#/$defs/metricThreshold" }, "uniqueItems": true }
+      },
+      "additionalProperties": false
+    },
+    "installStep": {
+      "type": "object",
+      "required": ["strategy"],
+      "properties": {
+        "strategy": { "enum": ["local", "winget", "scoop", "choco", "manual"] },
+        "command": { "type": "string" },
+        "windows_command": { "type": "string" },
+        "unix_command": { "type": "string" },
+        "probe": { "type": "string" },
+        "admin": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "docs": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "requirement": {
+      "type": "object",
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": { "enum": ["tool", "env", "path", "check", "home"] },
+        "name": { "type": "string" },
+        "env": { "type": "string" },
+        "path": { "type": "string" },
+        "id": { "type": "string" },
+        "probe": { "type": "string" },
+        "min_version": { "type": "string" },
+        "reason": { "type": "string", "minLength": 1 },
+        "install": { "type": "array", "items": { "$ref": "#/$defs/installStep" } },
+        "manual": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "platformSupport": {
+      "type": "object",
+      "properties": {
+        "windows": { "$ref": "#/$defs/platformEntry" },
+        "unix": { "$ref": "#/$defs/platformEntry" }
+      },
+      "additionalProperties": false
+    },
+    "platformEntry": {
+      "type": "object",
+      "required": ["supported", "reason"],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "checkItem": {
+      "type": "object",
+      "required": [
+        "schema_version", "id", "title", "stage", "type", "enabled", "required", "tags",
+        "command", "windows_command", "unix_command", "cwd", "env", "timeout", "threshold",
+        "artifacts", "requires", "install", "docs", "owner", "allow_failure"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 48 },
+        "title": { "type": "string", "minLength": 1 },
+        "stage": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "type": { "enum": ["static", "lint", "format", "typecheck", "unit", "coverage", "gherkin", "integration", "e2e", "mutation", "scan", "meta"] },
+        "enabled": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "command": { "type": "string", "minLength": 1 },
+        "windows_command": { "type": "string", "minLength": 1 },
+        "unix_command": { "type": "string", "minLength": 1 },
+        "platform_support": { "$ref": "#/$defs/platformSupport" },
+        "cwd": { "type": "string", "minLength": 1 },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timeout": { "type": "integer", "minimum": 1, "maximum": 7200 },
+        "threshold": { "$ref": "#/$defs/threshold" },
+        "artifacts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "requires": { "type": "array", "items": { "$ref": "#/$defs/requirement" } },
+        "install": { "type": "array", "items": { "$ref": "#/$defs/installStep" } },
+        "docs": { "type": "string", "pattern": "^docs/quality/.+\\.md$" },
+        "owner": { "type": "string", "minLength": 1 },
+        "allow_failure": { "type": "boolean" },
+        "on_missing": { "enum": ["skip", "block", "fail"] },
+        "description": { "type": "string" },
+        "enabled_reason": { "type": "string" },
+        "scope": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "stage": {
+      "type": "object",
+      "required": ["id", "title", "order"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "order": { "type": "integer" },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "qualityConfig": {
+      "type": "object",
+      "required": ["schema_version", "project", "discovery", "stages", "gate", "report", "install"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "project": {
+          "type": "object",
+          "required": ["name", "repo_root"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "repo_root": { "type": "string", "minLength": 1 },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "timeout": { "type": "integer", "minimum": 1, "maximum": 7200 },
+            "on_missing": { "enum": ["skip", "block", "fail"] },
+            "env": { "type": "object", "additionalProperties": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "discovery": {
+          "type": "object",
+          "required": ["checks_dir", "pattern"],
+          "properties": {
+            "checks_dir": { "type": "string", "minLength": 1 },
+            "pattern": { "type": "string", "minLength": 1 },
+            "exclude": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "stages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/stage" } },
+        "gate": {
+          "type": "object",
+          "required": ["fail_on", "warn_on"],
+          "properties": {
+            "fail_on": { "type": "array", "items": { "enum": ["failed", "error", "timeout", "blocked", "skipped", "disabled"] } },
+            "warn_on": { "type": "array", "items": { "enum": ["failed", "error", "timeout", "blocked", "skipped", "disabled"] } },
+            "min_enabled_checks": { "type": "integer", "minimum": 0 },
+            "max_disabled_checks": { "type": "integer", "minimum": 0 },
+            "allow_failure_downgrades": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "report": {
+          "type": "object",
+          "required": ["dir", "markdown", "json", "log", "artifact_dir"],
+          "properties": {
+            "dir": { "type": "string", "minLength": 1 },
+            "markdown": { "type": "string", "minLength": 1 },
+            "json": { "type": "string", "minLength": 1 },
+            "log": { "type": "string", "minLength": 1 },
+            "artifact_dir": { "type": "string", "minLength": 1 },
+            "keep_artifacts": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "install": {
+          "type": "object",
+          "required": ["log", "strategy_order"],
+          "properties": {
+            "log": { "type": "string", "minLength": 1 },
+            "strategy_order": { "type": "array", "items": { "enum": ["local", "winget", "scoop", "choco", "manual"] } },
+            "winget_flags": { "type": "array", "items": { "type": "string" } },
+            "never_elevate": { "type": "boolean" },
+            "choco_docs_only": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/qualityConfig" },
+    { "$ref": "#/$defs/checkItem" }
+  ]
+}
