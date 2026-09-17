@@ -1,4 +1,3 @@
-export const FAIRY_VOICE_CONTROL_ATTRIBUTE: 'data-dsh-fairy-voice-control';
 export const FAIRY_IDENTITY_SETTINGS_NAMESPACE: 'fairy-identity';
 
 export type FairyIdentityMode = 'ling' | 'zhe' | 'custom';

@@ -26,9 +26,6 @@ const defaultFetch = (input, init) => globalThis.fetch(input, init);
 /** 默认真等待；测试注入桩函数即可断言退避节奏，不必真的等。 */
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-/** 可重试的状态码：408 / 429 / 5xx（含官方文档的 529 Overloaded）。 */
-export const RETRYABLE_STATUSES = Object.freeze([408, 429]);
-
 /** 官方 `Retry-After` / `retry-after-ms` 响应头 → 等待毫秒数（封顶 RETRY_AFTER_MAX_MS）。 */
 export function readRetryAfterMs(headers) {
   if (headers === undefined || headers === null) return undefined;

@@ -21,7 +21,7 @@ export const inject = ['tools'];
 /**
  * Mount the agent half.
  *
- * @param {import('dsh-fairy-contracts/types').AgentContext} ctx agent 作用域上下文。
+ * @param {Object} ctx agent 作用域上下文。
  * @param {Object} [options]
  * @param {ReturnType<typeof createFairyDiagnostics>} [options.diagnostics] 测试可注入的诊断桩。
  * @param {Record<string, string | undefined>} [options.env] 测试可注入的环境变量。
