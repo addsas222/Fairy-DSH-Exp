@@ -114,6 +114,19 @@
     - id: fairy-roleplay-engine
       name: './plugins/fairy-roleplay.mjs'
 
+# ── TypeSafe 结构化文本评估(一次调用多问题,工具 typesafe_eval) ─────────────
+# 与记忆/角色扮演同形态:agent 面独立 isolate 域 + preset 内 shim。
+# 宿主面(两个 exact 路由)由 profile 的 host 行 dsh-fairy-eval 承担;
+# 配置只走环境变量(TYPESAFE_API_KEY / TYPESAFE_MODEL),无设置卡、无客户端 bundle。
+- id: fairy-eval
+  name: cordis:group
+  group: true
+  isolate:
+    fairyEval: true
+  config:
+    - id: fairy-eval-engine
+      name: './plugins/fairy-eval.mjs'
+
 # ── 极简模式(Explore&Check) ─────────────────────────────────────────────
 # 直接复用官方 plan-mode:探查、定案、exit_plan_mode 审批后才进入实施。
 # 主会话 chip 由 dsh-fairy-modes 的客户端读取 `plan` 投影显示。

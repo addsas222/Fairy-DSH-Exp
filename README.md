@@ -19,6 +19,7 @@
 | `fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成 |
 | `fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`）；mem0 / 自定义 HTTP / 本地 Markdown 备选；**外部记忆候选目录**（dshget 生态抽审，设置页可一键请求 Agent 安装）见 `fairy-memory/dsh-fairy-memory/CANDIDATES.md` |
 | `fairy-roleplay/` | 角色扮演：去AI味检查器（L1 词表 → L4 通读）+ 风格库 + 规划/时机/回复规则 |
+| `fairy-eval/` | TypeSafe AI 结构化文本评估（Noul / Choice / Score 一次调用多问题）：`typesafe_eval` 工具 + `/fairy-eval/status|evaluate` 宿主路由；配置走环境变量（`TYPESAFE_API_KEY` / `TYPESAFE_MODEL`）；**宿主型包**（无客户端 bundle） |
 | `fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT 路线 |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
 | `fairy-system/` | 验证/预检/审计工具（`doctor.mjs`（**只读体检**）、`verify-build.js`、`image-manifest.js`、`repo-update.mjs`、`host-align.js`、`verify.js`、`check.sh`、`accepted-baseline.js`、`upgrade-preflight.js`、`skill-audit.js`、`scaffold-plugin.js`） |
@@ -193,7 +194,7 @@ DSH_HOME=~/.dsh-fairy \
 | 组 | 例数 | 缺的东西（实测失败行） | 怎么给 |
 | --- | --- | --- | --- |
 | `preflight.test.js` | 6 | 一份官方 **0.1.1-rc.2**：`preflight-build.js:13-14` 默认按 `~/.local/lib/node_modules/@deepseek-ai/dsh/package.json` 找，且其 `dsh-client-runtime/lib/client.js` 的 sha256 必须等于 pin 的 `13a5fe0e…f669` | 用 `DSH_OFFICIAL_PACKAGE` / `DSH_OFFICIAL_RUNTIME` 指过去（`preflight-build.js:251-252`），不必装到默认路径 |
-| `upgrade.test.js` | 7 | `$DSH_HOME`（缺省 `~/.dsh`）的 profile 要装齐十个插件包 + 官方 `dsh-client-ui-conversation` + `dsh-reasoning-effort` / `dsh-message-edit`（`upgrade.test.js:40-43` 逐个 `realpathSync`），并 `copyFileSync` 一份 runtime | `DSH_HOME` 指向 **`~/.dsh-fairy`**——本仓在这台机器的部署，profile 里 12 个包齐 |
+| `upgrade.test.js` | 7 | `$DSH_HOME`（缺省 `~/.dsh`）的 profile 要装齐十一个插件包（含 `dsh-fairy-eval`）+ 官方 `dsh-client-ui-conversation` + `dsh-reasoning-effort` / `dsh-message-edit`（`upgrade.test.js:40-43` 逐个 `realpathSync`），并 `copyFileSync` 一份 runtime | `DSH_HOME` 指向一个已装齐这些包的 home：本仓 checkout（`profiles/web` 装齐，实测通过）或重新部署后的 **`~/.dsh-fairy`** |
 
 ⚠️ `~/.dsh` 是**另一条线**（`@deepseek-ai/dsh-app-boot` + `dsh-web` + `@dsh-external/*`，
 只 link 了 balance-meter/browser-dock），**不含** fairy 插件包是设计如此。**别对它跑

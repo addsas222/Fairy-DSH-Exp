@@ -21,6 +21,7 @@ const LOCAL_PACKAGES = [
   ['dsh-fairy-search', 'fairy-search', 'dsh-fairy-search'],
   ['dsh-fairy-memory', 'fairy-memory', 'dsh-fairy-memory'],
   ['dsh-fairy-roleplay', 'fairy-roleplay', 'dsh-fairy-roleplay'],
+  ['dsh-fairy-eval', 'fairy-eval', 'dsh-fairy-eval'],
 ];
 // Same knobs as preflight-build.js: the validation chain runs against an
 // isolated home and a candidate runtime, never the developer's live install.
@@ -123,11 +124,12 @@ function verifyPackage(profileRoot, name, folder, packageDirName) {
     `${name} profile dependency points outside its expected source package`);
   const manifest = readJson(path.join(sourceRoot, 'package.json'));
   assert(manifest.name === name, `${name} package identity drifted`);
-  const targets = [manifest.main, manifest.exports?.['.'], manifest.exports?.['./client']];
+  const expectsClient = Boolean(manifest.exports?.['./client']);
+  const targets = [manifest.main, manifest.exports?.['.'], ...(expectsClient ? [manifest.exports['./client']] : [])];
   assert(targets.every((target) => typeof target === 'string' && fs.statSync(path.resolve(sourceRoot, target)).isFile()), `${name} main/exports bundle is incomplete`);
-  assert(manifest.dsh?.client && Array.isArray(manifest.dsh.client.inject), `${name} dsh.client injection contract is missing`);
-  const clientFile = path.resolve(sourceRoot, manifest.exports['./client']);
-  return { name, sourceRoot, manifest, server: read(path.resolve(sourceRoot, manifest.main)), client: read(clientFile) };
+  if (expectsClient) assert(manifest.dsh?.client && Array.isArray(manifest.dsh.client.inject), `${name} dsh.client injection contract is missing`);
+  const clientFile = expectsClient ? path.resolve(sourceRoot, manifest.exports['./client']) : null;
+  return { name, sourceRoot, manifest, server: read(path.resolve(sourceRoot, manifest.main)), client: clientFile ? read(clientFile) : null };
 }
 
 function verifyRuntime(runtimeFile, expectedVersion, expectedHash) {
@@ -159,7 +161,7 @@ function verifyCapabilityMatrix(matrix, expectedVersion, expectedHash, profileRo
   const reasoningClient = read(path.join(reasoningPackage.path, '..', 'lib', 'client', 'index.js'));
   const messageEditClient = read(path.join(messageEditPackage.path, '..', 'client.js'));
   const conversationClient = read(path.join(conversationPackage.path, '..', 'lib', 'client.js'));
-  const allPackageText = `${packages.map((item) => `${item.server}\n${item.client}`).join('\n')}\n${reasoningClient}\n${messageEditClient}\n${patch}`;
+  const allPackageText = `${packages.map((item) => `${item.server}\n${item.client ?? ''}`).join('\n')}\n${reasoningClient}\n${messageEditClient}\n${patch}`;
 
   const officialSelectors = loadOfficialSelectors(visualAdapter, visualAdapterFile);
   for (const [name, selector] of Object.entries(matrix.dom || {})) {
@@ -242,8 +244,10 @@ function verifyProfileContracts(profileRoot, packages, matrix) {
     const declaredTarget = declared.slice('link:'.length);
     const declaredPath = path.isAbsolute(declaredTarget) ? declaredTarget : path.resolve(profileRoot, declaredTarget);
     assert(realpath(declaredPath, `${name} declared profile dependency`) === sourceRoot, `${name} profile dependency does not match its linked source`);
-    assert(client.includes('window.__ModuleLoader__.load({') && client.includes('factory:'), `${name} client is not a Browser ModuleLoader module`);
-    assert(Object.prototype.hasOwnProperty.call(manifest.exports, './client'), `${name} exports["./client"] is missing`);
+    if (client) {
+      assert(client.includes('window.__ModuleLoader__.load({') && client.includes('factory:'), `${name} client is not a Browser ModuleLoader module`);
+      assert(Object.prototype.hasOwnProperty.call(manifest.exports, './client'), `${name} exports["./client"] is missing`);
+    }
   }
 
   const positions = ['balance-meter', 'fairy-startup', 'fairy-voice', 'fairy-visual'].map((id) => patch.indexOf(`id: ${id}`));

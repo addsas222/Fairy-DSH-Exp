@@ -34,6 +34,7 @@ const paths = {
   searchPlugin: path.join(dshRoot, 'fairy-search', 'dsh-fairy-search'),
   memoryPlugin: path.join(dshRoot, 'fairy-memory', 'dsh-fairy-memory'),
   roleplayPlugin: path.join(dshRoot, 'fairy-roleplay', 'dsh-fairy-roleplay'),
+  evalPlugin: path.join(dshRoot, 'fairy-eval', 'dsh-fairy-eval'),
   profile: path.join(dshRoot, 'profiles', 'web'),
 };
 
@@ -48,6 +49,7 @@ const publishedPackages = [
   paths.searchPlugin,
   paths.memoryPlugin,
   paths.roleplayPlugin,
+  paths.evalPlugin,
 ];
 
 // 构建契约（产物存在性 + 新鲜度 + 禁用串）只有一份实现：verify-build.js。
@@ -128,7 +130,8 @@ function verifyProfileConsistency(profilePackage) {
 
     const entries = [
       [manifest.name, path.resolve(packageDir, manifest.main), 'host entry'],
-      [`${manifest.name}/client`, path.resolve(packageDir, manifest.exports['./client']), 'client entry'],
+      // 宿主型包（无客户端 bundle）不要求 /client 子路径能解析。
+      ...(manifest.exports?.['./client'] ? [[`${manifest.name}/client`, path.resolve(packageDir, manifest.exports['./client']), 'client entry']] : []),
       [`${manifest.name}/package.json`, path.join(packageDir, 'package.json'), 'package manifest'],
     ];
     for (const [specifier, expectedFile, label] of entries) {

@@ -15,6 +15,7 @@ const scopeRoots = [
   'balance-meter/dsh-balance-meter',
   'browser-dock/dsh-browser-dock',
   'fairy-contracts',
+  'fairy-eval/dsh-fairy-eval',
   'fairy-memory/dsh-fairy-memory',
   'fairy-roleplay/dsh-fairy-roleplay',
   'fairy-startup/dsh-fairy-startup',

@@ -243,6 +243,7 @@ function createDefaultConfig(overrides = {}) {
     { name: 'dsh-fairy-search', directory: path.join(dshHome, 'fairy-search', 'dsh-fairy-search'), sourceRoot: null },
     { name: 'dsh-fairy-memory', directory: path.join(dshHome, 'fairy-memory', 'dsh-fairy-memory'), sourceRoot: 'src' },
     { name: 'dsh-fairy-roleplay', directory: path.join(dshHome, 'fairy-roleplay', 'dsh-fairy-roleplay'), sourceRoot: null },
+    { name: 'dsh-fairy-eval', directory: path.join(dshHome, 'fairy-eval', 'dsh-fairy-eval'), sourceRoot: null, client: false },
   ];
   return {
     dshHome,
@@ -362,10 +363,12 @@ function verifyPackage(config, profile, definition) {
     });
   }
 
+  const expectsClient = definition.client !== false;
   const targets = {
     main: typeof manifest.main === 'string' && manifest.main.length > 0 ? manifest.main : null,
     root: exportTarget(manifest.exports?.['.']),
-    client: exportTarget(manifest.exports?.['./client']),
+    // 客户端面：契约声明 client: false 的宿主型包跳过（如 dsh-fairy-eval）。
+    ...(expectsClient ? { client: exportTarget(manifest.exports?.['./client']) } : {}),
   };
   for (const [entryName, target] of Object.entries(targets)) {
     if (!target) {
@@ -467,7 +470,7 @@ function verifyPackage(config, profile, definition) {
   const profileRequire = createRequire(profile.paths.profilePackagePath);
   const resolutions = [
     { specifier: name, expected: files.root, label: 'host entry' },
-    { specifier: `${name}/client`, expected: files.client, label: 'client entry' },
+    ...(files.client ? [{ specifier: `${name}/client`, expected: files.client, label: 'client entry' }] : []),
     { specifier: `${name}/package.json`, expected: manifestPath, label: 'package manifest' },
   ];
   const resolved = {};
@@ -501,7 +504,7 @@ function verifyPackage(config, profile, definition) {
   }
 
   const profileNodeModulesReal = fs.realpathSync(path.join(config.profileRoot, 'node_modules'));
-  if (isInside(resolved['client entry'], profileNodeModulesReal)) {
+  if (resolved['client entry'] && isInside(resolved['client entry'], profileNodeModulesReal)) {
     fail({
       scope: 'client_copy',
       packageName: name,
@@ -541,7 +544,7 @@ function verifyPackage(config, profile, definition) {
     }
   }
 
-  const revision = computeClientRevision(files.client);
+  const revision = files.client ? computeClientRevision(files.client) : null;
   return {
     name,
     hostEntry: resolved['host entry'],

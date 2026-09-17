@@ -108,7 +108,7 @@ for item in $PRESERVE_LIST; do
 done
 IFS=$old_ifs
 
-# 9 个插件包；顺序按依赖面排列（fairy-contracts 先落，其余各自 link 它）。
+# 11 个插件包；顺序按依赖面排列（fairy-contracts 先落，其余各自 link 它）。
 # POSIX sh 没有数组：用空格分隔的列表逐项遍历（本仓 test-isolated.sh 同约定，
 # 这样在 dash/debian 的 /bin/sh 下也能跑，而不只是 macOS 的 bash）。
 PACKAGES="browser-dock/dsh-browser-dock
@@ -120,8 +120,9 @@ fairy-persona/dsh-fairy-persona
 fairy-modes/dsh-fairy-modes
 fairy-search/dsh-fairy-search
 fairy-memory/dsh-fairy-memory
-fairy-roleplay/dsh-fairy-roleplay"
-PACKAGE_COUNT=10
+fairy-roleplay/dsh-fairy-roleplay
+fairy-eval/dsh-fairy-eval"
+PACKAGE_COUNT=11
 # 非包但必须落位的受控目录：契约、验证工具、人格包、两个 preset、web profile。
 EXTRA_PATHS="fairy-contracts fairy-system persona-packs .agent-presets/fairy-full .agent-presets/fairy-lite profiles/web"
 EXTRA_COUNT=6

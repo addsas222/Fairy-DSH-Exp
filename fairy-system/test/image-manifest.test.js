@@ -91,8 +91,9 @@ test('controlled-path list comes from deploy-live.sh, not a second copy', () => 
 
   // 真仓库：清单必须与真脚本声明逐条一致，否则部署删的与门禁查的不是一回事。
   const declared = manifest.readControlledPaths(REPO_ROOT);
-  assert.equal(declared.length, 16, `expected 16 controlled paths in the real checkout, saw ${declared.length}`);
+  assert.equal(declared.length, 17, `expected 17 controlled paths in the real checkout, saw ${declared.length}`);
   assert.ok(declared.includes('fairy-roleplay/dsh-fairy-roleplay'));
+  assert.ok(declared.includes('fairy-eval/dsh-fairy-eval'));
   assert.ok(declared.includes('profiles/web'));
   const script = fs.readFileSync(DEPLOY_SCRIPT, 'utf8');
   for (const entry of declared) assert.ok(script.includes(entry), `${entry} is missing from deploy-live.sh`);

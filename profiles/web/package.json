@@ -7,6 +7,7 @@
     "@upstash/context7-mcp": "4.0.2",
     "dsh-balance-meter": "link:../../balance-meter/dsh-balance-meter",
     "dsh-browser-dock": "link:../../browser-dock/dsh-browser-dock",
+    "dsh-fairy-eval": "link:../../fairy-eval/dsh-fairy-eval",
     "dsh-fairy-memory": "link:../../fairy-memory/dsh-fairy-memory",
     "dsh-fairy-modes": "link:../../fairy-modes/dsh-fairy-modes",
     "dsh-fairy-persona": "link:../../fairy-persona/dsh-fairy-persona",

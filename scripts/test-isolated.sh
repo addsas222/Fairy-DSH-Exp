@@ -66,7 +66,7 @@ if command -v pnpm >/dev/null 2>&1; then
   for area in fairy-visual/dsh-fairy-visual fairy-voice/dsh-fairy-voice \
               fairy-persona/dsh-fairy-persona fairy-modes/dsh-fairy-modes \
               fairy-search/dsh-fairy-search fairy-memory/dsh-fairy-memory \
-              fairy-roleplay/dsh-fairy-roleplay; do
+              fairy-roleplay/dsh-fairy-roleplay fairy-eval/dsh-fairy-eval; do
     if [ -d "$repo_root/$area/node_modules" ]; then
       echo "  ok   $area (already installed)"
     elif (cd "$repo_root/$area" && pnpm install --frozen-lockfile --ignore-scripts >/dev/null 2>&1); then
@@ -89,6 +89,7 @@ echo "[2/4] package tests"
 (cd "$repo_root/fairy-search/dsh-fairy-search" && npm test)
 (cd "$repo_root/fairy-memory/dsh-fairy-memory" && npm test)
 (cd "$repo_root/fairy-roleplay/dsh-fairy-roleplay" && npm test)
+(cd "$repo_root/fairy-eval/dsh-fairy-eval" && npm test)
 if [ -n "$DSH_OFFICIAL_PACKAGE" ] && [ -n "$DSH_OFFICIAL_RUNTIME" ]; then
   # Live-layout gate suite: it compares candidates against the installed
   # 0.1.1-rc.2, so it runs only when that comparison target exists.

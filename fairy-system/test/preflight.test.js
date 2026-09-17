@@ -26,6 +26,7 @@ const packages = [
   ['dsh-fairy-search', 'fairy-search'],
   ['dsh-fairy-memory', 'fairy-memory'],
   ['dsh-fairy-roleplay', 'fairy-roleplay'],
+  ['dsh-fairy-eval', 'fairy-eval'],
 ];
 
 function createFixture() {
@@ -51,10 +52,14 @@ function createFixture() {
   for (const [name, folder] of packages) {
     const source = join(root, folder, name);
     mkdirSync(join(source, 'lib'), { recursive: true });
+    // dsh-fairy-eval 是宿主型包（契约 client: false）：fixture 不建客户端面。
+    const hostOnly = name === 'dsh-fairy-eval';
     writeFileSync(join(source, 'package.json'), JSON.stringify({
       name,
       main: './lib/index.js',
-      exports: { '.': './lib/index.js', './client': './lib/client.js', './package.json': './package.json' },
+      exports: hostOnly
+        ? { '.': './lib/index.js', './package.json': './package.json' }
+        : { '.': './lib/index.js', './client': './lib/client.js', './package.json': './package.json' },
     }));
     if (name === 'dsh-fairy-visual' || name === 'dsh-browser-dock') {
       mkdirSync(join(source, 'src', 'client'), { recursive: true });
@@ -65,7 +70,9 @@ function createFixture() {
     mkdirSync(join(source, 'src'), { recursive: true });
     writeFileSync(join(source, 'src', 'index.js'), 'export function apply() {}\n');
     writeFileSync(join(source, 'lib', 'index.js'), 'export function apply() {}\n');
-    writeFileSync(join(source, 'lib', 'client.js'), `window.__ModuleLoader__.load({ id: ${JSON.stringify(name)}, factory: () => ({}) });\n`);
+    if (!hostOnly) {
+      writeFileSync(join(source, 'lib', 'client.js'), `window.__ModuleLoader__.load({ id: ${JSON.stringify(name)}, factory: () => ({}) });\n`);
+    }
     linkDirectory(relative(nodeModules, source), join(nodeModules, name));
   }
   return root;
@@ -83,7 +90,7 @@ test('accepts complete bundles and profile links', (t) => {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = runVerifier(root);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="10"/);
+  assert.match(result.stdout, /DSH_PREFLIGHT status="passed" packages="11"/);
 });
 
 test('fails before launch when a client bundle is missing', (t) => {

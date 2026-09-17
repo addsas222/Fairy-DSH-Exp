@@ -83,6 +83,16 @@ const packages = [
     forbidden: [/dsh-hdd-mode/, /agent\/pre-step/],
     forbiddenClient: [/Authorization/],
   },
+  {
+    dir: path.join(dshRoot, 'fairy-eval', 'dsh-fairy-eval'),
+    name: 'dsh-fairy-eval',
+    // Hand-written lib/ (no build step): the shipped files are the source.
+    sourceRoot: null,
+    // Host-only package: no client bundle. Credentials stay in env/.env and
+    // are only read by the host/agent faces; nothing ships to the browser.
+    client: false,
+    forbidden: [/dsh-hdd-mode/, /agent\/pre-step/, /\.agent-presets/],
+  },
 ];
 
 function fail(message) {
@@ -102,10 +112,12 @@ function verifyPackage(contract) {
   const manifestPath = path.join(packageDir, 'package.json');
   const manifest = readJson(manifestPath);
   if (manifest.name !== expectedName) fail(`${expectedName} manifest identity drifted: ${JSON.stringify(manifest.name)}`);
+  // 客户端面：契约里显式声明 client: false 的宿主型包跳过，其余包必须有 ./client 产物。
+  const expectsClient = contract.client !== false;
   const targets = new Map([
     ['main', manifest.main],
     ['exports["."]', manifest.exports?.['.']],
-    ['exports["./client"]', manifest.exports?.['./client']],
+    ...(expectsClient ? [['exports["./client"]', manifest.exports?.['./client']]] : []),
   ]);
   for (const [label, target] of targets) {
     if (typeof target !== 'string' || target.length === 0) fail(`${manifest.name} does not declare ${label}`);
@@ -154,10 +166,12 @@ function verifyPackage(contract) {
   for (const pattern of contract.forbidden || []) {
     if (pattern.test(bundleText)) fail(`${manifest.name} bundle contains forbidden legacy path or injection: ${pattern}`);
   }
-  const clientOutput = path.resolve(packageDir, manifest.exports['./client']);
-  const clientText = fs.readFileSync(clientOutput, 'utf8');
-  for (const pattern of contract.forbiddenClient || []) {
-    if (pattern.test(clientText)) fail(`${manifest.name} client bundle contains forbidden legacy path or injection: ${pattern}`);
+  if (expectsClient) {
+    const clientOutput = path.resolve(packageDir, manifest.exports['./client']);
+    const clientText = fs.readFileSync(clientOutput, 'utf8');
+    for (const pattern of contract.forbiddenClient || []) {
+      if (pattern.test(clientText)) fail(`${manifest.name} client bundle contains forbidden legacy path or injection: ${pattern}`);
+    }
   }
 }
 

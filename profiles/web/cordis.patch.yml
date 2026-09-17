@@ -124,3 +124,7 @@
     - id: fairy-roleplay
       name: 'dsh-fairy-roleplay'
       inject: [clientModules]
+
+    # TypeSafe 结构化文本评估:宿主路由(无客户端 bundle,故无 clientModules)
+    - id: fairy-eval
+      name: 'dsh-fairy-eval'
