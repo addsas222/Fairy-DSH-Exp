@@ -6,6 +6,7 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../src/client/pointer-drag.js', import.meta.url), 'utf8');
 const require = createRequire(import.meta.url);
+const { createFairyDiagnostics } = require('../../../fairy-contracts/client-diagnostics.cjs');
 
 function createWindow() {
   const listeners = new Map();
@@ -80,7 +81,10 @@ function loadControllerSafely(fakeWindow, raf, fakeDocument = null) {
   globalThis.cancelAnimationFrame = raf.cancel;
   const module = { exports: {} };
   const runner = new vm.Script(`(function (module, exports, require) {\n${source}\n})`).runInThisContext();
-  runner(module, module.exports, require);
+  runner(module, module.exports, (id) => {
+    assert.equal(id, '../../../../fairy-contracts/client-diagnostics.cjs');
+    return { createFairyDiagnostics };
+  });
   return {
     createPointerDrag: module.exports.createPointerDrag,
     restore() {

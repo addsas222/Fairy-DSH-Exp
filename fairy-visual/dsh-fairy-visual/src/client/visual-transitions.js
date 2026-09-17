@@ -1,13 +1,6 @@
-const diagnostics = {
-  start: () => typeof performance === 'object' && performance?.now ? performance.now() : Date.now(),
-  metric(operation, startedAt, context = {}) {
-    const clock = typeof performance === 'object' && performance?.now ? performance.now() : Date.now();
-    console.info(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'info', module: 'dsh-fairy-visual', operation, event: 'metric', context, duration_ms: Number((clock - startedAt).toFixed(3)) })}`);
-  },
-  warn(operation, context = {}, error) {
-    console.warn(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'warn', module: 'dsh-fairy-visual', operation, event: 'failure', context, error: { name: String(error?.name || 'Error'), message: String(error?.message || error).slice(0, 320) } })}`);
-  },
-};
+const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
+
+const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
 
 function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, composerSeat, composerCard }) {
   const FAIRY_CONTAINER_ID = 'dsh-fairy-plugin-container';

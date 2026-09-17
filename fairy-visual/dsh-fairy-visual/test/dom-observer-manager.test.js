@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import vm from 'node:vm';
 
 const managerSource = readFileSync(new URL('../src/client/dom-observer-manager.js', import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+const { createFairyDiagnostics } = require('../../../fairy-contracts/client-diagnostics.cjs');
 
 class FakeNode {
   constructor(parent = null) {
@@ -53,6 +56,10 @@ function createHarness() {
     },
     cancelAnimationFrame() {},
     setTimeout,
+    require: (id) => {
+      assert.equal(id, '../../../../fairy-contracts/client-diagnostics.cjs');
+      return { createFairyDiagnostics };
+    },
   };
   vm.runInNewContext(managerSource, context, { filename: 'dom-observer-manager.js' });
   return { ...context.module.exports, body, document, documentElement, frames, nativeObservers };

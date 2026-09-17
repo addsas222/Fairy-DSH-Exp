@@ -660,7 +660,7 @@ test('uses one composer height contract and restores official inline priorities'
 test('diagnoses visual setting failures through one asynchronous boundary', () => {
   assert.match(settingsWriteSource, /Promise\.resolve\(controller\.set\(field, value\)\)/);
   assert.match(settingsWriteSource, /settings\.persist/);
-  assert.match(settingsWriteSource, /DSH_FAIRY_LOG/);
+  assert.match(settingsWriteSource, /const diagnostics = createFairyDiagnostics\('dsh-fairy-visual'\)/);
   assert.match(clientSource, /const save = saveControllerSetting/);
   assert.match(composerDockSource, /settingError\('composerDockHeight', error\)/);
   assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);

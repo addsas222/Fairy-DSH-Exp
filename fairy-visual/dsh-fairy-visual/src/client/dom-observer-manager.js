@@ -2,19 +2,10 @@
 // below one stable document.body. Virtual observers preserve each subsystem's
 // callback and target semantics while sharing one native body observer.
 
+const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
+
 const managers = new WeakMap();
-const diagnostics = {
-  start: () => typeof performance === 'object' && performance?.now ? performance.now() : Date.now(),
-  metric(operation, startedAt, context = {}, thresholdMs = 0) {
-    const clock = typeof performance === 'object' && performance?.now ? performance.now() : Date.now();
-    const duration = clock - startedAt;
-    if (duration < thresholdMs) return;
-    console.info(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'info', module: 'dsh-fairy-visual', operation, event: 'metric', context, duration_ms: Number(duration.toFixed(3)) })}`);
-  },
-  error(operation, error, context = {}) {
-    console.error(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'error', module: 'dsh-fairy-visual', operation, event: 'failure', context, error: { name: String(error?.name || 'Error'), message: String(error?.message || error).slice(0, 320) } })}`);
-  },
-};
+const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
 
 function containsTarget(root, target, subtree) {
   if (root === target) return true;
@@ -60,7 +51,7 @@ function createDomObserverManager(documentRef) {
         if (typeof reportError === 'function') reportError(error);
         else setTimeout(() => { throw error; }, 0);
       } finally {
-        diagnostics.metric('observer.callback', startedAt, { record_count: accepted.length, root_only: rootOnly }, 8);
+        diagnostics.metric('observer.callback', startedAt, { record_count: accepted.length, root_only: rootOnly }, { thresholdMs: 8 });
       }
     });
   };

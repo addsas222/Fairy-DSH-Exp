@@ -3,11 +3,9 @@
 // Contract: lifecycle-ownership.json#owners[subsystem=pointer drag]
 // Shared pointer-drag lifecycle. Business modules only provide the payload and
 // geometry callbacks; this module owns capture, fallback listeners and cleanup.
-const diagnostics = {
-  error(operation, error, context = {}) {
-    console.error(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'error', module: 'dsh-fairy-visual', operation, event: 'failure', context, error: { name: String(error?.name || 'Error'), message: String(error?.message || error).slice(0, 320) } })}`);
-  },
-};
+const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
+
+const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
 
 function createPointerDrag({ getTarget, getLockNodes = () => [], onStart, onMove, onEnd, onCancel }) {
   let active = null;

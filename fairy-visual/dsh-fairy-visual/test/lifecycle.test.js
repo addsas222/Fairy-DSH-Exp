@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import test from 'node:test';
 
 const lifecycleSource = readFileSync(new URL('../src/client/lifecycle.js', import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+const { createFairyDiagnostics } = require('../../../fairy-contracts/client-diagnostics.cjs');
 
 function loadLifecycle(raf, cancel) {
   const module = { exports: {} };
@@ -17,6 +20,10 @@ function loadLifecycle(raf, cancel) {
     setInterval,
     clearInterval,
     AbortController,
+    require: (id) => {
+      assert.equal(id, '../../../../fairy-contracts/client-diagnostics.cjs');
+      return { createFairyDiagnostics };
+    },
   }, { filename: 'lifecycle.js' });
   return module.exports;
 }

@@ -1765,21 +1765,8 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 //#endregion
 //#region src/client/lifecycle.js
 	var require_lifecycle = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const diagnostics = { error(operation, error, context = {}) {
-			console.error(`DSH_FAIRY_LOG ${JSON.stringify({
-				schema: 1,
-				timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-				level: "error",
-				module: "dsh-fairy-visual",
-				operation,
-				event: "failure",
-				context,
-				error: {
-					name: String(error?.name || "Error"),
-					message: String(error?.message || error).slice(0, 320)
-				}
-			})}`);
-		} };
+		const { createFairyDiagnostics } = require_client_diagnostics();
+		const diagnostics = createFairyDiagnostics("dsh-fairy-visual");
 		const singletonOwners = /* @__PURE__ */ new WeakMap();
 		function createLifecycleScope(name = "fairy-visual") {
 			let disposed = false;
@@ -2001,39 +1988,9 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 //#endregion
 //#region src/client/dom-observer-manager.js
 	var require_dom_observer_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const { createFairyDiagnostics } = require_client_diagnostics();
 		const managers = /* @__PURE__ */ new WeakMap();
-		const diagnostics = {
-			start: () => typeof performance === "object" && performance?.now ? performance.now() : Date.now(),
-			metric(operation, startedAt, context = {}, thresholdMs = 0) {
-				const duration = (typeof performance === "object" && performance?.now ? performance.now() : Date.now()) - startedAt;
-				if (duration < thresholdMs) return;
-				console.info(`DSH_FAIRY_LOG ${JSON.stringify({
-					schema: 1,
-					timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-					level: "info",
-					module: "dsh-fairy-visual",
-					operation,
-					event: "metric",
-					context,
-					duration_ms: Number(duration.toFixed(3))
-				})}`);
-			},
-			error(operation, error, context = {}) {
-				console.error(`DSH_FAIRY_LOG ${JSON.stringify({
-					schema: 1,
-					timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-					level: "error",
-					module: "dsh-fairy-visual",
-					operation,
-					event: "failure",
-					context,
-					error: {
-						name: String(error?.name || "Error"),
-						message: String(error?.message || error).slice(0, 320)
-					}
-				})}`);
-			}
-		};
+		const diagnostics = createFairyDiagnostics("dsh-fairy-visual");
 		function containsTarget(root, target, subtree) {
 			if (root === target) return true;
 			return subtree === true && Boolean(root?.contains?.(target));
@@ -2079,7 +2036,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 						diagnostics.metric("observer.callback", startedAt, {
 							record_count: accepted.length,
 							root_only: rootOnly
-						}, 8);
+						}, { thresholdMs: 8 });
 					}
 				});
 			};
@@ -2989,21 +2946,8 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 //#endregion
 //#region src/client/pointer-drag.js
 	var require_pointer_drag = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const diagnostics = { error(operation, error, context = {}) {
-			console.error(`DSH_FAIRY_LOG ${JSON.stringify({
-				schema: 1,
-				timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-				level: "error",
-				module: "dsh-fairy-visual",
-				operation,
-				event: "failure",
-				context,
-				error: {
-					name: String(error?.name || "Error"),
-					message: String(error?.message || error).slice(0, 320)
-				}
-			})}`);
-		} };
+		const { createFairyDiagnostics } = require_client_diagnostics();
+		const diagnostics = createFairyDiagnostics("dsh-fairy-visual");
 		function createPointerDrag({ getTarget, getLockNodes = () => [], onStart, onMove, onEnd, onCancel }) {
 			let active = null;
 			let releaseFrame = 0;
@@ -3268,21 +3212,8 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 //#endregion
 //#region src/client/settings-write.js
 	var require_settings_write = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const diagnostics = { error(operation, error, context = {}) {
-			console.error(`DSH_FAIRY_LOG ${JSON.stringify({
-				schema: 1,
-				timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-				level: "error",
-				module: "dsh-fairy-visual",
-				operation,
-				event: "failure",
-				context,
-				error: {
-					name: String(error?.name || "Error"),
-					message: String(error?.message || error).slice(0, 320)
-				}
-			})}`);
-		} };
+		const { createFairyDiagnostics } = require_client_diagnostics();
+		const diagnostics = createFairyDiagnostics("dsh-fairy-visual");
 		function settingError(field, error) {
 			diagnostics.error("settings.persist", error, { field });
 		}
@@ -6991,37 +6922,8 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#region src/client/visual-transitions.js
 	var require_visual_transitions = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		init_defineProperty();
-		const diagnostics = {
-			start: () => typeof performance === "object" && performance?.now ? performance.now() : Date.now(),
-			metric(operation, startedAt, context = {}) {
-				const clock = typeof performance === "object" && performance?.now ? performance.now() : Date.now();
-				console.info(`DSH_FAIRY_LOG ${JSON.stringify({
-					schema: 1,
-					timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-					level: "info",
-					module: "dsh-fairy-visual",
-					operation,
-					event: "metric",
-					context,
-					duration_ms: Number((clock - startedAt).toFixed(3))
-				})}`);
-			},
-			warn(operation, context = {}, error) {
-				console.warn(`DSH_FAIRY_LOG ${JSON.stringify({
-					schema: 1,
-					timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-					level: "warn",
-					module: "dsh-fairy-visual",
-					operation,
-					event: "failure",
-					context,
-					error: {
-						name: String(error?.name || "Error"),
-						message: String(error?.message || error).slice(0, 320)
-					}
-				})}`);
-			}
-		};
+		const { createFairyDiagnostics } = require_client_diagnostics();
+		const diagnostics = createFairyDiagnostics("dsh-fairy-visual");
 		function createVisualTransitions({ rootSlot, modeAttr, conversation, anyPhase, composerSeat, composerCard }) {
 			const FAIRY_CONTAINER_ID = "dsh-fairy-plugin-container";
 			const FAIRY_CONTAINER_STYLE = "position:fixed;inset:0;pointer-events:none;z-index:2147483000;";

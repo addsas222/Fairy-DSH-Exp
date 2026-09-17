@@ -2,11 +2,9 @@
 // Every registration is paired with one reverse-order disposer. The registries
 // are module-local and never leak state onto window or the official runtime.
 
-const diagnostics = {
-  error(operation, error, context = {}) {
-    console.error(`DSH_FAIRY_LOG ${JSON.stringify({ schema: 1, timestamp: new Date().toISOString(), level: 'error', module: 'dsh-fairy-visual', operation, event: 'failure', context, error: { name: String(error?.name || 'Error'), message: String(error?.message || error).slice(0, 320) } })}`);
-  },
-};
+const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
+
+const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
 
 const singletonOwners = new WeakMap();
 

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/client/visual-transitions.js', import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+const { createFairyDiagnostics } = require('../../../fairy-contracts/client-diagnostics.cjs');
 
 class FakeNode {
   static cloneCount = 0;
@@ -102,6 +105,10 @@ function loadTransitions(document, window, globals = {}) {
     setTimeout: () => 1,
     clearTimeout() {},
     console,
+    require: (id) => {
+      assert.equal(id, '../../../../fairy-contracts/client-diagnostics.cjs');
+      return { createFairyDiagnostics };
+    },
     ...globals,
   }, { filename: 'visual-transitions.js' });
   return module.exports;
