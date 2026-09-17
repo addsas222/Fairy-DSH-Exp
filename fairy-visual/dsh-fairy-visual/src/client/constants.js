@@ -3,6 +3,8 @@ export const STYLE_ID = 'dsh-fairy-visual-style';
 export const MODE_ATTR = 'data-dsh-fairy-mode';
 export const POWER_MODE_ATTR = 'data-dsh-fairy-power-mode';
 export const THEME_ATTR = 'data-dsh-fairy-theme';
+export const PALETTE_ATTR = 'data-dsh-fairy-palette';
+export const PALETTES = Object.freeze(['hdd', 'ink', 'ember']);
 export const POWER_TOGGLE_WIDTH = 82;
 export const POWER_TOGGLE_HEIGHT = 22;
 
@@ -17,6 +19,8 @@ export const DEFAULT = {
   // 大眼睛位置：九宫格锚点，默认居中（= 既有无位移观感）。客户端默认表必须列全，
   // 否则写入会被判非法字段而被丢弃（实测：点击控件属性不生效）。
   mascotPosition: 'center',
+  // 调色盘（palette）：hdd=现值（属性缺省，默认零变化），ink=冷灰蓝，ember=暖炭。
+  palette: 'hdd',
   powerMode: 'normal',
   composerDockHeight: 132
 };

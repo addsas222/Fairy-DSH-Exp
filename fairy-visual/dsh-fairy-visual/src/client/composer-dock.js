@@ -31,6 +31,7 @@ const { setControllerSetting, settingError } = require('./settings-write.js');
 const { createMascotScaleBase } = require('./mascot-scale-control.js');
 const { createMascotAnimationSpeedBase } = require('./mascot-animation-speed-control.js');
 const { createMascotPositionBase } = require('./mascot-position-control.js');
+const { createMascotPaletteBase } = require('./mascot-palette-control.js');
 const MARKER_ATTRS = [
   COMPOSER_ATTR,
   'data-dsh-fairy-composer-row',
@@ -99,6 +100,7 @@ function mountComposerDock(controller) {
   let mascotScaleBase = null;
   let mascotAnimationSpeedBase = null;
   let mascotPositionBase = null;
+  let mascotPaletteBase = null;
   let previousSeatStyle = null;
   let height = HEIGHT_MIN;
   let workspaceTemplate = null;
@@ -290,6 +292,11 @@ function mountComposerDock(controller) {
     mascotPositionBase = null;
     seat?.querySelectorAll?.('[data-dsh-fairy-mascot-position-control="true"]').forEach((node) => node.remove());
   };
+  const removeMascotPaletteBase = () => {
+    mascotPaletteBase?.dispose?.();
+    mascotPaletteBase = null;
+    seat?.querySelectorAll?.('[data-dsh-fairy-palette-control="true"]').forEach((node) => node.remove());
+  };
   const ensureMascotAnimationSpeedBase = () => {
     if (!card) return;
     if (mascotAnimationSpeedBase?.node?.isConnected && mascotAnimationSpeedBase.host === card) return;
@@ -314,6 +321,12 @@ function mountComposerDock(controller) {
     if (mascotPositionBase?.node?.isConnected && mascotPositionBase.host === card) return;
     removeMascotPositionBase();
     mascotPositionBase = createMascotPositionBase(card, controller);
+  };
+  const ensureMascotPaletteBase = () => {
+    if (!card) return;
+    if (mascotPaletteBase?.node?.isConnected && mascotPaletteBase.host === card) return;
+    removeMascotPaletteBase();
+    mascotPaletteBase = createMascotPaletteBase(card, controller);
   };
   // While a question card is elected the seat is auto-height and the card can
   // resize with its own content (multiple questions, expanding options). The
@@ -438,6 +451,7 @@ function mountComposerDock(controller) {
       removeMascotScaleBase();
       removeMascotAnimationSpeedBase();
       removeMascotPositionBase();
+      removeMascotPaletteBase();
       removeLegacyVoiceDensityMarker(card);
       card = currentCard;
       removeLegacyVoiceDensityMarker();
@@ -448,6 +462,7 @@ function mountComposerDock(controller) {
     ensureMascotScaleBase();
     ensureMascotAnimationSpeedBase();
     ensureMascotPositionBase();
+    ensureMascotPaletteBase();
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');
     if (workspaceRow) captureWorkspaceTemplate(workspaceRow);
     const stack = seat?.querySelector('[data-dsh-fairy-composer-stack="true"]');

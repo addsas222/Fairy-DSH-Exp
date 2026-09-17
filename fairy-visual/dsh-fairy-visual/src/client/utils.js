@@ -1,4 +1,4 @@
-import { MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR } from './constants.js';
+import { MODE_ATTR, PALETTE_ATTR, PALETTES, POWER_MODE_ATTR, THEME_ATTR } from './constants.js';
 
 import { deriveSessionComfort } from './comfort-detector.js';
 
@@ -23,10 +23,15 @@ export function syncDocumentMode(snapshot) {
     root.setAttribute(THEME_ATTR, theme);
     root.setAttribute(MODE_ATTR, 'hdd');
     root.setAttribute(POWER_MODE_ATTR, powerMode);
+    // 调色盘：hdd 为属性缺省（默认 DOM 与既有状态逐字节一致），只有 ink/ember 才落属性。
+    const palette = PALETTES.includes(value.palette) ? value.palette : 'hdd';
+    if (palette === 'hdd') root.removeAttribute(PALETTE_ATTR);
+    else root.setAttribute(PALETTE_ATTR, palette);
   } else {
     root.removeAttribute('data-dsh-fairy-visual');
     root.removeAttribute(THEME_ATTR);
     root.removeAttribute(MODE_ATTR);
     root.removeAttribute(POWER_MODE_ATTR);
+    root.removeAttribute(PALETTE_ATTR);
   }
 }

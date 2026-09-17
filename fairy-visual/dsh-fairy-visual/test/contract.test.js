@@ -586,8 +586,10 @@ test('keeps native card ownership and flat selected-session presentation', () =>
 });
 
 test('shares the new-session material with the voice volume hardware', () => {
-  assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#30353a/);
-  assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*--dsh-card-border:linear-gradient\(135deg,#555f68/);
+  // 卡片底材基线（fill/grain/sheen/border）统一在根块定义、表面继承消费；
+  // 局部重定义会遮蔽调色盘（palette）的整体覆写，故此钉改锚根块 + 消费点。
+  assert.match(styleSource, /html\[data-dsh-fairy-visual\]\{[^}]*--dsh-card-fill:#30353a;[^}]*--dsh-card-border:linear-gradient\(135deg,#555f68/, '卡片底材基线必须在根块统一定义');
+  assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*background:linear-gradient\(var\(--dsh-card-fill\),var\(--dsh-card-fill\)\) padding-box,var\(--dsh-card-border\) border-box/, '语音条必须消费卡片底材 token');
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{[^}]*box-shadow:var\(--dsh-fairy-keycap-shadow\)/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\]\{background-image:radial-gradient\(circle at 1px 1px,var\(--dsh-card-grain-light\)/);
   assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#f4f5f6/);
@@ -1166,4 +1168,20 @@ test('大眼睛位置设置项：锚点 → 内层 float 的 translate 位移（
   assert.ok(dock.includes('ensureMascotPositionBase();') && dock.includes('removeMascotPositionBase();'), '缺挂载或清理');
   assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
   assert.ok((await read('../lib/client.js')).includes('mascot-position-control'), '客户端 bundle 没带上位置控件');
+});
+
+test('调色盘设置项：属性管线/令牌块/控件/落盘路径齐备', async () => {
+  // 需求：HDD 自有 chrome 的调色盘（hdd/ink/ember）。hdd=属性缺省（默认零变化），
+  // 非 hdd 落 data-dsh-fairy-palette；令牌层整体覆写卡片/键帽语义面，控件走 settings 通道。
+  assert.ok(constantsSource.includes('PALETTE_ATTR'), '缺调色盘属性常量');
+  assert.ok(utilsSource.includes('PALETTE_ATTR'), '属性同步缺调色盘分支');
+  assert.ok(clientEntrySource.includes('removeAttribute(PALETTE_ATTR)'), 'dispose 缺调色盘清理');
+  assert.ok(styleSource.includes('data-dsh-fairy-palette="ink"') && styleSource.includes('data-dsh-fairy-palette="ember"'), '缺两个调色盘令牌块');
+  const paletteControl = await read('../src/client/mascot-palette-control.js');
+  assert.ok(paletteControl.includes("setControllerSetting(controller, 'palette'"), '缺设置写入（必须走 settings 通道）');
+  assert.ok(paletteControl.includes('data-dsh-fairy-palette-control'), '缺控件标记');
+  const dock = await read('../src/client/composer-dock.js');
+  assert.ok(dock.includes('ensureMascotPaletteBase();') && dock.includes('removeMascotPaletteBase();'), '缺挂载或清理');
+  assert.ok((await read('../lib/index.js')).includes('palette:'), 'host schema 缺 palette');
+  assert.ok((await read('../lib/client.js')).includes('mascot-palette-control'), '客户端 bundle 没带上调色盘控件');
 });

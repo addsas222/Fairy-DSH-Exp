@@ -21,6 +21,9 @@ export const FairyVisualSettings = z.object({
   contentFade: z.boolean().default(false),
   mascotScale: z.number().step(0.01).min(0.55).max(1).default(1),
   mascotAnimationSpeed: z.union([z.const(0.7), z.const(1), z.const(1.5)]).default(1),
+  // 调色盘（palette）：HDD 自有 chrome（卡片/键帽/边框/光效）的语义色板。
+  // 默认 hdd 与既有观感一致（DOM 不落属性）；ink=冷灰蓝、ember=暖炭。
+  palette: z.union([z.const('hdd'), z.const('ink'), z.const('ember')]).default('hdd'),
   // 大眼睛位置：九宫格锚点。默认 center 与既有观感一致；位移由客户端 translate 实现，
   // 只动眼睛本身，不动宿主的固定定位与布局盒。
   mascotPosition: z.union([

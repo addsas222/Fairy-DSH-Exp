@@ -15,6 +15,7 @@ test('migrates a fresh or incomplete profile to the canonical v2 defaults', () =
     mascotScale: 1,
     mascotAnimationSpeed: 1,
     mascotPosition: 'center',
+    palette: 'hdd',
     powerMode: 'normal',
     composerDockHeight: 132,
   });

@@ -3,7 +3,7 @@ const { jsx, jsxs } = require('react/jsx-runtime');
 const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
 const { createAskKit } = require('../../../../fairy-contracts/client-ask-kit.cjs');
 const uiPrimitives = require('@deepseek-ai/dsh-client-ui-primitives');
-const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = require('./constants.js');
+const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = require('./constants.js');
 const IDENTITY_SETTINGS_NAMESPACE = 'fairy-identity';
 const { deriveSessionActivity, syncDocumentMode } = require('./utils.js');
 const { injectStyles } = require('./style.js');
@@ -135,6 +135,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
         document.documentElement.removeAttribute(MODE_ATTR);
         document.documentElement.removeAttribute(POWER_MODE_ATTR);
         document.documentElement.removeAttribute(THEME_ATTR);
+        document.documentElement.removeAttribute(PALETTE_ATTR);
         document.getElementById(STYLE_ID)?.remove();
         visualTransitions.removeFairyContainer();
       }
