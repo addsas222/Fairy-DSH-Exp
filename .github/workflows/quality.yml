@@ -35,19 +35,12 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: |
-            profiles/web/pnpm-lock.yaml
-            fairy-visual/dsh-fairy-visual/pnpm-lock.yaml
-            fairy-voice/dsh-fairy-voice/pnpm-lock.yaml
-            fairy-startup/dsh-fairy-startup/pnpm-lock.yaml
-            browser-dock/dsh-browser-dock/pnpm-lock.yaml
-            balance-meter/dsh-balance-meter/pnpm-lock.yaml
-            fairy-persona/dsh-fairy-persona/pnpm-lock.yaml
-            fairy-modes/dsh-fairy-modes/pnpm-lock.yaml
-            fairy-search/dsh-fairy-search/pnpm-lock.yaml
-            fairy-memory/dsh-fairy-memory/pnpm-lock.yaml
-            fairy-roleplay/dsh-fairy-roleplay/pnpm-lock.yaml
-            fairy-eval/dsh-fairy-eval/pnpm-lock.yaml
+          # 12 行手抄的 lockfile 路径换成 glob：本仓的 pnpm-lock.yaml（11 个包 +
+          # profiles/web）都正好一层深，`**/pnpm-lock.yaml` 解析出的就是原来那 12
+          # 个文件——新包自动进缓存键，不必再改这里。fairy-voice 的
+          # package-lock.json 不是 pnpm 锁文件、原本也不在清单里，故不纳入。
+          # 加引号是 YAML 的要求（普通标量不能以 `*` 开头）。
+          cache-dependency-path: "**/pnpm-lock.yaml"
 
       # 各包的 link: 依赖必须先逐包安装，否则包测试会 ERR_MODULE_NOT_FOUND。
       # 这一步用的就是 .agent/checks/unit.yaml 的 requires(package-deps) 的 local 安装命令。

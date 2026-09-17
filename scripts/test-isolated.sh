@@ -57,16 +57,42 @@ fi
 export DSH_OFFICIAL_PACKAGE DSH_OFFICIAL_RUNTIME
 export DSH_CAPABILITY_MATRIX="$repo_root/fairy-system/capability-matrix.json"
 
-echo "[1/4] package dependency install"
+# ── 包清单的唯一真源 ────────────────────────────────────────────────────────
+# 包名只写在 scripts/deploy-live.sh 的 PACKAGES 里（落位动作实际用的那份清单，
+# fairy-system/image-manifest.js:59-92 也解析同一处）。这里按同一条规则从它派生：
+# 行首 `^PACKAGES="` 打头、一路吃到下一个引号（清单跨行），再按空白切分——而不是
+# 再抄一份，抄一份就会漂：本脚本原来抄的那 8 个包已经和仓库的 11 个对不上。
+# 解析失败一律硬失败：清单为空时下面两个循环会「一个包都没测」还报绿。
+deploy_script="$repo_root/scripts/deploy-live.sh"
+[ -f "$deploy_script" ] || { echo "missing $deploy_script: the package list lives there" >&2; exit 1; }
+package_hits=$(grep -c '^PACKAGES="' "$deploy_script" || true)
+# 值可能收口在同一行、也可能跨行，所以先取「从 `PACKAGES="` 到下一个引号为止」的
+# 整段文本再切片——与 image-manifest.js 的 `^PACKAGES="([^"]*)"` 同义。
+block=$(sed -n '/^PACKAGES="/,/"/p' "$deploy_script")
+block=${block#*PACKAGES=\"}        # 去掉 `PACKAGES="` 及其之前
+case $block in
+  *\"*) packages=${block%%\"*} ;;  # 截到收口引号（引号之后的内容一概不算）
+  *)   packages="" ;;              # 值没收口 = 清单解析不出来
+esac
+if [ "$package_hits" != 1 ] || [ -z "$packages" ]; then
+  echo "cannot read PACKAGES from $deploy_script (found $package_hits definitions)" >&2
+  exit 1
+fi
+package_count=$(printf '%s\n' $packages | wc -l | tr -d ' ')
+
+# 包声明的 test 脚本（有则原样输出、没有则空）。用 node 读 package.json 而不是
+# grep：要回答的是「npm test 会不会跑起来」，不是「文件里有没有 test 这个词」。
+package_test_script() {
+  node -e 'const p = require(process.argv[1]); process.stdout.write((p.scripts && p.scripts.test) || "")' "$1"
+}
+
+echo "[1/4] package dependency install ($package_count packages, per deploy-live.sh PACKAGES)"
 # 从仓库根跑包测试的默认失败模式是 `ERR_MODULE_NOT_FOUND: dsh-fairy-contracts`：
 # clone 里没有 node_modules，而各包的 link: 依赖必须各自安装（与 deploy-live.sh
 # 第 3 步同一做法、与 CI 的 --frozen-lockfile 同一约定）。已装过的包直接跳过，
 # 所以重复跑不会变慢。
 if command -v pnpm >/dev/null 2>&1; then
-  for area in fairy-visual/dsh-fairy-visual fairy-voice/dsh-fairy-voice \
-              fairy-persona/dsh-fairy-persona fairy-modes/dsh-fairy-modes \
-              fairy-search/dsh-fairy-search fairy-memory/dsh-fairy-memory \
-              fairy-roleplay/dsh-fairy-roleplay fairy-eval/dsh-fairy-eval; do
+  for area in $packages; do
     if [ -d "$repo_root/$area/node_modules" ]; then
       echo "  ok   $area (already installed)"
     elif (cd "$repo_root/$area" && pnpm install --frozen-lockfile --ignore-scripts >/dev/null 2>&1); then
@@ -82,14 +108,19 @@ else
 fi
 
 echo "[2/4] package tests"
-(cd "$repo_root/fairy-visual/dsh-fairy-visual" && npm test)
-(cd "$repo_root/fairy-voice/dsh-fairy-voice" && npm test)
-(cd "$repo_root/fairy-persona/dsh-fairy-persona" && npm test)
-(cd "$repo_root/fairy-modes/dsh-fairy-modes" && npm test)
-(cd "$repo_root/fairy-search/dsh-fairy-search" && npm test)
-(cd "$repo_root/fairy-memory/dsh-fairy-memory" && npm test)
-(cd "$repo_root/fairy-roleplay/dsh-fairy-roleplay" && npm test)
-(cd "$repo_root/fairy-eval/dsh-fairy-eval" && npm test)
+# 同一份派生清单：新增的包会自动进这两个循环，不必在这里补第三处名单。
+for area in $packages; do
+  if [ -n "$(package_test_script "$repo_root/$area/package.json")" ]; then
+    (cd "$repo_root/$area" && npm test)
+  elif [ -d "$repo_root/$area/test" ]; then
+    # 包没有声明 test 脚本（fairy-startup 就是：test/ 里的用例是真的，只是没有
+    # scripts.test）→ 走 check.sh / checks/unit.mjs 同一条通道，免得整包漏测。
+    echo "  note $area declares no test script; running its test/ files with node --test"
+    (cd "$repo_root/$area" && node --test test/*.test.js)
+  else
+    echo "  skip $area (no test script and no test/ directory)"
+  fi
+done
 if [ -n "$DSH_OFFICIAL_PACKAGE" ] && [ -n "$DSH_OFFICIAL_RUNTIME" ]; then
   # Live-layout gate suite: it compares candidates against the installed
   # 0.1.1-rc.2, so it runs only when that comparison target exists.

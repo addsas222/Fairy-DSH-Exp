@@ -7,6 +7,11 @@ const { createRequire } = require('node:module');
 const os = require('node:os');
 const path = require('node:path');
 
+// 包的名称/落位/源根/客户端面只有一份声明：verify-build.js 的 packages 表（与 verify.js
+// 同一个 require 口径；该文件有 require.main 守卫，require 进来没有副作用）。这里只按当前
+// home 重算落位根，不再逐包复述。表里的 dir 是 <home>/<area>/<name> 两级。
+const { packages: BUILD_PACKAGES } = require('./verify-build.js');
+
 // Resolve the official DSH installation from the current account. Release
 // candidates must never embed a maintainer's home directory; CI or a local
 // installation can override either path explicitly with DSH_OFFICIAL_*.
@@ -229,22 +234,22 @@ function isInside(candidate, parent) {
   return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
 }
 
+// 从构建契约表派生本机的包定义：契约记录的 <home>/<area>/<name> 换成当前 dshHome 下的同名
+// 两级落位（--home/DSH_HOME 可以改根，契约表读的却是进程环境变量，所以只取区域与包名）。
+// client: false 只在契约显式声明时透传——这个负向断言必须来自契约表本身，不能从 manifest 推导。
+function defaultPackageDefinitions(dshHome) {
+  return BUILD_PACKAGES.map(({ name, dir, sourceRoot, client }) => ({
+    name,
+    directory: path.join(dshHome, path.basename(path.dirname(dir)), name),
+    sourceRoot,
+    ...(client === false ? { client: false } : {}),
+  }));
+}
+
 function createDefaultConfig(overrides = {}) {
   const dshHome = path.resolve(overrides.dshHome || process.env.DSH_HOME || path.join(os.homedir(), '.dsh'));
   const profileRoot = path.resolve(overrides.profileRoot || process.env.DSH_PROFILE_ROOT || path.join(dshHome, 'profiles', 'web'));
-  const packageDefinitions = overrides.packageDefinitions || [
-    { name: 'dsh-browser-dock', directory: path.join(dshHome, 'browser-dock', 'dsh-browser-dock'), sourceRoot: 'src' },
-    { name: 'dsh-balance-meter', directory: path.join(dshHome, 'balance-meter', 'dsh-balance-meter'), sourceRoot: null },
-    { name: 'dsh-fairy-startup', directory: path.join(dshHome, 'fairy-startup', 'dsh-fairy-startup'), sourceRoot: null },
-    { name: 'dsh-fairy-voice', directory: path.join(dshHome, 'fairy-voice', 'dsh-fairy-voice'), sourceRoot: null },
-    { name: 'dsh-fairy-visual', directory: path.join(dshHome, 'fairy-visual', 'dsh-fairy-visual'), sourceRoot: 'src' },
-    { name: 'dsh-fairy-persona', directory: path.join(dshHome, 'fairy-persona', 'dsh-fairy-persona'), sourceRoot: null },
-    { name: 'dsh-fairy-modes', directory: path.join(dshHome, 'fairy-modes', 'dsh-fairy-modes'), sourceRoot: null },
-    { name: 'dsh-fairy-search', directory: path.join(dshHome, 'fairy-search', 'dsh-fairy-search'), sourceRoot: null },
-    { name: 'dsh-fairy-memory', directory: path.join(dshHome, 'fairy-memory', 'dsh-fairy-memory'), sourceRoot: 'src' },
-    { name: 'dsh-fairy-roleplay', directory: path.join(dshHome, 'fairy-roleplay', 'dsh-fairy-roleplay'), sourceRoot: null },
-    { name: 'dsh-fairy-eval', directory: path.join(dshHome, 'fairy-eval', 'dsh-fairy-eval'), sourceRoot: null, client: false },
-  ];
+  const packageDefinitions = overrides.packageDefinitions || defaultPackageDefinitions(dshHome);
   return {
     dshHome,
     profileRoot,

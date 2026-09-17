@@ -10,19 +10,12 @@ const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const LOCAL_PACKAGES = [
-  ['dsh-browser-dock', 'browser-dock', 'dsh-browser-dock'],
-  ['dsh-balance-meter', 'balance-meter', 'dsh-balance-meter'],
-  ['dsh-fairy-startup', 'fairy-startup', 'dsh-fairy-startup'],
-  ['dsh-fairy-visual', 'fairy-visual', 'dsh-fairy-visual'],
-  ['dsh-fairy-voice', 'fairy-voice', 'dsh-fairy-voice'],
-  ['dsh-fairy-persona', 'fairy-persona', 'dsh-fairy-persona'],
-  ['dsh-fairy-modes', 'fairy-modes', 'dsh-fairy-modes'],
-  ['dsh-fairy-search', 'fairy-search', 'dsh-fairy-search'],
-  ['dsh-fairy-memory', 'fairy-memory', 'dsh-fairy-memory'],
-  ['dsh-fairy-roleplay', 'fairy-roleplay', 'dsh-fairy-roleplay'],
-  ['dsh-fairy-eval', 'fairy-eval', 'dsh-fairy-eval'],
-];
+// 包名与来源区域只有一份声明：verify-build.js 的 packages 表（其 dir 的末两级即
+// <home>/<area>/<name>）。候选闸只拿这两个标签在 profile 的 node_modules 里核对符号链接，
+// 落位根由 --profile 决定，所以这里不需要契约表里的 home。
+const { packages: BUILD_PACKAGES } = require('./verify-build.js');
+const LOCAL_PACKAGES = BUILD_PACKAGES.map(({ name, dir }) => [name, path.basename(path.dirname(dir))]);
+
 // Same knobs as preflight-build.js: the validation chain runs against an
 // isolated home and a candidate runtime, never the developer's live install.
 const DEFAULT_PROFILE = path.resolve(process.env.DSH_PROFILE_ROOT || path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'profiles', 'web'));
@@ -116,11 +109,11 @@ function resolvePackage(fromDir, name, label) {
   return { path: realpath(manifestPath, label), manifest: readJson(manifestPath) };
 }
 
-function verifyPackage(profileRoot, name, folder, packageDirName) {
+function verifyPackage(profileRoot, name, area) {
   const link = path.join(profileRoot, 'node_modules', name);
   assert(fs.existsSync(link) && fs.lstatSync(link).isSymbolicLink(), `${name} profile dependency is not a symlink`);
   const sourceRoot = realpath(link, `${name} profile dependency`);
-  assert(path.basename(path.dirname(sourceRoot)) === folder && path.basename(sourceRoot) === packageDirName,
+  assert(path.basename(path.dirname(sourceRoot)) === area && path.basename(sourceRoot) === name,
     `${name} profile dependency points outside its expected source package`);
   const manifest = readJson(path.join(sourceRoot, 'package.json'));
   assert(manifest.name === name, `${name} package identity drifted`);
@@ -371,7 +364,7 @@ function main() {
   const runtimeFile = realpath(path.resolve(args.runtime || DEFAULT_RUNTIME), 'runtime file');
   const capabilityMatrix = readJson(CAPABILITY_MATRIX_PATH);
   if (args.report) {
-    const packages = LOCAL_PACKAGES.map(([name, folder, packageDirName]) => verifyPackage(profileRoot, name, folder, packageDirName));
+    const packages = LOCAL_PACKAGES.map(([name, area]) => verifyPackage(profileRoot, name, area));
     const runtimePackage = readJson(path.join(path.dirname(path.dirname(runtimeFile)), 'package.json'));
     const runtimeSource = read(runtimeFile);
     const runtime = {
@@ -390,7 +383,7 @@ function main() {
     assert(realpath(profileRoot, 'candidate profile') !== currentProfile, 'refusing to validate the active profile; use an isolated profile');
     assert(realpath(runtimeFile, 'candidate runtime') !== currentRuntime, 'refusing to validate the active runtime; use an isolated runtime');
   }
-  const packages = LOCAL_PACKAGES.map(([name, folder, packageDirName]) => verifyPackage(profileRoot, name, folder, packageDirName));
+  const packages = LOCAL_PACKAGES.map(([name, area]) => verifyPackage(profileRoot, name, area));
   const runtime = verifyRuntime(runtimeFile, expectedVersion, expectedHash);
   const compatibility = verifyProfileContracts(profileRoot, packages, capabilityMatrix);
   const scope = args.allowCurrent ? 'baseline' : 'isolated profile';

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
@@ -15,19 +16,11 @@ function linkDirectory(target, linkPath) {
 
 const verifier = fileURLToPath(new URL('../preflight-build.js', import.meta.url));
 const approvedProfile = fileURLToPath(new URL('../../profiles/web/', import.meta.url));
-const packages = [
-  ['dsh-browser-dock', 'browser-dock'],
-  ['dsh-balance-meter', 'balance-meter'],
-  ['dsh-fairy-startup', 'fairy-startup'],
-  ['dsh-fairy-visual', 'fairy-visual'],
-  ['dsh-fairy-voice', 'fairy-voice'],
-  ['dsh-fairy-persona', 'fairy-persona'],
-  ['dsh-fairy-modes', 'fairy-modes'],
-  ['dsh-fairy-search', 'fairy-search'],
-  ['dsh-fairy-memory', 'fairy-memory'],
-  ['dsh-fairy-roleplay', 'fairy-roleplay'],
-  ['dsh-fairy-eval', 'fairy-eval'],
-];
+// 夹具的包名与区域从构建契约表派生（那是结构，不是期望值）：加包或换区域时不必再手抄
+// 第三份清单。期望值仍然手写——见 HOST_ONLY_PACKAGE 与首个用例里的显式断言。
+const { packages: buildContracts } = createRequire(import.meta.url)('../verify-build.js');
+const packages = buildContracts.map(({ name, dir }) => [name, basename(dirname(dir))]);
+const HOST_ONLY_PACKAGE = 'dsh-fairy-eval';
 
 function createFixture() {
   const root = mkdtempSync(join(tmpdir(), 'dsh-preflight-test-'));
@@ -52,8 +45,8 @@ function createFixture() {
   for (const [name, folder] of packages) {
     const source = join(root, folder, name);
     mkdirSync(join(source, 'lib'), { recursive: true });
-    // dsh-fairy-eval 是宿主型包（契约 client: false）：fixture 不建客户端面。
-    const hostOnly = name === 'dsh-fairy-eval';
+    // 宿主型包（契约 client: false）：fixture 不建客户端面。
+    const hostOnly = name === HOST_ONLY_PACKAGE;
     writeFileSync(join(source, 'package.json'), JSON.stringify({
       name,
       main: './lib/index.js',
@@ -86,6 +79,10 @@ function runVerifier(root) {
 }
 
 test('accepts complete bundles and profile links', (t) => {
+  // 夹具是按 host-only 建的（本包没有客户端面）：契约表必须仍然这么说。这条断言让
+  // 「翻掉 client: false」这件事在测试里出声，而不是让夹具跟着契约表一起翻面。
+  const hostOnlyContract = buildContracts.find(({ name }) => name === HOST_ONLY_PACKAGE);
+  assert.equal(hostOnlyContract?.client, false, `${HOST_ONLY_PACKAGE} 必须保持 host-only（client: false）`);
   const root = createFixture();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = runVerifier(root);

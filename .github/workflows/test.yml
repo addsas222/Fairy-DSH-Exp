@@ -16,19 +16,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: |
-            profiles/web/pnpm-lock.yaml
-            fairy-visual/dsh-fairy-visual/pnpm-lock.yaml
-            fairy-voice/dsh-fairy-voice/pnpm-lock.yaml
-            fairy-startup/dsh-fairy-startup/pnpm-lock.yaml
-            browser-dock/dsh-browser-dock/pnpm-lock.yaml
-            balance-meter/dsh-balance-meter/pnpm-lock.yaml
-            fairy-persona/dsh-fairy-persona/pnpm-lock.yaml
-            fairy-modes/dsh-fairy-modes/pnpm-lock.yaml
-            fairy-search/dsh-fairy-search/pnpm-lock.yaml
-            fairy-memory/dsh-fairy-memory/pnpm-lock.yaml
-            fairy-roleplay/dsh-fairy-roleplay/pnpm-lock.yaml
-            fairy-eval/dsh-fairy-eval/pnpm-lock.yaml
+          # One glob instead of the hand-kept list of 12 lockfile paths. Every
+          # pnpm-lock.yaml in this repo (the 11 packages + profiles/web) sits
+          # exactly one level deep, so this pattern resolves to the same 12
+          # files and a new package joins the cache key without editing here.
+          # fairy-voice's package-lock.json is not a pnpm lockfile and was never
+          # in the old list, so it stays out. Quoted because a plain YAML scalar
+          # may not start with `*`.
+          cache-dependency-path: "**/pnpm-lock.yaml"
       - name: Install and test visual
         working-directory: fairy-visual/dsh-fairy-visual
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
