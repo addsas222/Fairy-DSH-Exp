@@ -130,8 +130,8 @@ function verifyPackage(contract) {
   const outputs = [...new Set([...targets.values()].map((target) => path.resolve(packageDir, target)))];
   const outputMtime = Math.min(...outputs.map((output) => fs.statSync(output).mtimeMs));
   const manifestMtime = fs.statSync(manifestPath).mtimeMs;
-  // Only a package that generates its outputs can have stale ones. Six of the
-  // nine are hand-written: their lib files ARE the sources, so "output newer
+  // Only a package that generates its outputs can have stale ones. Eight of the
+  // eleven are hand-written: their lib files ARE the sources, so "output newer
   // than manifest" could only ever hold by the order files happened to be
   // written - a manifest edit would fail the gate for nothing. The criterion is
   // the build script rather than `sourceRoot` because that is the actual reason

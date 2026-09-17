@@ -1,20 +1,23 @@
 # DSH 内容边界与清理清单
 
-更新时间：2026-08-28
+更新时间：2026-09-17
 
 本清单用于防止后续 Agent 把历史材料、生成物或运行状态误认为当前源码。不授权自动删除、恢复或覆盖任何内容。
 
 ## 当前有效运行输入
 
 - `profiles/web/`、`launchers/`、`.agent-presets/fairy-lite/agent.cordis.yml`
-- 五个自定义包的 source 与已验证对应的 `lib/` 输出
+- 11 个自定义包的 source 与已验证对应的 `lib/` 输出（清单见 `fairy-system/verify-build.js` 的 `packages`）
 - `fairy-contracts/`
 - 已固定版本与 SHA-256 的官方 DSH 安装（只读）
 
 ## 离线输入、可重建产物与审计证据（保留）
 
-- `.agent-presets/fairy-lite/corpus/`、`training/`、`evaluation/`：被离线构建链引用。
-- `.agent-presets/fairy-lite/behavior/`、`style/`、`canon/`、`corpus_manifest.json`：运行时 compiler 读取的派生产物。
+- `.agent-presets/fairy-lite/training/`、`evaluation/`、`corpus_manifest.json`：本仓库没有这些
+  文件，仓库内也没有引用它的构建链；`.agent-presets/fairy-lite/ASSET-BOUNDARIES.json` 以
+  `training_assets` / `offline_evaluation_assets` / `generated_not_online` 声明它们。若它们
+  出现在 live 树的私有语料目录中，仍按本节保留，且不得进入线上人格上下文。
+- `.agent-presets/fairy-lite/behavior/`、`style/`、`canon/`：运行时 compiler 读取的派生产物。
 - `patches/`：保存当前 profile patch 的来源和可审查差异；不能作为恢复源。
 - `fairy-system/browser-evidence/`、`fairy-system/benchmarks/`：append-only 历史证据；旧 hash 必须保留并在新证据中标注。
 

@@ -220,7 +220,7 @@ DSH_HOME="$PWD/.dsh-test-home" ./scripts/test-isolated.sh
 
 ```sh
 # 从仓库根执行；DSH_HOME 已按第 2 节导出
-node fairy-system/verify-build.js     # 构建契约：10 包，exit 0
+node fairy-system/verify-build.js     # 构建契约：11 包，exit 0
 node fairy-system/skill-audit.js      # 技能/插件冗余审计（--self-test 自检）
 
 # 镜像 vs 源的对账（只读；部署第 6 步自动跑的就是它）
@@ -314,7 +314,7 @@ done
   的 manifest 里**没有**声明 `dsh-client-runtime`，所以默认嵌套路径不会因装 `dsh` 而出现，
   得靠旋钮或显式补放。**别用 `npm install` 装到 `~/.local/lib`**：那里没有自己的
   `package.json`，npm 会向上找到 `~/package.json` 当工程根并 reify 宿主那棵树。
-- `upgrade.test.js`（7）——要 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 装齐十个插件包 +
+- `upgrade.test.js`（7）——要 `$DSH_HOME`（缺省 `~/.dsh`）的 profile 装齐十一个插件包 +
   官方 `dsh-client-ui-conversation` + `dsh-reasoning-effort` / `dsh-message-edit`
   （`upgrade.test.js:40-43` 逐个 `realpathSync`，缺一即 ENOENT），并 `copyFileSync` 一份
   runtime（默认同为 `~/.local/…`）。本机 `~/.dsh` 的 profile 是**另一条线**
@@ -341,7 +341,9 @@ DSH_HOME=~/.dsh-fairy \
 **别往真实 `~/.dsh` 拷资产**（§5.6）：`DSH_CAPABILITY_MATRIX` 就是为替代这种拷贝而存在的，
 手拷的锚点会随仓库变旧，之后对着过期矩阵静默校验。
 
-修后实测（2026-09-14，两种跑法）：
+修后实测（2026-09-14，两种跑法；此后 `fairy-system/test/` 又新增了 `agent-providers`、
+`ask-kit`、`ask-ui-normalized`、`install-script`、`pen-mcp` 五个文件，并有若干文件继续扩例，
+下表只是那天的例数——当前值请重跑上面那条命令）：
 
 | 跑法 | 结果 |
 | --- | --- |
