@@ -141,12 +141,13 @@ log "source    : $([ "$FROM_WORKTREE" = 1 ] && echo 'working tree (含未提交�
 SOURCE_MODE=git
 if [ "$FROM_WORKTREE" = 1 ]; then SOURCE_MODE=worktree; fi
 
-# 1pre) ponytail 规则技能：不随仓库分发（第三方 MIT 文本），部署时从**本机**安装源同步进
-# preset 的 skills/ 槽位（该槽位在 image-manifest 的跳过策略里，不参与对账/prune）。
-# 安装源：$DSH_FAIRY_SKILLS_DIR（显式指定，指向某个含 ponytail* 的目录）
+# 1pre) ponytail 规则技能 + 设计技能（创作工坊）：都不随仓库分发，部署时从**本机**安装源
+# 同步进 preset 的 skills/ 槽位（该槽位在 image-manifest 的跳过策略里，不参与对账/prune）。
+# ponytail 安装源：$DSH_FAIRY_SKILLS_DIR（显式指定，指向某个含 ponytail* 的目录）
 #         > ~/.omp/agent/skills/_ponytail-vendor（本机留存处）
 #         > ~/.omp/agent/skills（harness 技能根，含主技能 ponytail）。
-# 只取 `ponytail*` 这几个目录，**不要**整目录 cp：技能根里还有十几个与本 preset 无关的
+# 设计技能安装源：$DSH_FAIRY_SKILLS_DIR 或 ~/.omp/agent/skills（白名单：huashu-design、open-design*）。
+# 只取白名单目录，**不要**整目录 cp：技能根里还有十几个与本 preset 无关的
 # 私人技能（以及 _ponytail-vendor 自身），整拷会把它们塞进 DSH 会话、并与 harness 自带重名。
 # 主技能 ponytail/ 在留存处没有（它与 harness 自带那份内容相同、当时被去重删掉），
 # 需要时从技能根补；缺少它的目录集是 5 个附属技能，不是完整规则集。
@@ -175,12 +176,21 @@ else
     for file in NOTICE ponytail.LICENSE; do
       [ -f "$SKILLS_SRC/$file" ] && cp "$SKILLS_SRC/$file" "$SKILLS_DEST/" 2>/dev/null
     done
+    # 设计技能（「创作工坊」的笔刷：花叔Design / OpenDesign 系）与本槽位同策略——本机安装、
+    # 不入库，部署时按白名单同步。它们不在 ponytail 留存处，单独从 harness 技能根取；
+    # 同样只取白名单目录，缺了不报错（创作工坊卡会把缺的技能如实列出来）。
+    DESIGN_SRC="${DSH_FAIRY_SKILLS_DIR:-$HOME/.omp/agent/skills}"
+    design_synced=0
+    for dir in "$DESIGN_SRC"/huashu-design "$DESIGN_SRC"/open-design*; do
+      [ -d "$dir" ] || continue
+      cp -R "$dir" "$SKILLS_DEST/" 2>/dev/null && { synced=$((synced + 1)); design_synced=$((design_synced + 1)); }
+    done
     # 留存处缺主技能时从 harness 技能根补一次（内容与仓库版逐字节相同，仅行尾不同）
     if [ ! -f "$SKILLS_DEST/ponytail/SKILL.md" ] && [ -f "$HOME/.omp/agent/skills/ponytail/SKILL.md" ]; then
       mkdir -p "$SKILLS_DEST/ponytail" && cp "$HOME/.omp/agent/skills/ponytail/SKILL.md" "$SKILLS_DEST/ponytail/" 2>/dev/null
     fi
     if [ "$synced" -gt 0 ]; then
-      log "  synced $synced ponytail skill dir(s) from $SKILLS_SRC"
+      log "  synced $synced skill dir(s) from $SKILLS_SRC（含设计技能 $design_synced 份）"
     else
       warn "ponytail 技能同步失败（不影响部署）：$SKILLS_SRC 下没有 ponytail* 目录"
     fi
