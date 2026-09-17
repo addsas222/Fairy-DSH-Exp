@@ -74,15 +74,19 @@ node fairy-system/upgrade-preflight.js \
 
 ## 2026-09-17 dual-line home isolation
 
-Two base lines must not share one DSH home. The `<home>/profiles/node_modules`
-module fallback farm (built by the profile install, healed additively at boot by
-`healProfilesModuleFallback`) holds exactly one link per package, so whichever
-line re-links it decides for every future cold boot. Failure modes observed that
-day, all traced to one shared home:
+Two base lines must not share one DSH home. `<home>/profiles/node_modules` is
+the module fallback farm, owned and maintained by the harness, never by pnpm:
+at every boot `healProfilesModuleFallback` (`dsh-app-boot`) walks the booting
+installation's dependency closure and writes one junction link per package,
+keeping correct links, re-pointing moved installations (a link whose target
+differs is unlinked and recreated), and leaving entries outside that closure
+alone. One farm holds one link per name, so the line that booted last owns every
+shared package and decides the other line's next cold boot. Failure modes
+observed that day, all traced to one shared home:
 
 - 0.1.1 boot crash `WorkspaceRegistry.indexHeader ... reading 'id'`: the farm
-  had been re-linked during the 0.1.6 deployment and the 0.1.1 loader resolved
-  `@deepseek-ai/dsh-workspace` from the 0.1.6 global installation.
+  entry `@deepseek-ai/dsh-workspace` was left pointing at the 0.1.6 global
+  installation, so the 0.1.1 boot loaded 0.1.6 workspace code.
 - 0.1.6 boot crash `Package subpath './model-selection-settings' is not defined`:
   the same farm resolved `@deepseek-ai/dsh-tool-subagent` to a 0.1.1 copy, so
   `dsh-web-app`'s row could not import.
@@ -103,7 +107,12 @@ Rules:
   `DSH_FAIRY_PROFILE_ROOT`. Missing `DSH_FAIRY_BASE` faults loudly by design;
   missing `DSH_HOME` silently falls back to `~/.dsh` and boots the wrong profile.
 - Never run `pnpm install` by hand inside a home, and never hand-edit the farm.
-  A non-frozen install re-resolves and re-links it; the boot heal only adds
-  missing links and rejects non-symlink entries (`mklink /J` junctions fail with
-  `exists and is not a symlink`). Recovering a poisoned home means re-pointing
-  the links or redeploying, not reinstalling the profile ad hoc.
+  The farm is harness-owned; pnpm only manages each profile's own
+  `node_modules` and each staged package's tree. A non-dsh writer that puts a
+  real directory at a farm entry path makes the next boot's heal throw
+  `exists and is not a symlink; remove it so dsh can manage the installation
+  fallback` — junctions are fine (the heal itself creates
+  `symlinkSync(target, link, "junction")` and accepts them via
+  `lstatSync(link).isSymbolicLink()`). Recovering a poisoned home means fixing
+  that one entry or re-pointing links for the intended line, not reinstalling
+  the profile ad hoc.
