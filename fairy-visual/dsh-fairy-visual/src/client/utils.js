@@ -1,10 +1,23 @@
-import { MODE_ATTR, PALETTE_ATTR, PALETTES, POWER_MODE_ATTR, THEME_ATTR } from './constants.js';
+import { MASCOT_POSITION_ATTR, MASCOT_POSITIONS, MODE_ATTR, PALETTE_ATTR, PALETTES, POWER_MODE_ATTR, THEME_ATTR } from './constants.js';
 
 import { deriveSessionComfort } from './comfort-detector.js';
+
+const MASCOT_POSITION_DEFAULT = 'center';
 
 export function deriveSessionActivity(snapshot) {
   if (deriveSessionComfort(snapshot)) return 'comforting';
   return snapshot?.running === true ? 'thinking' : 'normal';
+}
+
+export function normalizeMascotPosition(value) {
+  return MASCOT_POSITIONS.includes(value) ? value : MASCOT_POSITION_DEFAULT;
+}
+
+/** 大眼睛位置：设置值 → 吉祥物根的属性（CSS 消费）；根未挂载时静默跳过。 */
+export function applyMascotPosition(value, documentRef = document) {
+  const root = documentRef?.getElementById('dsh-fairy-root');
+  if (!root?.setAttribute) return;
+  root.setAttribute(MASCOT_POSITION_ATTR, normalizeMascotPosition(value));
 }
 
 export function syncDocumentMode(snapshot) {

@@ -1,6 +1,3 @@
-const CONTROL_ATTR = 'data-dsh-fairy-mascot-scale-control';
-const BASE_ATTR = 'data-dsh-fairy-mascot-scale-base';
-const INPUT_ATTR = 'data-dsh-fairy-mascot-scale-input';
 const ROOT_ID = 'dsh-fairy-root';
 
 const MASCOT_SCALE_MIN = 0.55;
@@ -8,11 +5,6 @@ const MASCOT_SCALE_MAX = 1;
 const MASCOT_SCALE_STEP = 0.01;
 const MASCOT_SCALE_DEFAULT = 1;
 const MASCOT_GEOMETRY_EVENT = 'dsh-fairy-mascot-geometry';
-const { setControllerSetting, settingError } = require('./settings-write.js');
-
-function scaleProgress(value) {
-  return ((clampScale(value) - MASCOT_SCALE_MIN) / (MASCOT_SCALE_MAX - MASCOT_SCALE_MIN)) * 100;
-}
 
 function clampScale(value) {
   const numeric = Number(value);
@@ -59,7 +51,7 @@ function applyMascotScale(value, documentRef = document) {
   root.setAttribute('data-dsh-fairy-mascot-scale', String(scale));
   // CSS transforms do not change layout size, so ResizeObserver cannot tell
   // the content fade that the eye's rendered perimeter moved. Notify the
-  // geometry owner after the transform write; its RAF coalesces drag events.
+  // geometry owner after the transform write.
   notifyMascotGeometry(documentRef, scale);
   return true;
 }
@@ -76,131 +68,6 @@ function scheduleMascotScale(value, documentRef = document) {
   return () => { if (frame) cancelAnimationFrame(frame); };
 }
 
-// The outer shell owns the existing Fairy hardware material. The interactive
-// control is mounted inside it so its inset is measured from one stable box.
-function createMascotScaleBase(host, controller, documentRef = document) {
-  if (!host) return null;
-  const existing = host.querySelector?.(`[${BASE_ATTR}="true"]`);
-  if (existing) {
-    existing.removeAttribute('aria-hidden');
-    const control = controller && !existing.querySelector(`[${CONTROL_ATTR}="true"]`)
-      ? createMascotScaleControl(existing, controller, documentRef)
-      : null;
-    return {
-      host,
-      node: existing,
-      dispose() { control?.dispose?.(); },
-    };
-  }
-
-  const shell = documentRef.createElement('span');
-  shell.setAttribute(BASE_ATTR, 'true');
-  host.appendChild(shell);
-  const control = controller ? createMascotScaleControl(shell, controller, documentRef) : null;
-  return {
-    host,
-    node: shell,
-    dispose() {
-      control?.dispose?.();
-      if (shell.parentElement === host) shell.remove();
-    },
-  };
-}
-
-function createMascotScaleControl(host, controller, documentRef = document) {
-  if (!host || !controller) return null;
-  const existing = host.querySelector(`[${CONTROL_ATTR}="true"]`);
-  if (existing) return { host, node: existing, dispose() {} };
-
-  const shell = documentRef.createElement('span');
-  shell.setAttribute(CONTROL_ATTR, 'true');
-  shell.setAttribute('role', 'group');
-  shell.setAttribute('aria-label', 'Fairy 眼睛大小');
-
-  const input = documentRef.createElement('input');
-  input.type = 'range';
-  input.setAttribute(INPUT_ATTR, 'true');
-  input.min = String(MASCOT_SCALE_MIN);
-  input.max = String(MASCOT_SCALE_MAX);
-  input.step = String(MASCOT_SCALE_STEP);
-  input.setAttribute('aria-label', 'Fairy 眼睛大小');
-  shell.appendChild(input);
-  host.appendChild(shell);
-
-  let committed = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-  let interacting = false;
-  let cancelPendingScale = null;
-
-  const updateInput = (value) => {
-    const scale = clampScale(value);
-    input.value = String(scale);
-    const progress = `${scaleProgress(scale).toFixed(2)}%`;
-    input.style.setProperty('--dsh-fairy-scale', progress);
-    shell.style.setProperty('--dsh-fairy-scale', progress);
-    input.setAttribute('aria-valuetext', `${Math.round(scale * 100)}%`);
-    input.title = `Fairy 眼睛大小 ${Math.round(scale * 100)}%`;
-    cancelPendingScale?.();
-    cancelPendingScale = scheduleMascotScale(scale, documentRef);
-  };
-  const commit = () => {
-    const next = clampScale(input.value);
-    input.value = String(next);
-    if (next === committed) {
-      interacting = false;
-      return;
-    }
-    committed = next;
-    interacting = false;
-    setControllerSetting(controller, 'mascotScale', next).catch((error) => {
-      settingError('mascotScale', error);
-      committed = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-      updateInput(committed);
-    });
-  };
-  const onInput = () => updateInput(input.value);
-  const onPointerDown = () => { interacting = true; };
-  const onPointerUp = () => commit();
-  const onPointerCancel = () => commit();
-  const onBlur = () => { if (interacting) commit(); };
-  const onKeyDown = () => { interacting = true; };
-  const onKeyUp = () => commit();
-  const onChange = () => commit();
-  input.addEventListener('input', onInput);
-  input.addEventListener('pointerdown', onPointerDown);
-  input.addEventListener('pointerup', onPointerUp);
-  input.addEventListener('pointercancel', onPointerCancel);
-  input.addEventListener('keydown', onKeyDown);
-  input.addEventListener('keyup', onKeyUp);
-  input.addEventListener('change', onChange);
-  input.addEventListener('blur', onBlur);
-  const off = controller.subscribe?.(() => {
-    if (interacting) return;
-    const next = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-    committed = next;
-    updateInput(next);
-  });
-
-  updateInput(committed);
-  return {
-    host,
-    node: shell,
-    dispose() {
-      cancelPendingScale?.();
-      cancelPendingScale = null;
-      off?.();
-      input.removeEventListener('input', onInput);
-      input.removeEventListener('pointerdown', onPointerDown);
-      input.removeEventListener('pointerup', onPointerUp);
-      input.removeEventListener('pointercancel', onPointerCancel);
-      input.removeEventListener('keydown', onKeyDown);
-      input.removeEventListener('keyup', onKeyUp);
-      input.removeEventListener('change', onChange);
-      input.removeEventListener('blur', onBlur);
-      shell.remove();
-    },
-  };
-}
-
 module.exports = {
   MASCOT_SCALE_MIN,
   MASCOT_SCALE_MAX,
@@ -209,6 +76,4 @@ module.exports = {
   MASCOT_GEOMETRY_EVENT,
   applyMascotScale,
   scheduleMascotScale,
-  createMascotScaleBase,
-  createMascotScaleControl,
 };

@@ -28,10 +28,6 @@ const { createToBottomPositioner } = require('./to-bottom-positioner.js');
 const { createComposerSessionResolver } = require('./composer-session-rebinding.js');
 const { createResizeController, HEIGHT_MIN, HEIGHT_MAX, CONTENT_MIN } = require('./composer-resize-controller.js');
 const { setControllerSetting, settingError } = require('./settings-write.js');
-const { createMascotScaleBase } = require('./mascot-scale-control.js');
-const { createMascotAnimationSpeedBase } = require('./mascot-animation-speed-control.js');
-const { createMascotPositionBase } = require('./mascot-position-control.js');
-const { createMascotPaletteBase } = require('./mascot-palette-control.js');
 const MARKER_ATTRS = [
   COMPOSER_ATTR,
   'data-dsh-fairy-composer-row',
@@ -97,10 +93,6 @@ function mountComposerDock(controller) {
   let seat = null;
   let card = null;
   let clearControls = () => {};
-  let mascotScaleBase = null;
-  let mascotAnimationSpeedBase = null;
-  let mascotPositionBase = null;
-  let mascotPaletteBase = null;
   let previousSeatStyle = null;
   let height = HEIGHT_MIN;
   let workspaceTemplate = null;
@@ -219,8 +211,6 @@ function mountComposerDock(controller) {
     workspaceProjection?.remove();
     workspaceProjection = null;
     removeMaterialLayer();
-    removeMascotScaleBase();
-    removeMascotAnimationSpeedBase();
     removeLegacyVoiceDensityMarker();
     seat.querySelector('[data-dsh-fairy-composer-stack="true"]')?.removeAttribute('data-dsh-fairy-model-menu-open');
     // Clear the complete owned marker tree. A replacement can leave a marker
@@ -272,62 +262,6 @@ function mountComposerDock(controller) {
   const removeHandle = () => resizeController.unmount();
   const createHandle = () => resizeController.mount();
   const updateHandle = () => resizeController.updateHandle();
-  const removeLegacyMascotScaleControl = () => {
-    seat?.querySelectorAll?.('[data-dsh-fairy-mascot-scale-control="true"]').forEach((node) => {
-      if (!node.closest?.('[data-dsh-fairy-mascot-scale-base="true"]')) node.remove();
-    });
-  };
-  const removeMascotScaleBase = () => {
-    mascotScaleBase?.dispose?.();
-    mascotScaleBase = null;
-    seat?.querySelectorAll?.('[data-dsh-fairy-mascot-scale-base="true"]').forEach((node) => node.remove());
-  };
-  const removeMascotAnimationSpeedBase = () => {
-    mascotAnimationSpeedBase?.dispose?.();
-    mascotAnimationSpeedBase = null;
-    seat?.querySelectorAll?.('[data-dsh-fairy-mascot-animation-speed-base="true"]').forEach((node) => node.remove());
-  };
-  const removeMascotPositionBase = () => {
-    mascotPositionBase?.dispose?.();
-    mascotPositionBase = null;
-    seat?.querySelectorAll?.('[data-dsh-fairy-mascot-position-control="true"]').forEach((node) => node.remove());
-  };
-  const removeMascotPaletteBase = () => {
-    mascotPaletteBase?.dispose?.();
-    mascotPaletteBase = null;
-    seat?.querySelectorAll?.('[data-dsh-fairy-palette-control="true"]').forEach((node) => node.remove());
-  };
-  const ensureMascotAnimationSpeedBase = () => {
-    if (!card) return;
-    if (mascotAnimationSpeedBase?.node?.isConnected && mascotAnimationSpeedBase.host === card) return;
-    removeMascotAnimationSpeedBase();
-    mascotAnimationSpeedBase = createMascotAnimationSpeedBase(card, document, {
-      initialRate: Number(snapshot().settings?.mascotAnimationSpeed) || 1,
-      onChange: (rate) => {
-        const result = setControllerSetting(controller, 'mascotAnimationSpeed', rate);
-        result.catch((error) => settingError('mascotAnimationSpeed', error));
-        return result;
-      },
-    });
-  };
-  const ensureMascotScaleBase = () => {
-    if (!card) return;
-    if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
-    removeMascotScaleBase();
-    mascotScaleBase = createMascotScaleBase(card, controller);
-  };
-  const ensureMascotPositionBase = () => {
-    if (!card) return;
-    if (mascotPositionBase?.node?.isConnected && mascotPositionBase.host === card) return;
-    removeMascotPositionBase();
-    mascotPositionBase = createMascotPositionBase(card, controller);
-  };
-  const ensureMascotPaletteBase = () => {
-    if (!card) return;
-    if (mascotPaletteBase?.node?.isConnected && mascotPaletteBase.host === card) return;
-    removeMascotPaletteBase();
-    mascotPaletteBase = createMascotPaletteBase(card, controller);
-  };
   // While a question card is elected the seat is auto-height and the card can
   // resize with its own content (multiple questions, expanding options). The
   // structural observer only fires on tree changes, so the inset follows the
@@ -448,21 +382,12 @@ function mountComposerDock(controller) {
       workspaceProjection?.remove();
       workspaceProjection = null;
       removeMaterialLayer();
-      removeMascotScaleBase();
-      removeMascotAnimationSpeedBase();
-      removeMascotPositionBase();
-      removeMascotPaletteBase();
       removeLegacyVoiceDensityMarker(card);
       card = currentCard;
       removeLegacyVoiceDensityMarker();
       clearControls = markControls(card);
       ensureCardFocusHandler();
     }
-    removeLegacyMascotScaleControl();
-    ensureMascotScaleBase();
-    ensureMascotAnimationSpeedBase();
-    ensureMascotPositionBase();
-    ensureMascotPaletteBase();
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');
     if (workspaceRow) captureWorkspaceTemplate(workspaceRow);
     const stack = seat?.querySelector('[data-dsh-fairy-composer-stack="true"]');
@@ -526,7 +451,6 @@ function mountComposerDock(controller) {
     if (seat && card) {
       clearControls();
       clearControls = markControls(card);
-      removeLegacyMascotScaleControl();
       ensureCardFocusHandler();
     }
     const workspaceRow = seat?.querySelector('[data-dsh-fairy-composer-workspace="true"]:not([data-dsh-fairy-composer-workspace-projection="true"])');

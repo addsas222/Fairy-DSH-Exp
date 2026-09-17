@@ -5,6 +5,19 @@ export const POWER_MODE_ATTR = 'data-dsh-fairy-power-mode';
 export const THEME_ATTR = 'data-dsh-fairy-theme';
 export const PALETTE_ATTR = 'data-dsh-fairy-palette';
 export const PALETTES = Object.freeze(['hdd', 'ink', 'ember']);
+// 大眼睛位置：九宫格锚点（设置卡选项用同一份清单与标签）。属性落在吉祥物根
+// （#dsh-fairy-root）上，由 CSS 把锚点翻译成内层 float 的 translate 位移。
+export const MASCOT_POSITION_ATTR = 'data-dsh-fairy-mascot-position';
+export const MASCOT_POSITIONS = Object.freeze([
+  'top-left', 'top-center', 'top-right',
+  'middle-left', 'center', 'middle-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
+]);
+export const MASCOT_POSITION_LABELS = Object.freeze({
+  'top-left': '左上', 'top-center': '中上', 'top-right': '右上',
+  'middle-left': '左中', 'center': '居中', 'middle-right': '右中',
+  'bottom-left': '左下', 'bottom-center': '中下', 'bottom-right': '右下',
+});
 export const POWER_TOGGLE_WIDTH = 82;
 export const POWER_TOGGLE_HEIGHT = 22;
 

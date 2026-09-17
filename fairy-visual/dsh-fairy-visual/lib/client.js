@@ -573,6 +573,9 @@ window.__ModuleLoader__.load({
 	var constants_exports = /* @__PURE__ */ __exportAll({
 		DEFAULT: () => DEFAULT,
 		HERO_PLACEHOLDERS: () => HERO_PLACEHOLDERS,
+		MASCOT_POSITIONS: () => MASCOT_POSITIONS,
+		MASCOT_POSITION_ATTR: () => MASCOT_POSITION_ATTR,
+		MASCOT_POSITION_LABELS: () => MASCOT_POSITION_LABELS,
 		MODE_ATTR: () => MODE_ATTR,
 		PALETTES: () => PALETTES,
 		PALETTE_ATTR: () => PALETTE_ATTR,
@@ -583,7 +586,7 @@ window.__ModuleLoader__.load({
 		STYLE_ID: () => STYLE_ID,
 		THEME_ATTR: () => THEME_ATTR
 	});
-	var SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, PALETTES, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT, HERO_PLACEHOLDERS;
+	var SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, PALETTES, MASCOT_POSITION_ATTR, MASCOT_POSITIONS, MASCOT_POSITION_LABELS, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT, HERO_PLACEHOLDERS;
 	var init_constants = __esmMin((() => {
 		SETTINGS_NAMESPACE = "fairy-visual";
 		STYLE_ID = "dsh-fairy-visual-style";
@@ -596,6 +599,29 @@ window.__ModuleLoader__.load({
 			"ink",
 			"ember"
 		]);
+		MASCOT_POSITION_ATTR = "data-dsh-fairy-mascot-position";
+		MASCOT_POSITIONS = Object.freeze([
+			"top-left",
+			"top-center",
+			"top-right",
+			"middle-left",
+			"center",
+			"middle-right",
+			"bottom-left",
+			"bottom-center",
+			"bottom-right"
+		]);
+		MASCOT_POSITION_LABELS = Object.freeze({
+			"top-left": "左上",
+			"top-center": "中上",
+			"top-right": "右上",
+			"middle-left": "左中",
+			"center": "居中",
+			"middle-right": "右中",
+			"bottom-left": "左下",
+			"bottom-center": "中下",
+			"bottom-right": "右下"
+		});
 		POWER_TOGGLE_WIDTH = 82;
 		POWER_TOGGLE_HEIGHT = 22;
 		DEFAULT = {
@@ -707,12 +733,23 @@ window.__ModuleLoader__.load({
 //#endregion
 //#region src/client/utils.js
 	var utils_exports = /* @__PURE__ */ __exportAll({
+		applyMascotPosition: () => applyMascotPosition,
 		deriveSessionActivity: () => deriveSessionActivity,
+		normalizeMascotPosition: () => normalizeMascotPosition,
 		syncDocumentMode: () => syncDocumentMode
 	});
 	function deriveSessionActivity(snapshot) {
 		if (deriveSessionComfort(snapshot)) return "comforting";
 		return snapshot?.running === true ? "thinking" : "normal";
+	}
+	function normalizeMascotPosition(value) {
+		return MASCOT_POSITIONS.includes(value) ? value : MASCOT_POSITION_DEFAULT;
+	}
+	/** 大眼睛位置：设置值 → 吉祥物根的属性（CSS 消费）；根未挂载时静默跳过。 */
+	function applyMascotPosition(value, documentRef = document) {
+		const root = documentRef?.getElementById("dsh-fairy-root");
+		if (!root?.setAttribute) return;
+		root.setAttribute(MASCOT_POSITION_ATTR, normalizeMascotPosition(value));
 	}
 	function syncDocumentMode(snapshot) {
 		const value = snapshot?.value || snapshot || {};
@@ -737,9 +774,11 @@ window.__ModuleLoader__.load({
 			root.removeAttribute(PALETTE_ATTR);
 		}
 	}
+	var MASCOT_POSITION_DEFAULT;
 	var init_utils = __esmMin((() => {
 		init_constants();
 		init_comfort_detector();
+		MASCOT_POSITION_DEFAULT = "center";
 	}));
 
 //#endregion
@@ -844,14 +883,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"] .re-model-trigger{gap:8px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"] .re-model-chevron{margin-left:0!important;margin-right:0!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"]{width:220px!important;max-width:220px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"] .re-model-name{min-width:0!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"]{width:200px!important;max-width:200px!important}}@media(max-width:760px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"]{width:176px!important;max-width:176px!important}}`);
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{box-shadow:inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13),-4px -4px 9px rgba(255,255,255,.06),5px 6px 13px rgba(0,0,0,.13)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{position:absolute!important;z-index:12!important;left:0!important;right:0!important;top:25px!important;width:100%!important;height:20px!important;min-width:0!important;box-sizing:border-box!important;display:block!important;padding:2px 7px!important;border:2px solid transparent!important;border-radius:999px!important;background:linear-gradient(var(--dsh-card-fill,#30353a),var(--dsh-card-fill,#30353a)) padding-box,var(--dsh-card-border,linear-gradient(135deg,#555f68,#3d444b)) border-box!important;box-shadow:inset 1px 1px 0 var(--dsh-card-sheen-light,rgba(255,255,255,.04)),inset -1px -1px 0 var(--dsh-card-sheen-dark,rgba(0,0,0,.14)),2px 3px 8px rgba(0,0,0,.18)!important;pointer-events:auto!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]{--dsh-fairy-scale:100%;appearance:none!important;-webkit-appearance:none!important;display:block!important;width:100%!important;height:12px!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;cursor:pointer!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track{height:3px;border-radius:999px;background:linear-gradient(to right,var(--dsw-alias-label-secondary) 0 var(--dsh-fairy-scale),var(--dsw-alias-border-l2) var(--dsh-fairy-scale) 100%)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;margin-top:-3.5px;border:2px solid var(--dsh-card-fill,#30353a);border-radius:50%;background:var(--dsw-alias-label-secondary);box-shadow:0 0 0 1px var(--dsw-alias-border-l2)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]:focus-visible{outline:none}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 2px var(--dsw-alias-brand-primary)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track{height:3px;border:0;border-radius:999px;background:var(--dsw-alias-border-l2)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{height:3px;border-radius:999px;background:var(--dsw-alias-label-secondary)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{width:8px;height:8px;border:2px solid var(--dsh-card-fill,#30353a);border-radius:50%;background:var(--dsw-alias-label-secondary);box-shadow:0 0 0 1px var(--dsw-alias-border-l2)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]:focus-within{box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-brand-primary) 35%,transparent),inset 1px 1px 0 var(--dsh-card-sheen-light,rgba(255,255,255,.04)),inset -1px -1px 0 var(--dsh-card-sheen-dark,rgba(0,0,0,.14)),2px 3px 8px rgba(0,0,0,.18)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot-scale-control="true"]{box-shadow:inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08),2px 3px 8px rgba(52,63,73,.10)!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{top:25px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]{display:none!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{position:absolute!important;z-index:11!important;right:0!important;top:33px!important;bottom:auto!important;left:auto!important;width:152px!important;height:28px!important;min-width:152px!important;max-width:152px!important;min-height:28px!important;max-height:28px!important;box-sizing:border-box!important;border:2px solid transparent!important;border-radius:999px!important;pointer-events:none!important;background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face)) padding-box,var(--dsh-fairy-keycap-edge) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{right:-2px!important;width:108px!important;min-width:108px!important;max-width:108px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{display:none!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-base="true"]{position:absolute!important;z-index:11!important;right:0!important;top:65px!important;bottom:auto!important;left:auto!important;width:152px!important;height:28px!important;min-width:152px!important;max-width:152px!important;min-height:28px!important;max-height:28px!important;box-sizing:border-box!important;padding:0!important;border:2px solid transparent!important;border-radius:999px!important;pointer-events:none!important;background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face)) padding-box,var(--dsh-fairy-keycap-edge) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-base="true"]{background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{position:absolute!important;inset:5px!important;box-sizing:border-box!important;border-radius:999px!important;background:linear-gradient(#30353a,#30353a)!important;box-shadow:inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{background:linear-gradient(#f4f5f6,#f4f5f6)!important;box-shadow:inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-base="true"]{right:-2px!important;width:108px!important;min-width:108px!important;max-width:108px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-animation-speed-base="true"]{display:none!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-animation-speed-control="true"]{display:block!important;overflow:visible!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-tick]{position:absolute!important;top:50%!important;width:5px!important;height:5px!important;margin:0!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:50%!important;background:#69747c!important;box-shadow:inset 0 1px 1px rgba(0,0,0,.32),0 1px 1px rgba(255,255,255,.04)!important;transform:translate(-50%,-50%)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-tick="0.5"]{left:6px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-tick="1"]{left:50%!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-tick="2"]{left:calc(100% - 6px)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{position:absolute!important;z-index:2!important;top:50%!important;left:50%!important;width:12px!important;height:12px!important;margin:0!important;border:2px solid rgba(255,255,255,.72)!important;border-radius:50%!important;background:radial-gradient(circle at 28% 28%,rgba(255,255,255,.78) 0 9%,transparent 30%),radial-gradient(circle at 72% 68%,rgba(196,113,231,.96) 0 13%,transparent 48%),radial-gradient(circle at 28% 70%,rgba(103,176,243,.96) 0 15%,transparent 52%),radial-gradient(circle at 66% 25%,rgba(247,142,194,.94) 0 16%,transparent 54%),linear-gradient(135deg,#8fcfff 0%,#b997ed 48%,#efa5cc 100%)!important;box-shadow:0 0 0 1px rgba(95,80,150,.30),0 1px 3px rgba(44,49,74,.28),inset 0 1px 1px rgba(255,255,255,.48),inset 0 -1px 1px rgba(70,49,105,.22)!important;transform:translate(-50%,-50%)!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{inset:5px!important}}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-tick]{border-color:rgba(52,63,73,.20)!important;background:#aeb6bc!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.58),0 1px 1px rgba(52,63,73,.10)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{border-color:rgba(255,255,255,.82)!important;background:radial-gradient(circle at 28% 28%,rgba(255,255,255,.68) 0 9%,transparent 30%),radial-gradient(circle at 72% 68%,rgba(190,104,224,.98) 0 13%,transparent 48%),radial-gradient(circle at 28% 70%,rgba(88,157,231,.96) 0 15%,transparent 52%),radial-gradient(circle at 66% 25%,rgba(241,126,187,.96) 0 16%,transparent 54%),linear-gradient(135deg,#8bc9f4 0%,#ae91e2 48%,#eca3c9 100%)!important;box-shadow:0 0 0 1px rgba(95,80,150,.24),0 1px 3px rgba(52,63,73,.18),inset 0 1px 1px rgba(255,255,255,.48),inset 0 -1px 1px rgba(70,49,105,.16)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{position:absolute!important;z-index:11!important;right:12px!important;top:-1px!important;bottom:auto!important;left:auto!important;width:152px!important;height:28px!important;min-width:152px!important;max-width:152px!important;min-height:28px!important;max-height:28px!important;margin:0!important;padding:2px 6px!important;display:flex!important;align-items:center!important;gap:3px!important;box-sizing:border-box!important;border:1px solid rgba(30,39,48,.16)!important;border-radius:999px!important;background:#fff!important;color:#25313b!important;box-shadow:inset 1px 1px 0 rgba(255,255,255,.78),inset -1px -1px 0 rgba(30,39,48,.10),2px 3px 8px rgba(30,39,48,.12)!important;overflow:visible!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-auto-control="true"]{position:relative!important;z-index:3!important;width:16px!important;height:16px!important;min-width:16px!important;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;color:inherit!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-auto-dot="true"]{display:block!important;width:8px!important;height:8px!important;border-radius:50%!important;background:#d4d8dc!important;box-shadow:inset 0 1px 1px rgba(0,0,0,.12)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-auto-control="true"][data-on="true"] [data-dsh-fairy-auto-dot="true"]{background:#e24b4b!important;box-shadow:0 0 0 2px rgba(226,75,75,.12),inset 0 1px 1px rgba(255,255,255,.24)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-waveform="true"]{display:flex!important;position:relative!important;z-index:1!important;height:18px!important;padding:0 3px!important;gap:1px!important;color:#26343e!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-wave-bar="true"]{width:2px!important;min-width:2px!important;background:currentColor!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-volume-input="true"]{position:absolute!important;z-index:2!important;left:22px!important;right:3px!important;top:0!important;width:auto!important;height:100%!important;margin:0!important;opacity:0!important;cursor:pointer!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [role="tooltip"]{transform:translateY(11px)!important;font-size:11px!important;font-weight:650!important;line-height:16px!important;padding:2px 6px!important;border:1px solid #c1c8ce!important;border-radius:999px!important;background:#f4f5f6!important;color:#293139!important;box-shadow:-3px -3px 7px rgba(255,255,255,.46),4px 5px 10px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border-color:transparent!important;background:#30353a!important;color:#f1f6fa!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [role="tooltip"]{border-color:#555f68!important;background:#30353a!important;color:#f1f6fa!important;box-shadow:-3px -3px 7px rgba(255,255,255,.06),4px 5px 10px rgba(0,0,0,.16),inset 1px 1px 0 rgba(255,255,255,.03),inset -1px -1px 0 rgba(0,0,0,.13)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-wave-bar="true"]{--dsh-fairy-wave-opacity:.72!important;color:#f1f6fa!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-wave-bar="true"][data-active="true"]{--dsh-fairy-wave-opacity:1!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-auto-dot="true"]{background:#e9f0f5!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-on="true"] [data-dsh-fairy-auto-dot="true"]{background:#e24b4b!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-voice-control="true"]{right:10px!important;width:108px!important;min-width:108px!important;max-width:108px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-voice-control="true"]{right:8px!important;top:10px!important;bottom:auto!important;width:116px!important;min-width:116px!important;max-width:116px!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{pointer-events:auto!important;touch-action:none!important;cursor:grab!important;user-select:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"][data-dragging="true"]{cursor:grabbing!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{transition:left 180ms cubic-bezier(.2,.8,.2,1),transform 120ms ease,box-shadow 120ms ease!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"][data-dragging="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{transition:left 40ms linear,transform 80ms ease!important;transform:translate(-50%,-50%) scale(1.12)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-position="0"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{left:6px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-position="0.5"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{left:50%!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-position="1"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{left:calc(100% - 6px)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-animation-speed-tick="0.5"],html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-animation-speed-tick="2"]{display:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-animation-speed-tick="0.7"]{left:6px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-animation-speed-tick="1.5"]{left:calc(100% - 6px)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face))!important;box-shadow:inset 0 1px 2px rgba(255,255,255,.12),inset 0 -1px 2px rgba(0,0,0,.42)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{background:linear-gradient(#f4f5f6,#f4f5f6)!important;box-shadow:inset 0 1px 2px rgba(255,255,255,.52),inset 0 -1px 2px rgba(52,63,73,.22)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-wave-bar="true"]{width:2px!important;min-width:0!important;max-width:2px!important;flex:1 1 2px!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border-style:solid!important;border-width:2px!important;border-color:transparent!important;background:linear-gradient(var(--dsh-card-fill),var(--dsh-card-fill)) padding-box,var(--dsh-card-border) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{background-image:radial-gradient(circle at 1px 1px,var(--dsh-card-grain-light) 0 .34px,transparent .68px),radial-gradient(circle at 2px 3px,var(--dsh-card-grain-dark) 0 .34px,transparent .72px),linear-gradient(135deg,var(--dsh-card-sheen-light),transparent 48%,var(--dsh-card-sheen-dark)),linear-gradient(var(--dsh-card-fill),var(--dsh-card-fill)),var(--dsh-card-border)!important;background-size:4px 4px,7px 7px,100% 100%,100% 100%,100% 100%!important;background-position:0 0,1px 2px,0 0,0 0,0 0!important;background-repeat:repeat,repeat,no-repeat,no-repeat,no-repeat!important;background-clip:padding-box,padding-box,padding-box,padding-box,border-box!important;background-origin:padding-box,padding-box,padding-box,padding-box,border-box!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{--dsh-card-fill:#f4f5f6;--dsh-card-grain-light:rgba(255,255,255,.12);--dsh-card-grain-dark:rgba(74,87,98,.048);--dsh-card-sheen-light:rgba(255,255,255,.085);--dsh-card-sheen-dark:rgba(74,87,98,.032);--dsh-card-border:linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%);color:#293139!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]:is(:hover,:focus-visible){--dsh-card-sheen-light:rgba(255,255,255,.13)}`);
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-modal-open] [data-dsh-fairy-overlay-layer="true"],html[data-dsh-fairy-visual][data-dsh-fairy-modal-open] [data-dsh-fairy-composer-dock="true"]{z-index:1!important}html[data-dsh-fairy-visual][data-dsh-fairy-modal-open] [data-dsh-fairy-sidebar-layer="true"]::after{z-index:0!important}`);
@@ -860,7 +892,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"][data-dsh-fairy-composer-attachments-active="true"]::after{background-color:var(--dsh-input-substrate)!important;background-image:var(--dsh-input-substrate-image)!important;background-attachment:fixed!important;background-position:0 0!important;background-repeat:no-repeat,no-repeat,no-repeat,repeat,repeat!important;background-size:auto,auto,auto,48px 48px,48px 48px!important}`);
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-a{background:radial-gradient(ellipse 56vmax 29vh at 46% 48%,rgba(96,212,255,.27),rgba(54,184,255,.135) 52%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-b{background:radial-gradient(ellipse 53vmax 37vh at 55% 52%,rgba(157,132,255,.23),rgba(119,91,255,.115) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] .dsh-hdd-glow-c{background:radial-gradient(ellipse 50vmax 26vh at 54% 49%,rgba(174,112,255,.24),rgba(143,94,255,.12) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-a{background:radial-gradient(ellipse 56vmax 29vh at 46% 48%,rgba(48,180,229,.22),rgba(54,184,255,.10) 52%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-b{background:radial-gradient(ellipse 53vmax 37vh at 55% 52%,rgba(139,115,241,.17),rgba(119,91,255,.078) 53%,transparent 100%)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] .dsh-hdd-glow-c{background:radial-gradient(ellipse 50vmax 26vh at 54% 49%,rgba(154,91,233,.17),rgba(143,94,233,.075) 53%,transparent 100%)}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-native-new-session="true"]{transition:filter 90ms ease,transform 90ms ease}html[data-dsh-fairy-visual] [data-dsh-fairy-native-new-session="true"]:active{filter:brightness(.84)!important;transform:translateY(1px)!important}`);
-		appendSection(`@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]{display:block!important}}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root="true"]{--dsh-fairy-mascot-shift-x:0px;--dsh-fairy-mascot-shift-y:0px}` + [
 			"top-left",
 			"top-center",
@@ -882,33 +913,9 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				26
 			][Math.floor(index / 3)]}%}`;
 		}).join("") + "html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}");
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:110px!important;width:max-content!important;height:18px!important;display:flex!important;align-items:center!important;gap:1px!important;padding:2px 3px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;color:var(--dsh-palette-text-dim,rgba(255,255,255,.72))!important;pointer-events:auto!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:10px!important;height:10px!important;padding:0!important;border-radius:4px!important;border:1px solid var(--dsh-palette-line,rgba(255,255,255,.18))!important;background:transparent!important;color:var(--dsh-palette-text-dim,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important;cursor:pointer!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button][aria-pressed="true"]{background:var(--dsh-fairy-keycap-face,#555f68)!important;border-color:var(--dsh-fairy-keycap-edge,#3d444b)!important;color:#fff!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"]{position:absolute!important;z-index:12!important;right:calc(7px + 104px + 8px)!important;top:110px!important;width:max-content!important;height:18px!important;display:flex!important;align-items:center!important;gap:2px!important;padding:2px 3px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;pointer-events:auto!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"] [data-dsh-fairy-palette-button]{appearance:none!important;width:12px!important;height:12px!important;padding:0!important;border-radius:4px!important;border:1px solid var(--dsh-palette-line,rgba(255,255,255,.18))!important;cursor:pointer!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"] [data-dsh-fairy-palette-button][data-dsh-fairy-palette-swatch="hdd"]{background:#30353a!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"] [data-dsh-fairy-palette-button][data-dsh-fairy-palette-swatch="ink"]{background:#2b3340!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"] [data-dsh-fairy-palette-button][data-dsh-fairy-palette-swatch="ember"]{background:#382f2b!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-palette-control="true"] [data-dsh-fairy-palette-button][aria-pressed="true"]{outline:1px solid var(--dsh-palette-accent,#7cc4ff)!important;outline-offset:1px!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{top:31px!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{height:24px!important;padding:2px 6px!important;overflow:hidden!important;--dsh-fairy-scale-track:#8ea6b5;--dsh-fairy-scale-track-rest:rgba(82,112,132,.24)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-track:#a8bac9;--dsh-fairy-scale-track-rest:rgba(168,186,201,.24)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]{position:absolute!important;left:16px!important;right:16px!important;top:50%!important;transform:translateY(-50%)!important;width:auto!important;height:16px!important;margin:0!important;box-sizing:border-box!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track{height:5px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-track) 0 var(--dsh-fairy-scale),var(--dsh-fairy-scale-track-rest) var(--dsh-fairy-scale) 100%)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{margin-top:-2.5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track{height:5px!important;background:var(--dsh-fairy-scale-track-rest)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{height:5px!important;background:var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{background:var(--dsh-fairy-scale-track)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{position:absolute!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]::before{content:''!important;position:absolute!important;z-index:0!important;left:16px!important;right:16px!important;top:50%!important;height:5px!important;transform:translateY(-50%)!important;border-radius:999px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-track) 0 var(--dsh-fairy-scale),var(--dsh-fairy-scale-track-rest) var(--dsh-fairy-scale) 100%)!important;pointer-events:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]{z-index:1!important;background:transparent!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{background:transparent!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-track:#7898aa;--dsh-fairy-scale-track-rest:rgba(82,112,132,.30)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-track:#9eb5c4;--dsh-fairy-scale-track-rest:rgba(158,181,196,.30)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{background:var(--dsh-fairy-scale-track)!important;border:2px solid var(--dsh-card-fill,#f4f5f6)!important;box-shadow:0 0 0 1px var(--dsh-fairy-scale-track)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{background:var(--dsh-fairy-scale-track)!important;border:2px solid var(--dsh-card-fill,#f4f5f6)!important;box-shadow:0 0 0 1px var(--dsh-fairy-scale-track)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track{background:transparent!important;background-image:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track,html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{background:transparent!important;background-image:none!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb{-webkit-appearance:none!important;width:10px!important;height:10px!important;background-color:#fff!important;background-image:none!important;opacity:1!important;border:2px solid #7898aa!important;box-shadow:0 0 0 1px rgba(82,112,132,.42)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{width:10px!important;height:10px!important;background-color:#fff!important;background-image:none!important;opacity:1!important;border:2px solid #7898aa!important;box-shadow:0 0 0 1px rgba(82,112,132,.42)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]{position:static!important;display:block!important;width:100%!important;height:16px!important;margin:0!important;transform:none!important;z-index:1!important;background:transparent!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track,html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track,html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{background:transparent!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-wing:176px;--dsh-fairy-composer-voice-width:152px;--dsh-fairy-composer-voice-inset:12px;--dsh-fairy-composer-voice-right:calc(var(--dsh-fairy-composer-wing) + var(--dsh-fairy-composer-voice-inset) + 5px);--dsh-fairy-input-side:var(--dsh-fairy-composer-wing);--dsh-fairy-input-control-gap:4px;--dsh-fairy-reasoning-gap:4px;--dsh-fairy-composer-reasoning-width:220px;grid-template-columns:minmax(var(--dsh-fairy-composer-wing),max-content) minmax(0,1fr) minmax(var(--dsh-fairy-composer-wing),max-content)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-model-control="true"]{left:12px!important;width:var(--dsh-fairy-composer-wing)!important;max-width:var(--dsh-fairy-composer-wing)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-workspace="true"]{width:var(--dsh-fairy-composer-wing)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-workspace-control="true"],html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-mode-control="true"],html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-mode-control="true"]>button{max-width:calc(var(--dsh-fairy-composer-wing) - 24px)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-command-control="true"]{left:var(--dsh-fairy-composer-wing)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-send-control="true"]{right:var(--dsh-fairy-composer-wing)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-context-control="true"]{right:calc(var(--dsh-fairy-composer-wing) + var(--dsh-fairy-input-control-size) + var(--dsh-fairy-input-control-gap))!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"]{right:calc(var(--dsh-fairy-composer-wing) + (var(--dsh-fairy-input-control-size) * 2) + var(--dsh-fairy-input-control-gap) + var(--dsh-fairy-reasoning-gap))!important;width:var(--dsh-fairy-composer-reasoning-width)!important;max-width:var(--dsh-fairy-composer-reasoning-width)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{right:var(--dsh-fairy-composer-voice-right)!important;width:var(--dsh-fairy-composer-voice-width)!important;min-width:var(--dsh-fairy-composer-voice-width)!important;max-width:var(--dsh-fairy-composer-voice-width)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"] [data-dsh-fairy-volume-input="true"]{right:3px!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-wing:132px;--dsh-fairy-composer-voice-width:108px;--dsh-fairy-composer-voice-inset:10px;--dsh-fairy-composer-reasoning-width:200px}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-wing:0px;--dsh-fairy-composer-voice-width:0px;--dsh-fairy-composer-voice-inset:8px;--dsh-fairy-composer-reasoning-width:0px;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{display:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-model-control="true"],html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-reasoning-control="true"]{display:none!important}}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-reasoning-gap:3px!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-voice-right:12px!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-voice-right:10px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"]{--dsh-fairy-composer-voice-right:8px!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{position:absolute!important;z-index:11!important;right:0!important;top:33px!important;bottom:auto!important;left:auto!important;width:152px!important;height:28px!important;min-width:152px!important;max-width:152px!important;min-height:28px!important;max-height:28px!important;box-sizing:border-box!important;padding:0!important;border:2px solid transparent!important;border-radius:999px!important;background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face)) padding-box,var(--dsh-fairy-keycap-edge) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important;pointer-events:auto!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]{position:absolute!important;inset:5px!important;width:auto!important;height:auto!important;min-width:0!important;max-width:none!important;min-height:0!important;max-height:none!important;box-sizing:border-box!important;padding:0!important;border:1px solid rgba(0,0,0,.42)!important;border-radius:999px!important;background:linear-gradient(to right,var(--dsh-fairy-scale-fill,#08090b) 0 var(--dsh-fairy-scale,100%),var(--dsh-fairy-scale-rest,#7d8790) var(--dsh-fairy-scale,100%) 100%)!important;box-shadow:inset 0 1px 2px rgba(255,255,255,.12),inset 0 -1px 2px rgba(0,0,0,.42)!important;overflow:hidden!important;pointer-events:auto!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;appearance:none!important;-webkit-appearance:none!important;background:transparent!important;opacity:0!important;cursor:pointer!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-runnable-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-track,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-progress{height:100%!important;background:transparent!important;border:0!important}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]::-webkit-slider-thumb,html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-input="true"]::-moz-range-thumb{width:0!important;height:0!important;border:0!important;background:transparent!important;box-shadow:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]:focus-within{box-shadow:0 0 0 2px rgba(255,255,255,.28),inset 0 1px 2px rgba(255,255,255,.12),inset 0 -1px 2px rgba(0,0,0,.42)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-rest:#aeb6bc;border-color:rgba(52,63,73,.34)!important;box-shadow:inset 0 1px 2px rgba(255,255,255,.52),inset 0 -1px 2px rgba(52,63,73,.22)!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{right:-2px!important;width:108px!important;min-width:108px!important;max-width:108px!important}}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-scale-base="true"]{display:none!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-fill:#000000!important;--dsh-fairy-scale-rest:#cfd2d5!important;border:0!important;box-shadow:none!important;background:linear-gradient(to right,#000000 0 var(--dsh-fairy-scale,100%),#cfd2d5 var(--dsh-fairy-scale,100%) 100%)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]::before,html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]::after{display:none!important;content:none!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-control="true"]:focus-within{box-shadow:none!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-rest:#cfd2d5!important;--dsh-fairy-scale-gradient-start:#8bb9c8;--dsh-fairy-scale-gradient-blue:#36519a;--dsh-fairy-scale-gradient-purple:#624d9f;--dsh-fairy-scale-gradient-end:#b26b99;--dsh-fairy-scale-inset-shadow:inset 0 0 6px rgba(52,63,73,.48);background-image:linear-gradient(to right,transparent 0 var(--dsh-fairy-scale,100%),#cfd2d5 var(--dsh-fairy-scale,100%) 100%),radial-gradient(ellipse 38% 170% at 15% 18%,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%),radial-gradient(ellipse 42% 150% at 40% 90%,rgba(36,82,186,.28) 0%,rgba(36,82,186,0) 72%),radial-gradient(ellipse 36% 150% at 68% 24%,rgba(190,107,232,.25) 0%,rgba(190,107,232,0) 72%),radial-gradient(ellipse 34% 160% at 91% 82%,rgba(255,180,220,.28) 0%,rgba(255,180,220,0) 70%),linear-gradient(to right,var(--dsh-fairy-scale-gradient-start) 0%,var(--dsh-fairy-scale-gradient-blue) 34%,var(--dsh-fairy-scale-gradient-purple) 67%,var(--dsh-fairy-scale-gradient-end) 100%)!important;background-color:#cfd2d5!important;background-repeat:no-repeat!important;box-shadow:var(--dsh-fairy-scale-inset-shadow)!important}`);
-		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-gradient-start:#d6f5ff;--dsh-fairy-scale-gradient-blue:#7897d8;--dsh-fairy-scale-gradient-purple:#b29be8;--dsh-fairy-scale-gradient-end:#f7bbdc;--dsh-fairy-scale-inset-shadow:inset 0 0 6px rgba(52,63,73,.48)}html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"] [data-dsh-fairy-mascot-scale-control="true"]{--dsh-fairy-scale-gradient-start:#8bb9c8;--dsh-fairy-scale-gradient-blue:#36519a;--dsh-fairy-scale-gradient-purple:#624d9f;--dsh-fairy-scale-gradient-end:#b26b99;--dsh-fairy-scale-inset-shadow:inset 0 0 6px rgba(0,0,0,.68)}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{top:39px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-base="true"]{top:79px!important}@media(max-width:900px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-scale-base="true"]{top:39px!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-base="true"]{top:79px!important}}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{overflow:hidden!important;box-shadow:inset 0 2px 3px rgba(0,0,0,.24),inset 0 -2px 3px rgba(255,255,255,.16)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{box-shadow:inset 0 2px 3px rgba(52,63,73,.18),inset 0 -2px 3px rgba(255,255,255,.65)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{box-shadow:inset 0 2px 3px rgba(0,0,0,.30),inset 0 -1px 2px rgba(0,0,0,.16)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{box-shadow:inset 0 2px 3px rgba(52,63,73,.22),inset 0 -1px 2px rgba(52,63,73,.10)!important}`);
-		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{border-color:rgba(48,53,58,.94)!important;background:radial-gradient(circle at 28% 28%,rgba(255,255,255,.34) 0 9%,transparent 30%),radial-gradient(circle at 72% 68%,rgba(196,113,231,.96) 0 13%,transparent 48%),radial-gradient(circle at 28% 70%,rgba(103,176,243,.96) 0 15%,transparent 52%),radial-gradient(circle at 66% 25%,rgba(247,142,194,.94) 0 16%,transparent 54%),linear-gradient(135deg,#8fcfff 0%,#b997ed 48%,#efa5cc 100%)!important;box-shadow:0 0 0 1px rgba(15,18,22,.72),0 1px 3px rgba(0,0,0,.46),inset 0 1px 1px rgba(255,255,255,.18),inset 0 -1px 1px rgba(20,16,32,.38)!important}`);
-		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-control="true"]{overflow:visible!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{z-index:5!important;box-sizing:border-box!important;width:16px!important;height:16px!important}`);
-		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-animation-speed-thumb="1"]{border-color:rgba(112,124,137,.72)!important;box-shadow:0 0 0 1px rgba(82,94,107,.28),0 1px 3px rgba(0,0,0,.34),inset 0 1px 1px rgba(255,255,255,.18),inset 0 -1px 1px rgba(20,16,32,.28)!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-attachments="true"]{position:relative!important;z-index:2!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-attachments="true"]>*{position:relative!important;z-index:2!important;grid-column:2!important;grid-row:1!important;min-width:0!important;align-self:start!important;justify-self:stretch!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"][data-dsh-fairy-composer-attachments-active="true"]{grid-template-rows:auto minmax(0,1fr)!important}@media(max-width:620px){html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"][data-dsh-fairy-composer-attachments-active="true"]{grid-template-rows:auto minmax(0,1fr)!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-attachments="true"]>*{grid-column:1!important;grid-row:1!important}html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-composer-card="true"][data-dsh-fairy-composer-attachments-active="true"] [data-input-scroll]{grid-column:1!important;grid-row:2!important}}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;border-radius:999px!important;background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face)) padding-box,var(--dsh-fairy-keycap-edge) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
 		appendSection(`html[data-dsh-fairy-visual][data-dsh-fairy-theme="dark"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;background:linear-gradient(var(--dsh-fairy-keycap-face),var(--dsh-fairy-keycap-face)) padding-box,var(--dsh-fairy-keycap-edge) border-box!important;box-shadow:var(--dsh-fairy-keycap-shadow)!important}html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-composer-voice-control="true"]{border:2px solid transparent!important;background:linear-gradient(#f4f5f6,#f4f5f6) padding-box,linear-gradient(135deg,#dfe5e9 0%,#dce2e6 48%,#c1c8ce 100%) border-box!important;box-shadow:-4px -4px 9px rgba(255,255,255,.46),5px 6px 13px rgba(52,63,73,.10),inset 1px 1px 0 rgba(255,255,255,.58),inset -1px -1px 0 rgba(52,63,73,.08)!important}`);
@@ -3266,557 +3273,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 	}));
 
 //#endregion
-//#region src/client/mascot-scale-control.js
-	var require_mascot_scale_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const CONTROL_ATTR = "data-dsh-fairy-mascot-scale-control";
-		const BASE_ATTR = "data-dsh-fairy-mascot-scale-base";
-		const INPUT_ATTR = "data-dsh-fairy-mascot-scale-input";
-		const ROOT_ID = "dsh-fairy-root";
-		const MASCOT_SCALE_MIN = .55;
-		const MASCOT_SCALE_MAX = 1;
-		const MASCOT_SCALE_STEP = .01;
-		const MASCOT_SCALE_DEFAULT = 1;
-		const MASCOT_GEOMETRY_EVENT = "dsh-fairy-mascot-geometry";
-		const { setControllerSetting, settingError } = require_settings_write();
-		function scaleProgress(value) {
-			return (clampScale(value) - MASCOT_SCALE_MIN) / .44999999999999996 * 100;
-		}
-		function clampScale(value) {
-			const numeric = Number(value);
-			if (!Number.isFinite(numeric)) return MASCOT_SCALE_DEFAULT;
-			const stepped = Math.round(numeric / MASCOT_SCALE_STEP) * MASCOT_SCALE_STEP;
-			return Math.min(MASCOT_SCALE_MAX, Math.max(MASCOT_SCALE_MIN, Number(stepped.toFixed(2))));
-		}
-		function mascotRoot(documentRef = document) {
-			return documentRef?.getElementById(ROOT_ID) || null;
-		}
-		function notifyMascotGeometry(documentRef = document, scale = MASCOT_SCALE_DEFAULT) {
-			const target = documentRef?.defaultView || (typeof window !== "undefined" ? window : null);
-			if (!target?.dispatchEvent || typeof CustomEvent !== "function") return;
-			target.dispatchEvent(new CustomEvent(MASCOT_GEOMETRY_EVENT, { detail: { scale } }));
-		}
-		function applyMascotScale(value, documentRef = document) {
-			const root = mascotRoot(documentRef);
-			const float = root?.querySelector(".dsh-fairy-float");
-			const eye = root?.querySelector(".dsh-fairy-outer-disc");
-			if (!root || !float || !eye) return false;
-			const scale = clampScale(value);
-			float.style.transform = "none";
-			const floatRect = float.getBoundingClientRect();
-			const eyeRect = eye.getBoundingClientRect();
-			const layoutWidth = float.offsetWidth || floatRect.width || 1;
-			const layoutHeight = float.offsetHeight || floatRect.height || 1;
-			const viewportScaleX = floatRect.width / layoutWidth || 1;
-			const viewportScaleY = floatRect.height / layoutHeight || 1;
-			const originX = (eyeRect.left + eyeRect.width * .5 - floatRect.left) / viewportScaleX;
-			const originY = (eyeRect.top - floatRect.top) / viewportScaleY;
-			float.style.transformOrigin = `${originX.toFixed(2)}px ${originY.toFixed(2)}px`;
-			float.style.transform = `scale(${scale})`;
-			root.style.setProperty("--dsh-fairy-mascot-scale", String(scale));
-			root.setAttribute("data-dsh-fairy-mascot-scale", String(scale));
-			notifyMascotGeometry(documentRef, scale);
-			return true;
-		}
-		function scheduleMascotScale(value, documentRef = document) {
-			let frame = 0;
-			let attempts = 0;
-			const run = () => {
-				frame = 0;
-				if (applyMascotScale(value, documentRef) || attempts++ >= 24) return;
-				frame = requestAnimationFrame(run);
-			};
-			run();
-			return () => {
-				if (frame) cancelAnimationFrame(frame);
-			};
-		}
-		function createMascotScaleBase(host, controller, documentRef = document) {
-			if (!host) return null;
-			const existing = host.querySelector?.(`[${BASE_ATTR}="true"]`);
-			if (existing) {
-				existing.removeAttribute("aria-hidden");
-				const control = controller && !existing.querySelector(`[${CONTROL_ATTR}="true"]`) ? createMascotScaleControl(existing, controller, documentRef) : null;
-				return {
-					host,
-					node: existing,
-					dispose() {
-						control?.dispose?.();
-					}
-				};
-			}
-			const shell = documentRef.createElement("span");
-			shell.setAttribute(BASE_ATTR, "true");
-			host.appendChild(shell);
-			const control = controller ? createMascotScaleControl(shell, controller, documentRef) : null;
-			return {
-				host,
-				node: shell,
-				dispose() {
-					control?.dispose?.();
-					if (shell.parentElement === host) shell.remove();
-				}
-			};
-		}
-		function createMascotScaleControl(host, controller, documentRef = document) {
-			if (!host || !controller) return null;
-			const existing = host.querySelector(`[${CONTROL_ATTR}="true"]`);
-			if (existing) return {
-				host,
-				node: existing,
-				dispose() {}
-			};
-			const shell = documentRef.createElement("span");
-			shell.setAttribute(CONTROL_ATTR, "true");
-			shell.setAttribute("role", "group");
-			shell.setAttribute("aria-label", "Fairy 眼睛大小");
-			const input = documentRef.createElement("input");
-			input.type = "range";
-			input.setAttribute(INPUT_ATTR, "true");
-			input.min = String(MASCOT_SCALE_MIN);
-			input.max = String(MASCOT_SCALE_MAX);
-			input.step = String(MASCOT_SCALE_STEP);
-			input.setAttribute("aria-label", "Fairy 眼睛大小");
-			shell.appendChild(input);
-			host.appendChild(shell);
-			let committed = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-			let interacting = false;
-			let cancelPendingScale = null;
-			const updateInput = (value) => {
-				const scale = clampScale(value);
-				input.value = String(scale);
-				const progress = `${scaleProgress(scale).toFixed(2)}%`;
-				input.style.setProperty("--dsh-fairy-scale", progress);
-				shell.style.setProperty("--dsh-fairy-scale", progress);
-				input.setAttribute("aria-valuetext", `${Math.round(scale * 100)}%`);
-				input.title = `Fairy 眼睛大小 ${Math.round(scale * 100)}%`;
-				cancelPendingScale?.();
-				cancelPendingScale = scheduleMascotScale(scale, documentRef);
-			};
-			const commit = () => {
-				const next = clampScale(input.value);
-				input.value = String(next);
-				if (next === committed) {
-					interacting = false;
-					return;
-				}
-				committed = next;
-				interacting = false;
-				setControllerSetting(controller, "mascotScale", next).catch((error) => {
-					settingError("mascotScale", error);
-					committed = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-					updateInput(committed);
-				});
-			};
-			const onInput = () => updateInput(input.value);
-			const onPointerDown = () => {
-				interacting = true;
-			};
-			const onPointerUp = () => commit();
-			const onPointerCancel = () => commit();
-			const onBlur = () => {
-				if (interacting) commit();
-			};
-			const onKeyDown = () => {
-				interacting = true;
-			};
-			const onKeyUp = () => commit();
-			const onChange = () => commit();
-			input.addEventListener("input", onInput);
-			input.addEventListener("pointerdown", onPointerDown);
-			input.addEventListener("pointerup", onPointerUp);
-			input.addEventListener("pointercancel", onPointerCancel);
-			input.addEventListener("keydown", onKeyDown);
-			input.addEventListener("keyup", onKeyUp);
-			input.addEventListener("change", onChange);
-			input.addEventListener("blur", onBlur);
-			const off = controller.subscribe?.(() => {
-				if (interacting) return;
-				const next = clampScale(controller.getSnapshot?.().settings?.mascotScale);
-				committed = next;
-				updateInput(next);
-			});
-			updateInput(committed);
-			return {
-				host,
-				node: shell,
-				dispose() {
-					cancelPendingScale?.();
-					cancelPendingScale = null;
-					off?.();
-					input.removeEventListener("input", onInput);
-					input.removeEventListener("pointerdown", onPointerDown);
-					input.removeEventListener("pointerup", onPointerUp);
-					input.removeEventListener("pointercancel", onPointerCancel);
-					input.removeEventListener("keydown", onKeyDown);
-					input.removeEventListener("keyup", onKeyUp);
-					input.removeEventListener("change", onChange);
-					input.removeEventListener("blur", onBlur);
-					shell.remove();
-				}
-			};
-		}
-		module.exports = {
-			MASCOT_SCALE_MIN,
-			MASCOT_SCALE_MAX,
-			MASCOT_SCALE_STEP,
-			MASCOT_SCALE_DEFAULT,
-			MASCOT_GEOMETRY_EVENT,
-			applyMascotScale,
-			scheduleMascotScale,
-			createMascotScaleBase,
-			createMascotScaleControl
-		};
-	}));
-
-//#endregion
-//#region src/client/mascot-animation-speed-control.js
-	var require_mascot_animation_speed_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const BASE_ATTR = "data-dsh-fairy-mascot-animation-speed-base";
-		const CONTROL_ATTR = "data-dsh-fairy-mascot-animation-speed-control";
-		const TICK_ATTR = "data-dsh-fairy-mascot-animation-speed-tick";
-		const THUMB_ATTR = "data-dsh-fairy-mascot-animation-speed-thumb";
-		const POSITION_ATTR = "data-dsh-fairy-mascot-animation-speed-position";
-		const SPEED_EVENT = "dsh-fairy-mascot-animation-speed";
-		const SPEED_STOPS = Object.freeze([
-			Object.freeze({
-				position: 0,
-				rate: .7,
-				label: "0.7"
-			}),
-			Object.freeze({
-				position: .5,
-				rate: 1,
-				label: "1"
-			}),
-			Object.freeze({
-				position: 1,
-				rate: 1.5,
-				label: "1.5"
-			})
-		]);
-		let selectedPosition = .5;
-		function positionForRate(rate) {
-			return SPEED_STOPS.find((stop) => stop.rate === rate)?.position ?? .5;
-		}
-		function bindVisualDrag(control, documentRef, options = {}) {
-			if (!control || control.__dshFairySpeedDrag) return () => {};
-			const positions = [
-				0,
-				.5,
-				1
-			];
-			selectedPosition = positionForRate(options.initialRate);
-			let dragging = false;
-			const emitSpeed = (position) => {
-				const stop = SPEED_STOPS.find((candidate) => candidate.position === position) || SPEED_STOPS[1];
-				selectedPosition = stop.position;
-				options.onChange?.(stop.rate);
-				const target = documentRef?.defaultView || (typeof window !== "undefined" ? window : null);
-				if (typeof CustomEvent !== "function" || !target?.dispatchEvent) return;
-				target.dispatchEvent(new CustomEvent(SPEED_EVENT, { detail: {
-					rate: stop.rate,
-					position: stop.position
-				} }));
-			};
-			const setPosition = (position, animate = true) => {
-				control.setAttribute(POSITION_ATTR, String(position));
-				control.setAttribute("data-dragging", animate ? "false" : "true");
-			};
-			const positionFromEvent = (event) => {
-				const rect = control.getBoundingClientRect();
-				if (!rect.width) return .5;
-				return Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-			};
-			const snap = (value) => positions.reduce((closest, candidate) => Math.abs(candidate - value) < Math.abs(closest - value) ? candidate : closest, positions[0]);
-			const onPointerMove = (event) => {
-				if (!dragging) return;
-				event.preventDefault();
-				setPosition(snap(positionFromEvent(event)), false);
-			};
-			const onPointerUp = (event) => {
-				if (!dragging) return;
-				dragging = false;
-				control.releasePointerCapture?.(event.pointerId);
-				documentRef.removeEventListener("pointermove", onPointerMove);
-				documentRef.removeEventListener("pointerup", onPointerUp);
-				documentRef.removeEventListener("pointercancel", onPointerUp);
-				const position = snap(positionFromEvent(event));
-				setPosition(position, true);
-				emitSpeed(position);
-			};
-			const onPointerDown = (event) => {
-				if (event.button !== void 0 && event.button !== 0) return;
-				dragging = true;
-				control.setPointerCapture?.(event.pointerId);
-				documentRef.addEventListener("pointermove", onPointerMove, { passive: false });
-				documentRef.addEventListener("pointerup", onPointerUp);
-				documentRef.addEventListener("pointercancel", onPointerUp);
-				const position = snap(positionFromEvent(event));
-				setPosition(position, false);
-				emitSpeed(position);
-				event.preventDefault();
-			};
-			control.addEventListener("pointerdown", onPointerDown, { passive: false });
-			control.__dshFairySpeedDrag = true;
-			setPosition(selectedPosition, true);
-			return () => {
-				control.removeEventListener("pointerdown", onPointerDown);
-				documentRef.removeEventListener("pointermove", onPointerMove);
-				documentRef.removeEventListener("pointerup", onPointerUp);
-				documentRef.removeEventListener("pointercancel", onPointerUp);
-				delete control.__dshFairySpeedDrag;
-			};
-		}
-		function createMascotAnimationSpeedBase(host, documentRef = document, options = {}) {
-			if (!host) return null;
-			const existing = host.querySelector?.(`[${BASE_ATTR}="true"]`);
-			if (existing) {
-				const disposeDrag = bindVisualDrag(existing.querySelector(`[${CONTROL_ATTR}="true"]`), documentRef, options);
-				return {
-					host,
-					node: existing,
-					dispose() {
-						disposeDrag();
-						if (existing.parentElement === host) existing.remove();
-					}
-				};
-			}
-			const base = documentRef.createElement("span");
-			base.setAttribute(BASE_ATTR, "true");
-			base.setAttribute("aria-hidden", "true");
-			const control = documentRef.createElement("span");
-			control.setAttribute(CONTROL_ATTR, "true");
-			[
-				"0.7",
-				"1",
-				"1.5"
-			].forEach((speed) => {
-				const tick = documentRef.createElement("span");
-				tick.setAttribute(TICK_ATTR, speed);
-				tick.setAttribute("aria-hidden", "true");
-				control.appendChild(tick);
-			});
-			const thumb = documentRef.createElement("span");
-			thumb.setAttribute(THUMB_ATTR, "1");
-			thumb.setAttribute("aria-hidden", "true");
-			control.appendChild(thumb);
-			base.appendChild(control);
-			const disposeDrag = bindVisualDrag(control, documentRef, options);
-			host.appendChild(base);
-			return {
-				host,
-				node: base,
-				dispose() {
-					disposeDrag();
-					if (base.parentElement === host) base.remove();
-				}
-			};
-		}
-		module.exports = {
-			BASE_ATTR,
-			CONTROL_ATTR,
-			TICK_ATTR,
-			THUMB_ATTR,
-			POSITION_ATTR,
-			SPEED_EVENT,
-			SPEED_STOPS,
-			createMascotAnimationSpeedBase
-		};
-	}));
-
-//#endregion
-//#region src/client/mascot-position-control.js
-	var require_mascot_position_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const CONTROL_ATTR = "data-dsh-fairy-mascot-position-control";
-		const BUTTON_ATTR = "data-dsh-fairy-mascot-position-button";
-		const ROOT_ID = "dsh-fairy-root";
-		const MASCOT_POSITION_ATTR = "data-dsh-fairy-mascot-position";
-		const MASCOT_POSITIONS = [
-			"top-left",
-			"top-center",
-			"top-right",
-			"middle-left",
-			"center",
-			"middle-right",
-			"bottom-left",
-			"bottom-center",
-			"bottom-right"
-		];
-		const MASCOT_POSITION_DEFAULT = "center";
-		const MASCOT_POSITION_LABELS = {
-			"top-left": "左上",
-			"top-center": "中上",
-			"top-right": "右上",
-			"middle-left": "左中",
-			"center": "居中",
-			"middle-right": "右中",
-			"bottom-left": "左下",
-			"bottom-center": "中下",
-			"bottom-right": "右下"
-		};
-		const { setControllerSetting, settingError } = require_settings_write();
-		function normalizeMascotPosition(value) {
-			return MASCOT_POSITIONS.includes(value) ? value : MASCOT_POSITION_DEFAULT;
-		}
-		function mascotRoot(documentRef = document) {
-			return documentRef?.getElementById(ROOT_ID) || null;
-		}
-		function applyMascotPosition(value, documentRef = document) {
-			const root = mascotRoot(documentRef);
-			if (!root?.setAttribute) return;
-			root.setAttribute(MASCOT_POSITION_ATTR, normalizeMascotPosition(value));
-		}
-		/** 一行九格：紧凑控件条，与缩放/速度控件同宽同高，塞得进 composer 卡片。 */
-		function createMascotPositionBase(host, controller, documentRef = document) {
-			const shell = documentRef.createElement("div");
-			shell.setAttribute(CONTROL_ATTR, "true");
-			shell.setAttribute("role", "group");
-			shell.setAttribute("aria-label", "Fairy 眼睛位置");
-			const buttons = /* @__PURE__ */ new Map();
-			const paint = (value) => {
-				const current = normalizeMascotPosition(value);
-				for (const [anchor, button] of buttons) button.setAttribute("aria-pressed", String(anchor === current));
-			};
-			for (const anchor of MASCOT_POSITIONS) {
-				const button = documentRef.createElement("button");
-				button.type = "button";
-				button.setAttribute(BUTTON_ATTR, anchor);
-				button.setAttribute("aria-label", `Fairy 眼睛位置：${MASCOT_POSITION_LABELS[anchor]}`);
-				button.textContent = MASCOT_POSITION_LABELS[anchor].slice(-1);
-				button.addEventListener("click", () => {
-					applyMascotPosition(anchor, documentRef);
-					paint(anchor);
-					setControllerSetting(controller, "mascotPosition", anchor).catch((error) => {
-						const current = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
-						applyMascotPosition(current, documentRef);
-						paint(current);
-						console.warn("[fairy] 眼睛位置写入失败：", settingError("mascotPosition", error));
-					});
-				});
-				buttons.set(anchor, button);
-				shell.appendChild(button);
-			}
-			const off = controller.subscribe?.(() => {
-				const next = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
-				applyMascotPosition(next, documentRef);
-				paint(next);
-			});
-			const initial = normalizeMascotPosition(controller.getSnapshot?.().settings?.mascotPosition);
-			applyMascotPosition(initial, documentRef);
-			paint(initial);
-			host?.appendChild?.(shell);
-			return {
-				node: shell,
-				host,
-				dispose: () => {
-					off?.();
-					shell.remove?.();
-				}
-			};
-		}
-		module.exports = {
-			CONTROL_ATTR,
-			BUTTON_ATTR,
-			MASCOT_POSITION_ATTR,
-			MASCOT_POSITIONS,
-			MASCOT_POSITION_DEFAULT,
-			MASCOT_POSITION_LABELS,
-			normalizeMascotPosition,
-			applyMascotPosition,
-			createMascotPositionBase
-		};
-	}));
-
-//#endregion
-//#region src/client/mascot-palette-control.js
-	var require_mascot_palette_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const CONTROL_ATTR = "data-dsh-fairy-palette-control";
-		const BUTTON_ATTR = "data-dsh-fairy-palette-button";
-		const SWATCH_ATTR = "data-dsh-fairy-palette-swatch";
-		const PALETTE_ATTR = "data-dsh-fairy-palette";
-		const PALETTES = [
-			"hdd",
-			"ink",
-			"ember"
-		];
-		const PALETTE_LABELS = {
-			hdd: "岩",
-			ink: "墨",
-			ember: "炭"
-		};
-		const { setControllerSetting, settingError } = require_settings_write();
-		function normalizePalette(value) {
-			return PALETTES.includes(value) ? value : "hdd";
-		}
-		function applyPalette(value, documentRef = document) {
-			const root = documentRef?.documentElement;
-			if (!root?.setAttribute) return;
-			const palette = normalizePalette(value);
-			if (palette === "hdd") root.removeAttribute(PALETTE_ATTR);
-			else root.setAttribute(PALETTE_ATTR, palette);
-		}
-		/** 一行三色块：紧凑控件条，与位置控件同宽同高，锚在位置条下方。 */
-		function createMascotPaletteBase(host, controller, documentRef = document) {
-			const shell = documentRef.createElement("div");
-			shell.setAttribute(CONTROL_ATTR, "true");
-			shell.setAttribute("role", "group");
-			shell.setAttribute("aria-label", "Fairy 调色盘");
-			const buttons = /* @__PURE__ */ new Map();
-			const paint = (value) => {
-				const current = normalizePalette(value);
-				for (const [name, button] of buttons) button.setAttribute("aria-pressed", String(name === current));
-			};
-			for (const name of PALETTES) {
-				const button = documentRef.createElement("button");
-				button.type = "button";
-				button.setAttribute(BUTTON_ATTR, name);
-				button.setAttribute(SWATCH_ATTR, name);
-				button.setAttribute("aria-label", `Fairy 调色盘：${PALETTE_LABELS[name]}`);
-				button.addEventListener("click", () => {
-					applyPalette(name, documentRef);
-					paint(name);
-					setControllerSetting(controller, "palette", name).catch((error) => {
-						const current = normalizePalette(controller.getSnapshot?.().settings?.palette);
-						applyPalette(current, documentRef);
-						paint(current);
-						console.warn("[fairy] 调色盘写入失败：", settingError("palette", error));
-					});
-				});
-				buttons.set(name, button);
-				shell.appendChild(button);
-			}
-			const off = controller.subscribe?.(() => {
-				const next = normalizePalette(controller.getSnapshot?.().settings?.palette);
-				applyPalette(next, documentRef);
-				paint(next);
-			});
-			const initial = normalizePalette(controller.getSnapshot?.().settings?.palette);
-			applyPalette(initial, documentRef);
-			paint(initial);
-			host?.appendChild?.(shell);
-			return {
-				node: shell,
-				host,
-				dispose: () => {
-					off?.();
-					shell.remove?.();
-				}
-			};
-		}
-		module.exports = {
-			CONTROL_ATTR,
-			BUTTON_ATTR,
-			SWATCH_ATTR,
-			PALETTE_ATTR,
-			PALETTES,
-			PALETTE_LABELS,
-			normalizePalette,
-			applyPalette,
-			createMascotPaletteBase
-		};
-	}));
-
-//#endregion
 //#region src/client/composer-dock.js
 	var require_composer_dock = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const COMPOSER_ATTR = "data-dsh-fairy-composer-dock";
@@ -3833,10 +3289,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 		const { createComposerSessionResolver } = require_composer_session_rebinding();
 		const { createResizeController, HEIGHT_MIN, HEIGHT_MAX, CONTENT_MIN } = require_composer_resize_controller();
 		const { setControllerSetting, settingError } = require_settings_write();
-		const { createMascotScaleBase } = require_mascot_scale_control();
-		const { createMascotAnimationSpeedBase } = require_mascot_animation_speed_control();
-		const { createMascotPositionBase } = require_mascot_position_control();
-		const { createMascotPaletteBase } = require_mascot_palette_control();
 		const MARKER_ATTRS = [
 			COMPOSER_ATTR,
 			"data-dsh-fairy-composer-row",
@@ -3890,10 +3342,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 			let seat = null;
 			let card = null;
 			let clearControls = () => {};
-			let mascotScaleBase = null;
-			let mascotAnimationSpeedBase = null;
-			let mascotPositionBase = null;
-			let mascotPaletteBase = null;
 			let previousSeatStyle = null;
 			let height = HEIGHT_MIN;
 			let workspaceTemplate = null;
@@ -3988,8 +3436,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				workspaceProjection?.remove();
 				workspaceProjection = null;
 				removeMaterialLayer();
-				removeMascotScaleBase();
-				removeMascotAnimationSpeedBase();
 				removeLegacyVoiceDensityMarker();
 				seat.querySelector("[data-dsh-fairy-composer-stack=\"true\"]")?.removeAttribute("data-dsh-fairy-model-menu-open");
 				MARKER_ATTRS.forEach((name) => clearMarkerTree(seat, name));
@@ -4044,62 +3490,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 			const removeHandle = () => resizeController.unmount();
 			const createHandle = () => resizeController.mount();
 			const updateHandle = () => resizeController.updateHandle();
-			const removeLegacyMascotScaleControl = () => {
-				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-scale-control=\"true\"]").forEach((node) => {
-					if (!node.closest?.("[data-dsh-fairy-mascot-scale-base=\"true\"]")) node.remove();
-				});
-			};
-			const removeMascotScaleBase = () => {
-				mascotScaleBase?.dispose?.();
-				mascotScaleBase = null;
-				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-scale-base=\"true\"]").forEach((node) => node.remove());
-			};
-			const removeMascotAnimationSpeedBase = () => {
-				mascotAnimationSpeedBase?.dispose?.();
-				mascotAnimationSpeedBase = null;
-				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-animation-speed-base=\"true\"]").forEach((node) => node.remove());
-			};
-			const removeMascotPositionBase = () => {
-				mascotPositionBase?.dispose?.();
-				mascotPositionBase = null;
-				seat?.querySelectorAll?.("[data-dsh-fairy-mascot-position-control=\"true\"]").forEach((node) => node.remove());
-			};
-			const removeMascotPaletteBase = () => {
-				mascotPaletteBase?.dispose?.();
-				mascotPaletteBase = null;
-				seat?.querySelectorAll?.("[data-dsh-fairy-palette-control=\"true\"]").forEach((node) => node.remove());
-			};
-			const ensureMascotAnimationSpeedBase = () => {
-				if (!card) return;
-				if (mascotAnimationSpeedBase?.node?.isConnected && mascotAnimationSpeedBase.host === card) return;
-				removeMascotAnimationSpeedBase();
-				mascotAnimationSpeedBase = createMascotAnimationSpeedBase(card, document, {
-					initialRate: Number(snapshot().settings?.mascotAnimationSpeed) || 1,
-					onChange: (rate) => {
-						const result = setControllerSetting(controller, "mascotAnimationSpeed", rate);
-						result.catch((error) => settingError("mascotAnimationSpeed", error));
-						return result;
-					}
-				});
-			};
-			const ensureMascotScaleBase = () => {
-				if (!card) return;
-				if (mascotScaleBase?.node?.isConnected && mascotScaleBase.host === card) return;
-				removeMascotScaleBase();
-				mascotScaleBase = createMascotScaleBase(card, controller);
-			};
-			const ensureMascotPositionBase = () => {
-				if (!card) return;
-				if (mascotPositionBase?.node?.isConnected && mascotPositionBase.host === card) return;
-				removeMascotPositionBase();
-				mascotPositionBase = createMascotPositionBase(card, controller);
-			};
-			const ensureMascotPaletteBase = () => {
-				if (!card) return;
-				if (mascotPaletteBase?.node?.isConnected && mascotPaletteBase.host === card) return;
-				removeMascotPaletteBase();
-				mascotPaletteBase = createMascotPaletteBase(card, controller);
-			};
 			let seatObserver = null;
 			const syncQuestionObserver = () => {
 				if (!seat || typeof ResizeObserver !== "function") return;
@@ -4200,21 +3590,12 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 					workspaceProjection?.remove();
 					workspaceProjection = null;
 					removeMaterialLayer();
-					removeMascotScaleBase();
-					removeMascotAnimationSpeedBase();
-					removeMascotPositionBase();
-					removeMascotPaletteBase();
 					removeLegacyVoiceDensityMarker(card);
 					card = currentCard;
 					removeLegacyVoiceDensityMarker();
 					clearControls = markControls(card);
 					ensureCardFocusHandler();
 				}
-				removeLegacyMascotScaleControl();
-				ensureMascotScaleBase();
-				ensureMascotAnimationSpeedBase();
-				ensureMascotPositionBase();
-				ensureMascotPaletteBase();
 				const workspaceRow = seat?.querySelector("[data-dsh-fairy-composer-workspace=\"true\"]:not([data-dsh-fairy-composer-workspace-projection=\"true\"])");
 				if (workspaceRow) captureWorkspaceTemplate(workspaceRow);
 				const stack = seat?.querySelector("[data-dsh-fairy-composer-stack=\"true\"]");
@@ -4271,7 +3652,6 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				if (seat && card) {
 					clearControls();
 					clearControls = markControls(card);
-					removeLegacyMascotScaleControl();
 					ensureCardFocusHandler();
 				}
 				const workspaceRow = seat?.querySelector("[data-dsh-fairy-composer-workspace=\"true\"]:not([data-dsh-fairy-composer-workspace-projection=\"true\"])");
@@ -5035,6 +4415,13 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			});
 		}
 		module.exports = { createMascotEventScheduler };
+	}));
+
+//#endregion
+//#region src/client/mascot-animation-speed-control.js
+	var require_mascot_animation_speed_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const SPEED_EVENT = "dsh-fairy-mascot-animation-speed";
+		module.exports = { SPEED_EVENT };
 	}));
 
 //#endregion
@@ -5948,14 +5335,14 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/sidebar-geometry-manager.js
 	var require_sidebar_geometry_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$3 = require("react");
+		const React$4 = require("react");
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { claimGeometryLifecycle } = require_geometry_lifecycle();
 		const { mutationTouchesSurface, roundedRectPath } = require_surface_utils();
 		const { OFFICIAL_SELECTORS, OFFICIAL_ATTRIBUTES, sidebarResizeHandle } = require_dom_adapter();
 		function install(_lifecycle = null) {
 			function SidebarBoardCutout({ enabled }) {
-				React$3.useLayoutEffect(() => {
+				React$4.useLayoutEffect(() => {
 					const lifecycle = claimGeometryLifecycle(document, "sidebar-board-cutout");
 					let structureObserver = null;
 					let layoutObserver = null;
@@ -6083,7 +5470,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/scrollbars-manager.js
 	var require_scrollbars_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$2 = require("react");
+		const React$3 = require("react");
 		const { createLifecycleScope } = require_lifecycle();
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { createPointerDrag } = require_pointer_drag();
@@ -6091,7 +5478,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const { HDD_SCROLL_TARGET_SELECTOR, hddScrollTargets } = require_dom_adapter();
 		function install(_lifecycle = null) {
 			function HddOverlayScrollbars({ enabled }) {
-				React$2.useLayoutEffect(() => {
+				React$3.useLayoutEffect(() => {
 					if (!enabled || !document.body) return void 0;
 					const lifecycle = claimScrollbarLifecycle(document);
 					const host = document.createElement("div");
@@ -6335,8 +5722,8 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/hero-projection-manager.js
 	var require_hero_projection_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$1 = require("react");
-		const { jsx: jsx$1, jsxs: jsxs$1 } = require("react/jsx-runtime");
+		const React$2 = require("react");
+		const { jsx: jsx$2, jsxs: jsxs$2 } = require("react/jsx-runtime");
 		const { MODE_ATTR, HERO_PLACEHOLDERS } = (init_constants(), __toCommonJS(constants_exports));
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { mutationTouchesSurface, mutationTouchesHeroSurface } = require_surface_utils();
@@ -6344,10 +5731,10 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		let heroMaskInstanceSeed = 0;
 		function install(_lifecycle = null, { Toggle, useController }) {
 			function HeroToggleHost({ controller }) {
-				const hostRef = React$1.useRef(null);
-				const [positioned, setPositioned] = React$1.useState(false);
+				const hostRef = React$2.useRef(null);
+				const [positioned, setPositioned] = React$2.useState(false);
 				const { sessionId } = useController(controller);
-				React$1.useLayoutEffect(() => {
+				React$2.useLayoutEffect(() => {
 					const host = hostRef.current;
 					if (!host) return;
 					let frame = 0;
@@ -6431,27 +5818,27 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						host.style.removeProperty("top");
 					};
 				}, [sessionId]);
-				return jsx$1("div", {
+				return jsx$2("div", {
 					ref: hostRef,
 					className: "dsh-fairy-hero-toggle-host",
 					"data-positioned": String(positioned),
 					hidden: !positioned,
-					children: jsx$1(Toggle, { controller })
+					children: jsx$2(Toggle, { controller })
 				});
 			}
 			function HeroHost({ controller }) {
 				const state = useController(controller);
-				const stateRef = React$1.useRef(state);
+				const stateRef = React$2.useRef(state);
 				stateRef.current = state;
-				const hostRef = React$1.useRef(null);
-				const placeholderRef = React$1.useRef({
+				const hostRef = React$2.useRef(null);
+				const placeholderRef = React$2.useRef({
 					key: null,
 					text: null
 				});
-				const heroMaskIdRef = React$1.useRef(null);
+				const heroMaskIdRef = React$2.useRef(null);
 				if (!heroMaskIdRef.current) heroMaskIdRef.current = `dsh-fairy-hero-mask-${++heroMaskInstanceSeed}`;
 				const heroMaskId = heroMaskIdRef.current;
-				React$1.useLayoutEffect(() => {
+				React$2.useLayoutEffect(() => {
 					const host = hostRef.current;
 					if (!host) return;
 					let frame = 0;
@@ -6608,19 +5995,19 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						clearHero(true);
 					};
 				}, []);
-				return jsxs$1("div", {
+				return jsxs$2("div", {
 					ref: hostRef,
 					className: "dsh-fairy-hero-host",
-					children: [jsxs$1("span", {
+					children: [jsxs$2("span", {
 						className: "dsh-fairy-hero-main",
-						children: [jsxs$1("svg", {
+						children: [jsxs$2("svg", {
 							className: "dsh-fairy-hero-projection-svg",
 							width: "100%",
 							height: "220",
 							"aria-hidden": "true",
 							children: [
-								jsxs$1("defs", { children: [
-									jsx$1("mask", {
+								jsxs$2("defs", { children: [
+									jsx$2("mask", {
 										id: `${heroMaskId}-2`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6629,13 +6016,13 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$1("g", { children: [jsx$1("rect", {
+										children: jsxs$2("g", { children: [jsx$2("rect", {
 											x: "0",
 											y: "0",
 											width: "100%",
 											height: "220",
 											fill: "white"
-										}), jsx$1("text", {
+										}), jsx$2("text", {
 											className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-2",
 											x: "50%",
 											y: "114",
@@ -6643,7 +6030,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 											children: "HOLLOW DEEP DIVE SYSTEM"
 										})] })
 									}),
-									jsx$1("mask", {
+									jsx$2("mask", {
 										id: `${heroMaskId}-3`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6652,22 +6039,22 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$1("g", { children: [
-											jsx$1("rect", {
+										children: jsxs$2("g", { children: [
+											jsx$2("rect", {
 												x: "0",
 												y: "0",
 												width: "100%",
 												height: "220",
 												fill: "white"
 											}),
-											jsx$1("text", {
+											jsx$2("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-3",
 												x: "50%",
 												y: "174",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$1("text", {
+											jsx$2("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-2-for-3",
 												x: "50%",
 												y: "150",
@@ -6676,7 +6063,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 											})
 										] })
 									}),
-									jsx$1("mask", {
+									jsx$2("mask", {
 										id: `${heroMaskId}-4`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6685,29 +6072,29 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$1("g", { children: [
-											jsx$1("rect", {
+										children: jsxs$2("g", { children: [
+											jsx$2("rect", {
 												x: "0",
 												y: "0",
 												width: "100%",
 												height: "220",
 												fill: "white"
 											}),
-											jsx$1("text", {
+											jsx$2("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-4",
 												x: "50%",
 												y: "246",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$1("text", {
+											jsx$2("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-2-for-4",
 												x: "50%",
 												y: "222",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$1("text", {
+											jsx$2("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-3-for-4",
 												x: "50%",
 												y: "192",
@@ -6717,14 +6104,14 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										] })
 									})
 								] }),
-								jsx$1("text", {
+								jsx$2("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-1",
 									x: "50%",
 									y: "66",
 									transform: "matrix(1 0 0 -1 0 132)",
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$1("text", {
+								jsx$2("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-2",
 									x: "50%",
 									y: "90",
@@ -6732,7 +6119,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 									mask: `url(#${heroMaskId}-2)`,
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$1("text", {
+								jsx$2("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-3",
 									x: "50%",
 									y: "120",
@@ -6740,7 +6127,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 									mask: `url(#${heroMaskId}-3)`,
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$1("text", {
+								jsx$2("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-4",
 									x: "50%",
 									y: "156",
@@ -6750,9 +6137,9 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 								})
 							]
 						}), "HOLLOW DEEP DIVE SYSTEM"]
-					}), jsx$1("span", {
+					}), jsx$2("span", {
 						className: "dsh-fairy-hero-sub",
-						children: Array.from("空洞深潜系统").map((character, index) => jsx$1("span", {
+						children: Array.from("空洞深潜系统").map((character, index) => jsx$2("span", {
 							className: "dsh-fairy-hero-sub-char",
 							children: character
 						}, index))
@@ -6761,11 +6148,11 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			}
 			function ActiveComposerPlaceholder({ controller }) {
 				const state = useController(controller);
-				const placeholderRef = React$1.useRef({
+				const placeholderRef = React$2.useRef({
 					key: null,
 					text: null
 				});
-				React$1.useLayoutEffect(() => {
+				React$2.useLayoutEffect(() => {
 					let frame = 0;
 					let textarea = null;
 					let originalPlaceholder = null;
@@ -7002,6 +6389,75 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 	}));
 
 //#endregion
+//#region src/client/mascot-scale-control.js
+	var require_mascot_scale_control = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const ROOT_ID = "dsh-fairy-root";
+		const MASCOT_SCALE_MIN = .55;
+		const MASCOT_SCALE_MAX = 1;
+		const MASCOT_SCALE_STEP = .01;
+		const MASCOT_SCALE_DEFAULT = 1;
+		const MASCOT_GEOMETRY_EVENT = "dsh-fairy-mascot-geometry";
+		function clampScale(value) {
+			const numeric = Number(value);
+			if (!Number.isFinite(numeric)) return MASCOT_SCALE_DEFAULT;
+			const stepped = Math.round(numeric / MASCOT_SCALE_STEP) * MASCOT_SCALE_STEP;
+			return Math.min(MASCOT_SCALE_MAX, Math.max(MASCOT_SCALE_MIN, Number(stepped.toFixed(2))));
+		}
+		function mascotRoot(documentRef = document) {
+			return documentRef?.getElementById(ROOT_ID) || null;
+		}
+		function notifyMascotGeometry(documentRef = document, scale = MASCOT_SCALE_DEFAULT) {
+			const target = documentRef?.defaultView || (typeof window !== "undefined" ? window : null);
+			if (!target?.dispatchEvent || typeof CustomEvent !== "function") return;
+			target.dispatchEvent(new CustomEvent(MASCOT_GEOMETRY_EVENT, { detail: { scale } }));
+		}
+		function applyMascotScale(value, documentRef = document) {
+			const root = mascotRoot(documentRef);
+			const float = root?.querySelector(".dsh-fairy-float");
+			const eye = root?.querySelector(".dsh-fairy-outer-disc");
+			if (!root || !float || !eye) return false;
+			const scale = clampScale(value);
+			float.style.transform = "none";
+			const floatRect = float.getBoundingClientRect();
+			const eyeRect = eye.getBoundingClientRect();
+			const layoutWidth = float.offsetWidth || floatRect.width || 1;
+			const layoutHeight = float.offsetHeight || floatRect.height || 1;
+			const viewportScaleX = floatRect.width / layoutWidth || 1;
+			const viewportScaleY = floatRect.height / layoutHeight || 1;
+			const originX = (eyeRect.left + eyeRect.width * .5 - floatRect.left) / viewportScaleX;
+			const originY = (eyeRect.top - floatRect.top) / viewportScaleY;
+			float.style.transformOrigin = `${originX.toFixed(2)}px ${originY.toFixed(2)}px`;
+			float.style.transform = `scale(${scale})`;
+			root.style.setProperty("--dsh-fairy-mascot-scale", String(scale));
+			root.setAttribute("data-dsh-fairy-mascot-scale", String(scale));
+			notifyMascotGeometry(documentRef, scale);
+			return true;
+		}
+		function scheduleMascotScale(value, documentRef = document) {
+			let frame = 0;
+			let attempts = 0;
+			const run = () => {
+				frame = 0;
+				if (applyMascotScale(value, documentRef) || attempts++ >= 24) return;
+				frame = requestAnimationFrame(run);
+			};
+			run();
+			return () => {
+				if (frame) cancelAnimationFrame(frame);
+			};
+		}
+		module.exports = {
+			MASCOT_SCALE_MIN,
+			MASCOT_SCALE_MAX,
+			MASCOT_SCALE_STEP,
+			MASCOT_SCALE_DEFAULT,
+			MASCOT_GEOMETRY_EVENT,
+			applyMascotScale,
+			scheduleMascotScale
+		};
+	}));
+
+//#endregion
 //#region src/client/settings-normalizer.cjs
 	var require_settings_normalizer = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const SETTINGS_VERSION = 2;
@@ -7067,6 +6523,94 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			PALETTES,
 			migrateVisualSettings,
 			normalizeSetting
+		};
+	}));
+
+//#endregion
+//#region src/client/workshop.js
+	var require_workshop = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const React$1 = require("react");
+		const { jsx: jsx$1, jsxs: jsxs$1 } = require("react/jsx-runtime");
+		const { createAskKit } = require_client_ask_kit();
+		const uiPrimitives$1 = require("@deepseek-ai/dsh-client-ui-primitives");
+		/** 创作工坊：设计 DSH UI 的工作台入口；状态来自宿主只读端点 /fairy-visual/workshop。 */
+		const WORKSHOP_BRIEF = [
+			"用「创作工坊」流程设计 DSH UI：",
+			"1) 先读现有实现与设计约束（fairy-visual 的样式令牌与控件族）；",
+			"2) 用 pen.dev（.pen 设计稿）、花叔Design（HTML 高保真原型）与 OpenDesign 各出一个方向；",
+			"3) 三个方向给我选，选定后落成 fairy-visual 改动并在本实例验证。"
+		].join("\n");
+		const askKit = createAskKit({
+			React: React$1,
+			jsx: jsx$1,
+			jsxs: jsxs$1,
+			primitives: uiPrimitives$1
+		});
+		function Workshop() {
+			const { ASK_TEXT, AskSection, AskResult, AskActions } = askKit;
+			const [status, setStatus] = React$1.useState(null);
+			const [copyStatus, setCopyStatus] = React$1.useState("");
+			React$1.useEffect(() => {
+				let cancelled = false;
+				fetch("/fairy-visual/workshop", { headers: { Accept: "application/json" } }).then((response) => response.json()).then((value) => {
+					if (!cancelled) setStatus(value);
+				}).catch((error) => {
+					if (!cancelled) setStatus({
+						ok: false,
+						error: String(error?.message || error)
+					});
+				});
+				return () => {
+					cancelled = true;
+				};
+			}, []);
+			const copyBrief = () => {
+				const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : null;
+				if (!clipboard?.writeText) {
+					setCopyStatus("复制失败：当前浏览器未放行剪贴板。");
+					return;
+				}
+				clipboard.writeText(WORKSHOP_BRIEF).then(() => setCopyStatus("设计指令已复制——粘进会话即可开工。"), (error) => setCopyStatus(`复制失败：${error?.message || error}`));
+			};
+			const rows = [];
+			if (status === null) rows.push(jsx$1(AskResult, {
+				ok: true,
+				text: ASK_TEXT.loading
+			}, "workshop-loading"));
+			else if (status.ok === false) rows.push(jsx$1(AskResult, {
+				ok: false,
+				text: `读取失败：${status.error || "未知错误"}`
+			}, "workshop-error"));
+			else {
+				const skills = Array.isArray(status.skills) ? status.skills : [];
+				rows.push(jsx$1(AskResult, {
+					ok: Boolean(status.pen?.installed),
+					text: status.pen?.installed ? `pen.dev：已安装（${status.pen.path}）` : "pen.dev：未安装——先到 pen.dev 官网安装"
+				}, "workshop-pen"));
+				rows.push(jsx$1(AskResult, {
+					ok: Boolean(status.mcp?.wired),
+					text: status.mcp?.wired ? "MCP：已接入 web profile，设计会话直接可用" : "MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）"
+				}, "workshop-mcp"));
+				rows.push(jsx$1(AskResult, {
+					ok: skills.includes("huashu-design"),
+					text: `设计技能：${skills.length ? skills.join("、") : "技能槽位为空"}`
+				}, "workshop-skills"));
+			}
+			return jsxs$1(AskSection, {
+				title: "创作工坊",
+				description: ["用 OpenDesign、花叔Design 与 pen.dev 设计 DSH UI；设计会话由 Fairy 本体驱动，MCP 只是笔刷。"],
+				children: [...rows, jsx$1(AskActions, {
+					busy: null,
+					status: copyStatus,
+					primary: "复制设计指令",
+					onPrimary: copyBrief,
+					writable: true
+				}, "workshop-actions")]
+			});
+		}
+		module.exports = {
+			Workshop,
+			WORKSHOP_BRIEF
 		};
 	}));
 
@@ -7612,9 +7156,9 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const { createFairyDiagnostics } = require_client_diagnostics();
 		const { createAskKit } = require_client_ask_kit();
 		const uiPrimitives = require("@deepseek-ai/dsh-client-ui-primitives");
-		const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = (init_constants(), __toCommonJS(constants_exports));
+		const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, PALETTES, MASCOT_POSITIONS, MASCOT_POSITION_LABELS, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = (init_constants(), __toCommonJS(constants_exports));
 		const IDENTITY_SETTINGS_NAMESPACE = "fairy-identity";
-		const { deriveSessionActivity, syncDocumentMode } = (init_utils(), __toCommonJS(utils_exports));
+		const { applyMascotPosition, deriveSessionActivity, syncDocumentMode } = (init_utils(), __toCommonJS(utils_exports));
 		const { injectStyles } = (init_style(), __toCommonJS(style_exports));
 		const { mountComposerDock } = require_composer_dock();
 		const { createLifecycleScope, claimSingleton } = require_lifecycle();
@@ -7633,7 +7177,8 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const { scheduleMascotScale, MASCOT_GEOMETRY_EVENT } = require_mascot_scale_control();
 		const { saveControllerSetting, setControllerSetting, settingError } = require_settings_write();
 		const { mutationTouchesSurface } = require_surface_utils();
-		const { migrateVisualSettings, normalizeSetting } = require_settings_normalizer();
+		const { migrateVisualSettings, normalizeSetting, SPEED_STOPS } = require_settings_normalizer();
+		const { Workshop } = require_workshop();
 		const { createVisualTransitions } = require_visual_transitions();
 		const { OFFICIAL_SELECTORS, OFFICIAL_ATTRIBUTES, rootSlot, sidebar, conversation, conversationScroll, anyPhase, composerSeat, composerCard, conversationComposerDock, chatFlows, balanceAction, sidebarResizeHandle, reportMissingCapabilities } = require_dom_adapter();
 		const visualTransitions = createVisualTransitions({
@@ -8002,11 +7547,13 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				const mascot = mascotRuntime;
 				mascot?.mount?.(stageNode, owner, state.settings.mascotAnimationSpeed);
 				mascot?.setVisualActive?.(visible, owner);
+				applyMascotPosition(state.settings.mascotPosition);
 			}, [
 				visible,
 				state.activity,
 				state.settings.powerMode,
-				state.settings.mascotAnimationSpeed
+				state.settings.mascotAnimationSpeed,
+				state.settings.mascotPosition
 			]);
 			React.useLayoutEffect(() => {
 				if (!enabled) return void 0;
@@ -8508,7 +8055,11 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			"theme",
 			"mascotVisible",
 			"powerMode",
-			"contentFade"
+			"contentFade",
+			"palette",
+			"mascotPosition",
+			"mascotScale",
+			"mascotAnimationSpeed"
 		];
 		const IDENTITY_TEXT_FIELDS = ["customName", "secondAssistant"];
 		const IDENTITY_MODE_OPTIONS = [
@@ -8525,6 +8076,44 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				label: "自定义"
 			}
 		];
+		/** 眼睛大小的可选档位（存储仍是 0.55–1 连续值；卡片把任意存量值吸附到最近档）。 */
+		const MASCOT_SCALE_STOPS = Object.freeze([
+			.55,
+			.7,
+			.85,
+			1
+		]);
+		const nearestScaleStop = (value) => {
+			const numeric = Number(value);
+			if (!Number.isFinite(numeric)) return 1;
+			return MASCOT_SCALE_STOPS.reduce((best, stop) => Math.abs(stop - numeric) < Math.abs(best - numeric) ? stop : best, MASCOT_SCALE_STOPS[0]);
+		};
+		const PALETTE_OPTIONS = [
+			{
+				value: "hdd",
+				label: "岩（默认）"
+			},
+			{
+				value: "ink",
+				label: "墨"
+			},
+			{
+				value: "ember",
+				label: "炭"
+			}
+		];
+		const MASCOT_POSITION_OPTIONS = MASCOT_POSITIONS.map((anchor) => ({
+			value: anchor,
+			label: MASCOT_POSITION_LABELS[anchor]
+		}));
+		const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({
+			value: String(stop),
+			label: `${Math.round(stop * 100)}%${stop === 1 ? "（默认）" : ""}`
+		}));
+		const MASCOT_SPEED_OPTIONS = SPEED_STOPS.map((rate) => ({
+			value: String(rate),
+			label: `${rate}×${rate === 1 ? "（默认）" : ""}`
+		}));
 		/** 家庭成员的线上形态：顿号/逗号分隔、最多 12 项（与逐键写盘时一致）。 */
 		const parseHousehold = (text) => String(text ?? "").split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
 		const sameHousehold = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
@@ -8535,6 +8124,10 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			mascotVisible: visual.mascotVisible === true,
 			powerMode: visual.powerMode === "low-power" ? "low-power" : "normal",
 			contentFade: visual.contentFade === true,
+			palette: PALETTES.includes(visual.palette) ? visual.palette : "hdd",
+			mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : "center",
+			mascotScale: nearestScaleStop(visual.mascotScale),
+			mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
 			mode: identity.mode || "ling",
 			customName: typeof identity.customName === "string" ? identity.customName : "",
 			secondAssistant: typeof identity.secondAssistant === "string" ? identity.secondAssistant : "",
@@ -8631,6 +8224,51 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						onChange: (next) => form.change("contentFade", next)
 					}, "contentFade"),
 					jsx(AskRow, {
+						id: "dsh-fairy-visual-palette",
+						label: "皮肤（调色盘）：",
+						hint: "岩=现值默认；墨=冷灰蓝；炭=暖炭。",
+						children: jsx(AskSelect, {
+							id: "dsh-fairy-visual-palette",
+							value: value("palette"),
+							options: PALETTE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("palette", next)
+						})
+					}, "palette"),
+					jsx(AskRow, {
+						id: "dsh-fairy-mascot-position",
+						label: "大眼睛位置：",
+						children: jsx(AskSelect, {
+							id: "dsh-fairy-mascot-position",
+							value: value("mascotPosition"),
+							options: MASCOT_POSITION_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotPosition", next)
+						})
+					}, "mascotPosition"),
+					jsx(AskRow, {
+						id: "dsh-fairy-mascot-scale",
+						label: "大眼睛大小：",
+						children: jsx(AskSelect, {
+							id: "dsh-fairy-mascot-scale",
+							value: String(value("mascotScale")),
+							options: MASCOT_SCALE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotScale", Number(next))
+						})
+					}, "mascotScale"),
+					jsx(AskRow, {
+						id: "dsh-fairy-mascot-speed",
+						label: "大眼睛动画速度：",
+						children: jsx(AskSelect, {
+							id: "dsh-fairy-mascot-speed",
+							value: String(value("mascotAnimationSpeed")),
+							options: MASCOT_SPEED_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotAnimationSpeed", Number(next))
+						})
+					}, "mascotAnimationSpeed"),
+					jsx(AskRow, {
 						id: "dsh-fairy-identity-mode",
 						label: "Fairy 当前将我识别为：",
 						children: jsx(AskSelect, {
@@ -8725,6 +8363,12 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 					controller,
 					identitySettings
 				})));
+				ctx.slots.inject("settings.section", () => ctx.slots.register({
+					name: "settings.section",
+					id: "dsh-fairy-workshop",
+					order: 46,
+					label: () => "创作工坊"
+				}, () => jsx(Workshop, {})));
 			}, { surface: "client" });
 		}
 		module.exports = {

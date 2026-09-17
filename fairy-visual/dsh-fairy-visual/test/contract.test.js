@@ -353,21 +353,17 @@ test('keeps both themes explicit and preserves the original Fairy visual primiti
   assert.match(clientSource, /scheduleGlitch/);
 });
 
-test('keeps animation speed selection and mascot rate synchronized across control rebinds', () => {
-  assert.match(speedControlSource, /SPEED_STOPS = Object\.freeze/);
-  assert.match(speedControlSource, /position: 0, rate: 0\.7/);
-  assert.match(speedControlSource, /position: 0\.5, rate: 1/);
-  assert.match(speedControlSource, /position: 1, rate: 1\.5/);
-  assert.match(speedControlSource, /let selectedPosition = 0\.5/);
-  assert.match(speedControlSource, /setPosition\(selectedPosition, true\)/);
-  assert.match(speedControlSource, /selectedPosition = stop\.position/);
-  assert.match(speedControlSource, /positionForRate\(rate\)/);
-  assert.match(speedControlSource, /options\.onChange\?\.\(stop\.rate\)/);
-  assert.match(composerDockSource, /mascotAnimationSpeed/);
-  assert.match(speedControlSource, /\['0\.7', '1', '1\.5'\]/);
-  assert.match(styleSource, /animation-speed-tick="0\.5"\].*animation-speed-tick="2"\].*display:none/);
-  assert.match(styleSource, /animation-speed-tick="0\.7"\].*left:6px/);
-  assert.match(styleSource, /animation-speed-tick="1\.5"\].*left:calc\(100% - 6px\)/);
+test('keeps animation speed selection and mascot rate synchronized through the settings path', () => {
+  // 速度控件已收进设置卡：写入走 settings 通道，应用走 StageHost 的 mount(…, speed)；
+  // 运行时的 SPEED_EVENT 通道保留为扩展点，作曲栏不再有速度控件条。
+  assert.match(clientEntrySource, /const MASCOT_SPEED_OPTIONS = SPEED_STOPS\.map/);
+  assert.match(clientEntrySource, /form\.change\('mascotAnimationSpeed', Number\(next\)\)/);
+  assert.match(clientEntrySource, /mascot\?\.mount\?\.\(stageNode, owner, state\.settings\.mascotAnimationSpeed\)/);
+  assert.match(clientEntrySource, /state\.settings\.mascotAnimationSpeed, state\.settings\.mascotPosition\]\)/);
+  assert.match(mascotRuntimeSource, /motionClock\.setRate\(rate\)/);
+  assert.match(speedControlSource, /SPEED_EVENT/);
+  assert.doesNotMatch(speedControlSource, /createMascotAnimationSpeedBase|selectedPosition|bindVisualDrag/);
+  assert.doesNotMatch(styleSource, /mascot-animation-speed-(base|control|tick|thumb)/);
 });
 
 test('keeps the mascot body under one scoped style and state owner', () => {
@@ -595,8 +591,8 @@ test('shares the new-session material with the voice volume hardware', () => {
   assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#f4f5f6/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\] \[data-dsh-fairy-volume-input="true"\]\{[^}]*opacity:0!important/);
   assert.match(styleSource, /data-dsh-fairy-wave-bar="true"\]\{width:2px!important;min-width:0!important;max-width:2px!important;flex:1 1 2px!important/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px!important;box-shadow:var\(--dsh-fairy-keycap-shadow\)/);
-  assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-mascot-scale-control="true"\]\{box-shadow:-4px -4px 9px rgba\(255,255,255,\.46\)/);
+  assert.doesNotMatch(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px/);
+  assert.doesNotMatch(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{box-shadow:-4px -4px 9px rgba\(255,255,255,\.46\)/);
 });
 
 test('keeps the Composer command control aligned with the input edge inset', () => {
@@ -663,7 +659,7 @@ test('diagnoses visual setting failures through one asynchronous boundary', () =
   assert.match(settingsWriteSource, /DSH_FAIRY_LOG/);
   assert.match(clientSource, /const save = saveControllerSetting/);
   assert.match(composerDockSource, /settingError\('composerDockHeight', error\)/);
-  assert.match(mascotScaleSource, /settingError\('mascotScale', error\)/);
+  assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);
   assert.doesNotMatch(clientSource, /controller\.set\(field, value\)\.catch\(\(\) => \{\}\)/);
 });
 
@@ -964,31 +960,17 @@ test('keeps Fairy scale control removed from the voice hardware', () => {
   assert.doesNotMatch(clientSource, /dsh-fairy-halo-layer-mask[\s\S]*?<circle[^>]+r="66" fill="#000"/);
 });
 
-test('mounts the Fairy scale control inside its stable outer capsule', () => {
-  assert.match(mascotScaleSource, /const BASE_ATTR = 'data-dsh-fairy-mascot-scale-base'/);
-  assert.match(mascotScaleSource, /function createMascotScaleBase\(host, controller, documentRef = document\)/);
-  const baseSource = mascotScaleSource.slice(mascotScaleSource.indexOf('function createMascotScaleBase'), mascotScaleSource.indexOf('function createMascotScaleControl'));
-  assert.match(baseSource, /setAttribute\(BASE_ATTR, 'true'\)/);
-  assert.match(baseSource, /createMascotScaleControl\(shell, controller, documentRef\)/);
-  assert.match(baseSource, /!existing\.querySelector\(`\[\$\{CONTROL_ATTR\}="true"\]`\)/);
-  assert.doesNotMatch(baseSource, /setAttribute\('aria-hidden', 'true'\)/);
-  assert.match(mascotScaleSource, /input\.style\.setProperty\('--dsh-fairy-scale', progress\)/);
-  assert.match(composerDockSource, /createMascotScaleBase\(card, controller\)/);
-  assert.match(composerDockSource, /if \(!node\.closest\?\.\('\[data-dsh-fairy-mascot-scale-base="true"\]'\)\) node\.remove\(\)/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-base="true"\]\{position:absolute!important;z-index:11!important;right:0!important;top:33px!important/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-base="true"\]\{[^}]*width:152px!important[^}]*height:28px!important/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-base="true"\] \[data-dsh-fairy-mascot-scale-control="true"\]\{[^}]*inset:5px!important/);
-  assert.match(styleSource, /linear-gradient\(to right,var\(--dsh-fairy-scale-fill,#08090b\) 0 var\(--dsh-fairy-scale,100%\),var\(--dsh-fairy-scale-rest,#7d8790\)/);
-  assert.match(styleSource, /background-image:linear-gradient\(to right,transparent 0 var\(--dsh-fairy-scale,100%\),#cfd2d5 var\(--dsh-fairy-scale,100%\) 100%\),radial-gradient\(ellipse 38% 170% at 15% 18%/);
-  assert.match(styleSource, /linear-gradient\(to right,var\(--dsh-fairy-scale-gradient-start\) 0%,var\(--dsh-fairy-scale-gradient-blue\) 34%,var\(--dsh-fairy-scale-gradient-purple\) 67%,var\(--dsh-fairy-scale-gradient-end\) 100%\)/);
-  assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*--dsh-fairy-scale-gradient-start:#d6f5ff[^}]*--dsh-fairy-scale-gradient-blue:#7897d8[^}]*--dsh-fairy-scale-gradient-purple:#b29be8[^}]*--dsh-fairy-scale-gradient-end:#f7bbdc/);
-  assert.match(styleSource, /data-dsh-fairy-theme="dark"[^}]*--dsh-fairy-scale-gradient-start:#8bb9c8[^}]*--dsh-fairy-scale-gradient-blue:#36519a[^}]*--dsh-fairy-scale-gradient-purple:#624d9f[^}]*--dsh-fairy-scale-gradient-end:#b26b99/);
-  assert.match(styleSource, /--dsh-fairy-scale-inset-shadow:inset 0 0 6px rgba\(52,63,73,\.48\)[^}]*box-shadow:var\(--dsh-fairy-scale-inset-shadow\)!important/);
-  assert.match(styleSource, /data-dsh-fairy-theme="dark"[^}]*--dsh-fairy-scale-inset-shadow:inset 0 0 6px rgba\(0,0,0,\.68\)/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]::before,[\s\S]*?::after\{display:none!important;content:none!important/);
-  assert.match(styleSource, /data-dsh-fairy-mascot-scale-base="true"\] \[data-dsh-fairy-mascot-scale-input="true"\]\{[^}]*opacity:0!important/);
-  assert.match(styleSource, /@media\(max-width:900px\)[\s\S]*data-dsh-fairy-mascot-scale-base="true"\]\{right:-2px!important;width:108px!important/);
-  assert.match(styleSource, /@media\(max-width:620px\)[\s\S]*data-dsh-fairy-mascot-scale-base="true"\]\{display:none!important/);
+test('applies the Fairy scale through the settings path without composer controls', () => {
+  // 大小控件已收进设置卡；应用仍走 scheduleMascotScale(settings.mascotScale)，
+  // 作曲栏的滑杆与外壳控件全部撤出，对应 CSS 一并删除。
+  assert.match(mascotScaleSource, /function applyMascotScale\(value, documentRef = document\)/);
+  assert.match(mascotScaleSource, /function scheduleMascotScale\(value, documentRef = document\)/);
+  assert.match(mascotScaleSource, /root\.setAttribute\('data-dsh-fairy-mascot-scale', String\(scale\)\)/);
+  assert.match(clientEntrySource, /scheduleMascotScale\(state\.settings\.mascotScale\)/);
+  assert.match(clientEntrySource, /const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS\.map/);
+  assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);
+  assert.doesNotMatch(mascotScaleSource, /createMascotScaleBase|createMascotScaleControl|BASE_ATTR|INPUT_ATTR/);
+  assert.doesNotMatch(styleSource, /mascot-scale-(base|control|input)/);
 });
 
 test('keeps the voice volume tooltip in the Fairy control material language', () => {
@@ -1155,33 +1137,48 @@ test('弹层打开期间：拖拽把手不得吞掉菜单点击（网格扫描�
   assert.match(styleSource, /\[data-dsh-fairy-composer-popover="true"\] \.dsh-fairy-composer-resizer\{pointer-events:none!important\}/, '弹层打开期间把手必须指针穿透');
 });
 
-test('大眼睛位置设置项：锚点 → 内层 float 的 translate 位移（挂载/清理/schema 齐备）', async () => {
-  // 需求：眼睛有独立设置项、可改位置。实现只动眼睛本身（宿主固定定位不动、布局盒不变），
-  // 用 translate（独立于 transform，不与入场 transform 打架），并走既有的设置写入路径。
+test('大眼睛位置设置项：设置卡写入 + 根属性应用（控件条已撤出 UI）', async () => {
+  // 需求：眼睛位置在设置里改。属性落在吉祥物根上，由 CSS 翻译成内层 float 的
+  // translate 位移；作曲栏不再有位置控件条。
   assert.ok(styleSource.includes('--dsh-fairy-mascot-shift-x'), '缺位移令牌');
   assert.ok(styleSource.includes('.dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x)'), '缺 float 位移规则');
   assert.ok(styleSource.includes('data-dsh-fairy-mascot-position='), '缺锚点选择器');
-  const positionControl = await read('../src/client/mascot-position-control.js');
-  assert.ok(positionControl.includes("setControllerSetting(controller, 'mascotPosition', anchor)"), '缺设置写入（必须走 settings 通道）');
-  assert.ok(positionControl.includes('data-dsh-fairy-mascot-position-control'), '缺控件标记');
-  const dock = await read('../src/client/composer-dock.js');
-  assert.ok(dock.includes('ensureMascotPositionBase();') && dock.includes('removeMascotPositionBase();'), '缺挂载或清理');
+  assert.match(utilsSource, /export function applyMascotPosition\(value, documentRef = document\)/);
+  assert.match(utilsSource, /setAttribute\(MASCOT_POSITION_ATTR, normalizeMascotPosition\(value\)\)/);
+  assert.match(constantsSource, /export const MASCOT_POSITION_LABELS/);
+  assert.match(clientEntrySource, /form\.change\('mascotPosition', next\)/);
+  assert.match(clientEntrySource, /applyMascotPosition\(state\.settings\.mascotPosition\)/);
   assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
-  assert.ok((await read('../lib/client.js')).includes('mascot-position-control'), '客户端 bundle 没带上位置控件');
+  assert.ok((await read('../lib/client.js')).includes('dsh-fairy-mascot-position'), '客户端 bundle 没带上位置设置项');
+  const dock = await read('../src/client/composer-dock.js');
+  assert.ok(!dock.includes('MascotPositionBase'), '位置控件条必须已撤出作曲栏');
 });
 
-test('调色盘设置项：属性管线/令牌块/控件/落盘路径齐备', async () => {
+test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（控件条已撤出 UI）', async () => {
   // 需求：HDD 自有 chrome 的调色盘（hdd/ink/ember）。hdd=属性缺省（默认零变化），
-  // 非 hdd 落 data-dsh-fairy-palette；令牌层整体覆写卡片/键帽语义面，控件走 settings 通道。
+  // 非 hdd 落 data-dsh-fairy-palette；令牌层整体覆写卡片/键帽语义面，写入走 settings 通道。
   assert.ok(constantsSource.includes('PALETTE_ATTR'), '缺调色盘属性常量');
   assert.ok(utilsSource.includes('PALETTE_ATTR'), '属性同步缺调色盘分支');
   assert.ok(clientEntrySource.includes('removeAttribute(PALETTE_ATTR)'), 'dispose 缺调色盘清理');
   assert.ok(styleSource.includes('data-dsh-fairy-palette="ink"') && styleSource.includes('data-dsh-fairy-palette="ember"'), '缺两个调色盘令牌块');
-  const paletteControl = await read('../src/client/mascot-palette-control.js');
-  assert.ok(paletteControl.includes("setControllerSetting(controller, 'palette'"), '缺设置写入（必须走 settings 通道）');
-  assert.ok(paletteControl.includes('data-dsh-fairy-palette-control'), '缺控件标记');
-  const dock = await read('../src/client/composer-dock.js');
-  assert.ok(dock.includes('ensureMascotPaletteBase();') && dock.includes('removeMascotPaletteBase();'), '缺挂载或清理');
+  assert.match(clientEntrySource, /form\.change\('palette', next\)/);
   assert.ok((await read('../lib/index.js')).includes('palette:'), 'host schema 缺 palette');
-  assert.ok((await read('../lib/client.js')).includes('mascot-palette-control'), '客户端 bundle 没带上调色盘控件');
+  assert.ok((await read('../lib/client.js')).includes('dsh-fairy-visual-palette'), '客户端 bundle 没带上调色盘设置项');
+  const dock = await read('../src/client/composer-dock.js');
+  assert.ok(!dock.includes('MascotPaletteBase'), '调色盘控件条必须已撤出作曲栏');
+});
+
+test('创作工坊：设置分区 + 只读状态端点 + 设计指令复制', async () => {
+  // 需求：设计 DSH UI 的工作台要有可见入口（设置里的「创作工坊」分区），
+  // 状态来自宿主只读端点；设计技能与 pen 接线可自检；一键复制设计指令。
+  assert.match(clientEntrySource, /id: 'dsh-fairy-workshop', order: 46, label: \(\) => '创作工坊'/);
+  const workshop = await read('../src/client/workshop.js');
+  assert.match(workshop, /fetch\('\/fairy-visual\/workshop'/);
+  assert.match(workshop, /navigator\.clipboard/);
+  assert.match(serverSource, /const WORKSHOP_PATH = '\/fairy-visual\/workshop'/);
+  assert.match(serverSource, /workshopStatus\(\)/);
+  assert.match(serverSource, /'profiles', 'web', 'cordis\.patch\.yml'/);
+  assert.match(serverSource, /mcp-pen/);
+  assert.ok((await read('../lib/index.js')).includes('webServer'), '宿主 bundle 没带上工作坊端点');
+  assert.ok((await read('../lib/client.js')).includes('创作工坊'), '客户端 bundle 没带上创作工坊分区');
 });

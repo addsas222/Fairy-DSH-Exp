@@ -3,9 +3,9 @@ const { jsx, jsxs } = require('react/jsx-runtime');
 const { createFairyDiagnostics } = require('../../../../fairy-contracts/client-diagnostics.cjs');
 const { createAskKit } = require('../../../../fairy-contracts/client-ask-kit.cjs');
 const uiPrimitives = require('@deepseek-ai/dsh-client-ui-primitives');
-const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = require('./constants.js');
+const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, PALETTES, MASCOT_POSITIONS, MASCOT_POSITION_LABELS, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = require('./constants.js');
 const IDENTITY_SETTINGS_NAMESPACE = 'fairy-identity';
-const { deriveSessionActivity, syncDocumentMode } = require('./utils.js');
+const { applyMascotPosition, deriveSessionActivity, syncDocumentMode } = require('./utils.js');
 const { injectStyles } = require('./style.js');
 const { mountComposerDock } = require('./composer-dock.js');
 const { createLifecycleScope, claimSingleton } = require('./lifecycle.js');
@@ -24,7 +24,8 @@ const { createSelectionGuard } = require('./selection-guard.js');
 const { scheduleMascotScale, MASCOT_GEOMETRY_EVENT } = require('./mascot-scale-control.js');
 const { saveControllerSetting, setControllerSetting, settingError } = require('./settings-write.js');
 const { mutationTouchesSurface } = require('./surface-utils.js');
-const { migrateVisualSettings, normalizeSetting } = require('./settings-normalizer.cjs');
+const { migrateVisualSettings, normalizeSetting, SPEED_STOPS } = require('./settings-normalizer.cjs');
+const { Workshop } = require('./workshop.js');
 const { createVisualTransitions } = require('./visual-transitions.js');
 const {
   OFFICIAL_SELECTORS,
@@ -356,7 +357,8 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
         const mascot = mascotRuntime;
         mascot?.mount?.(stageNode, owner, state.settings.mascotAnimationSpeed);
         mascot?.setVisualActive?.(visible, owner);
-      }, [visible, state.activity, state.settings.powerMode, state.settings.mascotAnimationSpeed]);
+        applyMascotPosition(state.settings.mascotPosition);
+      }, [visible, state.activity, state.settings.powerMode, state.settings.mascotAnimationSpeed, state.settings.mascotPosition]);
 
       React.useLayoutEffect(() => {
         if (!enabled) return undefined;
@@ -808,13 +810,28 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
     const askKit = createAskKit({ React, jsx, jsxs, primitives: uiPrimitives });
 
     /** 本卡提问的视觉字段（写回 `fairy-visual`）与身份字段（写回 `fairy-identity`）。 */
-    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode', 'contentFade'];
+    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode', 'contentFade', 'palette', 'mascotPosition', 'mascotScale', 'mascotAnimationSpeed'];
     const IDENTITY_TEXT_FIELDS = ['customName', 'secondAssistant'];
     const IDENTITY_MODE_OPTIONS = [
       { value: 'ling', label: '铃' },
       { value: 'zhe', label: '哲' },
       { value: 'custom', label: '自定义' },
     ];
+    /** 眼睛大小的可选档位（存储仍是 0.55–1 连续值；卡片把任意存量值吸附到最近档）。 */
+    const MASCOT_SCALE_STOPS = Object.freeze([0.55, 0.7, 0.85, 1]);
+    const nearestScaleStop = (value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return 1;
+      return MASCOT_SCALE_STOPS.reduce((best, stop) => (Math.abs(stop - numeric) < Math.abs(best - numeric) ? stop : best), MASCOT_SCALE_STOPS[0]);
+    };
+    const PALETTE_OPTIONS = [
+      { value: 'hdd', label: '岩（默认）' },
+      { value: 'ink', label: '墨' },
+      { value: 'ember', label: '炭' },
+    ];
+    const MASCOT_POSITION_OPTIONS = MASCOT_POSITIONS.map((anchor) => ({ value: anchor, label: MASCOT_POSITION_LABELS[anchor] }));
+    const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({ value: String(stop), label: `${Math.round(stop * 100)}%${stop === 1 ? '（默认）' : ''}` }));
+    const MASCOT_SPEED_OPTIONS = SPEED_STOPS.map((rate) => ({ value: String(rate), label: `${rate}×${rate === 1 ? '（默认）' : ''}` }));
 
     /** 家庭成员的线上形态：顿号/逗号分隔、最多 12 项（与逐键写盘时一致）。 */
     const parseHousehold = (text) => String(text ?? '').split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
@@ -827,6 +844,10 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       mascotVisible: visual.mascotVisible === true,
       powerMode: visual.powerMode === 'low-power' ? 'low-power' : 'normal',
       contentFade: visual.contentFade === true,
+      palette: PALETTES.includes(visual.palette) ? visual.palette : 'hdd',
+      mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : 'center',
+      mascotScale: nearestScaleStop(visual.mascotScale),
+      mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
       mode: identity.mode || 'ling',
       customName: typeof identity.customName === 'string' ? identity.customName : '',
       secondAssistant: typeof identity.secondAssistant === 'string' ? identity.secondAssistant : '',
@@ -904,6 +925,10 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
           jsx(AskToggle, { id: 'dsh-fairy-visual-mascot', label: '显示 Fairy 主视觉', checked: value('mascotVisible'), disabled: !writable, onChange: (next) => form.change('mascotVisible', next) }, 'mascot'),
           jsx(AskToggle, { id: 'dsh-fairy-visual-power', label: '低功耗模式', checked: value('powerMode') === 'low-power', disabled: !writable, onChange: (next) => form.change('powerMode', next ? 'low-power' : 'normal') }, 'power'),
           jsx(AskToggle, { id: 'dsh-fairy-visual-content-fade', label: '内容遮罩', hint: '开启时主视觉会遮住其下的正文（生成期间新文字会变淡）；关闭后正文始终可读。', checked: value('contentFade'), disabled: !writable, onChange: (next) => form.change('contentFade', next) }, 'contentFade'),
+          jsx(AskRow, { id: 'dsh-fairy-visual-palette', label: '皮肤（调色盘）：', hint: '岩=现值默认；墨=冷灰蓝；炭=暖炭。', children: jsx(AskSelect, { id: 'dsh-fairy-visual-palette', value: value('palette'), options: PALETTE_OPTIONS, disabled: !writable, onChange: (next) => form.change('palette', next) }) }, 'palette'),
+          jsx(AskRow, { id: 'dsh-fairy-mascot-position', label: '大眼睛位置：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-position', value: value('mascotPosition'), options: MASCOT_POSITION_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotPosition', next) }) }, 'mascotPosition'),
+          jsx(AskRow, { id: 'dsh-fairy-mascot-scale', label: '大眼睛大小：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-scale', value: String(value('mascotScale')), options: MASCOT_SCALE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotScale', Number(next)) }) }, 'mascotScale'),
+          jsx(AskRow, { id: 'dsh-fairy-mascot-speed', label: '大眼睛动画速度：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-speed', value: String(value('mascotAnimationSpeed')), options: MASCOT_SPEED_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotAnimationSpeed', Number(next)) }) }, 'mascotAnimationSpeed'),
           jsx(AskRow, { id: 'dsh-fairy-identity-mode', label: 'Fairy 当前将我识别为：', children: jsx(AskSelect, { id: 'dsh-fairy-identity-mode', value: value('mode'), options: IDENTITY_MODE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mode', next) }) }, 'mode'),
           jsx('div', {
             onBlur: flush,
@@ -943,6 +968,7 @@ function apply(ctx) {
       ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({ name: 'conversation.session.header.utilities', id: 'dsh-fairy-session-metrics', order: 80 }, () => jsx(SessionMetricsControl, {})));
       ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({ name: 'conversation.session.header.utilities', id: 'dsh-fairy-visual-toggle', order: 90 }, () => jsx(Toggle, { controller })));
       ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'dsh-fairy-visual', order: 45, label: () => 'HDD 视觉与 Fairy 身份' }, () => jsx(Settings, { controller, identitySettings })));
+      ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'dsh-fairy-workshop', order: 46, label: () => '创作工坊' }, () => jsx(Workshop, {})));
       }, { surface: 'client' });
     }
 
