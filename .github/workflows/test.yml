@@ -28,6 +28,7 @@ jobs:
             fairy-search/dsh-fairy-search/pnpm-lock.yaml
             fairy-memory/dsh-fairy-memory/pnpm-lock.yaml
             fairy-roleplay/dsh-fairy-roleplay/pnpm-lock.yaml
+            fairy-eval/dsh-fairy-eval/pnpm-lock.yaml
       - name: Install and test visual
         working-directory: fairy-visual/dsh-fairy-visual
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
@@ -48,6 +49,9 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
       - name: Install and test roleplay
         working-directory: fairy-roleplay/dsh-fairy-roleplay
+        run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
+      - name: Install and test eval
+        working-directory: fairy-eval/dsh-fairy-eval
         run: pnpm install --frozen-lockfile --ignore-scripts && pnpm test
       # Dependency-free self-tests of the create-mode tooling (skill-audit,
       # scaffold-plugin). The full fairy-system suite stays out of CI until an

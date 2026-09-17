@@ -20,7 +20,7 @@
 | pnpm | ≥ 11（每个包各自带 lockfile，逐包安装） |
 | 社区包 dsh-web | 需 **≥ 0.1.5-rc.1**，与本仓分居客户端面孔切换线两侧（0.1.2 起移除 `@deepseek-ai/dsh-client-runtime`），同一 profile 不能共跑；详见 `fairy-system/DSH-WEB-COMPAT.md` |
 
-### 1.2 包清单（9 个插件包 + 支撑目录）
+### 1.2 包清单（11 个插件包 + 支撑目录）
 
 | 路径 | 作用 |
 | --- | --- |
@@ -29,6 +29,7 @@
 | `fairy-search/dsh-fairy-search/` | 搜索枢纽：deepseek / exa / perplexity / 自定义路由 + MCP 片段生成。端点 `/fairy-search/*` |
 | `fairy-memory/dsh-fairy-memory/` | 长期记忆：**GBrain 主用**（MCP，按官方 `MEMORY_VERBS_v1`），mem0 / 自定义 HTTP / 本地 Markdown 备选；`memory_recall`/`memory_remember` 工具 + CLI。端点 `/fairy-memory/*` |
 | `fairy-roleplay/dsh-fairy-roleplay/` | 角色扮演（`/mode roleplay`，流水线环的起点与回环点）：去AI味检查器（L1 词表 → L4 通读）+ 风格库（当…时，可以用…）+ 规划/时机/回复规则；`roleplay_check`/`roleplay_style` 工具 + 设置卡。端点 `/fairy-roleplay/*` |
+| `fairy-eval/dsh-fairy-eval/` | TypeSafe 结构化文本评估（Noul / Choice / Score 一次调用多问题）：`typesafe_eval` 工具 + 端点 `/fairy-eval/{status,evaluate}`；配置走环境变量（`TYPESAFE_API_KEY` / `TYPESAFE_MODEL`，无设置卡）；**宿主型包**（无客户端 bundle，门禁契约 `client: false`） |
 | `fairy-voice/dsh-fairy-voice/` | TTS provider 注册表（local-sovits / openai / elevenlabs-ws / kokoro-web / kitten-web / piper-web / browser / custom-http）与 STT（网上：browser / openai / deepgram / azure / custom-http；本地：whisper-web、或 openai 指向 loopback）。端点 `/fairy-voice/*` |
 | `fairy-visual/` | 视觉舞台（HDD 视觉与身份），客户端产物由 tsdown 生成 |
 | `balance-meter/` | 余额指示 |
