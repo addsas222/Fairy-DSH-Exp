@@ -3824,6 +3824,8 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				removeMaterialLayer();
 				removeMascotScaleBase();
 				removeMascotAnimationSpeedBase();
+				removeMascotPositionBase();
+				removeMascotPaletteBase();
 				removeLegacyVoiceDensityMarker();
 				seat.querySelector("[data-dsh-fairy-composer-stack=\"true\"]")?.removeAttribute("data-dsh-fairy-model-menu-open");
 				MARKER_ATTRS.forEach((name) => clearMarkerTree(seat, name));

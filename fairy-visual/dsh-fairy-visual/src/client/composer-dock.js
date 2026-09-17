@@ -221,6 +221,8 @@ function mountComposerDock(controller) {
     removeMaterialLayer();
     removeMascotScaleBase();
     removeMascotAnimationSpeedBase();
+    removeMascotPositionBase();
+    removeMascotPaletteBase();
     removeLegacyVoiceDensityMarker();
     seat.querySelector('[data-dsh-fairy-composer-stack="true"]')?.removeAttribute('data-dsh-fairy-model-menu-open');
     // Clear the complete owned marker tree. A replacement can leave a marker

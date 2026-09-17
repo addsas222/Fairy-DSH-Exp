@@ -1177,6 +1177,14 @@ test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲�
   const palette = await read('../src/client/mascot-palette-control.js');
   assert.doesNotMatch(palette, /addEventListener|setControllerSetting/, '调色盘读数条必须只读：不得监听点击或写设置');
   assert.match(styleSource, /data-dsh-fairy-palette-control="true"/, '调色盘读数条样式必须保留');
+  // 生命周期对齐：restoreSeat（禁用/换座路径）必须释放全部四条读数条，
+  // 只清 scale/speed 会让 position/palette 以裸控件形态留在宿主作曲栏卡片上。
+  const restoreStart = composerDockSource.indexOf('  const restoreSeat =');
+  assert.ok(restoreStart >= 0, 'composer-dock 缺 restoreSeat');
+  const restoreBlock = composerDockSource.slice(restoreStart, composerDockSource.indexOf('\n  };', restoreStart));
+  for (const release of ['removeMascotScaleBase()', 'removeMascotAnimationSpeedBase()', 'removeMascotPositionBase()', 'removeMascotPaletteBase()']) {
+    assert.ok(restoreBlock.includes(release), `restoreSeat 必须释放 ${release}`);
+  }
 });
 
 test('创作工坊：设置分区 + 只读状态端点 + 设计指令复制', async () => {
