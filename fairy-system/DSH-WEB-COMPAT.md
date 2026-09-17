@@ -29,6 +29,32 @@ profile 机制挂载（`dsh plugin --profile web add @linxin666/dsh-web-all@late
 `fairy-web-fetch-http` 行必须禁用（行条件见 `profiles/web/cordis.patch.yml`）——
 未禁用会以 `WEB_DUPLICATE_PROVIDER` 在启动期失败（0.1.6-alpha.1 实测）。
 
+### 0.1.6 客户端面（已落位，2026-09-17）
+
+0.1.6 的客户端模块面去掉了 `@deepseek-ai/dsh-client-runtime`（新面为
+`dsh-client-store` / `dsh-client-resources` / `dsh-client-ui-renderer` 等；
+`ctx.slots` 由 `dsh-client-ui-renderer` 提供，**API 与旧面相同**）。Fairy 自己
+的 10 个客户端 bundle 在该面上**无需改动**即可 apply（实证：client 侧
+`DSH_FAIRY_LOG … "surface":"client","outcome":"success"`）；注入清单里残留的
+旧面名字不会被解析，但也不会阻塞条目激活。
+
+真正的阻塞者是**第三方插件** `dsh-message-edit@0.2.3`：它的客户端
+`require("@deepseek-ai/dsh-client-runtime/client")`（0.1.6 无此模块）导致该
+条目激活失败，而宿主会因"1 entry did not activate"**不组装整个 web UI**——
+症状是白屏 + `Failed to load plugins`，Fairy 的 dock/主视觉没有可挂载的 DOM。
+
+修复：`profiles/web/patches/dsh-message-edit@0.2.3.patch` 的 **client.js hunk**
+把该 require 改为「先 `@deepseek-ai/dsh-client-store`，抛错则回退旧面」——
+两条底座线因此都能用（0.1.1 走回退、0.1.6 走新面）。改补丁后须重算
+`pnpm-lock.yaml` 的 `patchedDependencies` 哈希（`pnpm install --lockfile-only`
+或直接 `pnpm install`）。验证：两线分别起 `--profile web`，页面应出现
+`[data-dsh-fairy-composer-dock="true"]` 与 `#dsh-fairy-root`。
+
+已知残留（不阻塞 Fairy）：`dsh-reasoning-effort` 的客户端把条目注册进
+`conversation.input.model` 且未声明 `remote.session` 依赖，在 0.1.6 上该 slot
+条目抛 `cannot get property "remote.session" without inject`（模型行控件退化，
+其余 UI 正常）。修法同型：补它的 inject/external 声明——需两线同验后再动。
+
 ## 软兼容面（同 cohort 前提下实测为干净）
 
 - 设置命名空间零冲突：dsh-web 用 `pet`/`doctor`/`task-board`/`dsh-ssh`/`dsh-usage`

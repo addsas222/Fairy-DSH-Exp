@@ -16,7 +16,7 @@
 | 项 | 值 |
 | --- | --- |
 | DSH | **0.1.1-rc.2**（capability matrix、官方 runtime SHA-256、upgrade-preflight 批准记录都以它为准） |
-| DSH 底座线 | `011`=0.1.1-rc.2（长期运行、门禁钉定）；`015`=0.1.5-rc.1；`016`=**0.1.6-alpha.1**（最新非稳定线，2026-09-17 纳入）。线号决定 profile 抓取通道行是否禁用（015/016 上底座自带，未禁用会 `WEB_DUPLICATE_PROVIDER`），装成哪条线由 `scripts/install.mjs` 的 `baseFor`/`KNOWN_BASES` 与启动器导出的 `DSH_FAIRY_BASE` 同源决定；除 011 外的线仅供安装/启动，门禁仍钉 0.1.1-rc.2 |
+| DSH 底座线 | `011`=0.1.1-rc.2（长期运行、门禁钉定）；`015`=0.1.5-rc.1；`016`=**0.1.6-alpha.1**（最新非稳定线，2026-09-17 纳入，客户端面已实测落位——见 `fairy-system/DSH-WEB-COMPAT.md` §0.1.6）。线号决定 profile 抓取通道行是否禁用（015/016 上底座自带，未禁用会 `WEB_DUPLICATE_PROVIDER`），装成哪条线由 `scripts/install.mjs` 的 `baseFor`/`KNOWN_BASES` 与启动器导出的 `DSH_FAIRY_BASE` 同源决定；除 011 外的线仅供安装/启动，门禁仍钉 0.1.1-rc.2 |
 | Node | CI 固定 **22**（`.github/workflows/test.yml`）；各包未声明 `engines`，测试用内置 `node --test` |
 | pnpm | ≥ 11（每个包各自带 lockfile，逐包安装） |
 | 社区包 dsh-web | 需 **≥ 0.1.5-rc.1**，与本仓分居客户端面孔切换线两侧（0.1.2 起移除 `@deepseek-ai/dsh-client-runtime`），同一 profile 不能共跑；详见 `fairy-system/DSH-WEB-COMPAT.md` |
@@ -485,6 +485,16 @@ import 痕迹"是正常现象，不能读作"在跑降级"。这条此前在本�
 
       git cat-file -p :profiles/web/patches/dsh-message-edit@0.2.3.patch > \
         profiles/web/patches/dsh-message-edit@0.2.3.patch
+
+- **web 端白屏、只显示 `Failed to load plugins`（0.1.6 线）**：宿主对"客户端条目
+  未激活"是**整页不组装**——任一插件的客户端模块 import 失败，Fairy 的 dock/主视觉
+  就没有可挂载的 DOM（表现为"客户端面未落位"）。先看页面标题下点名的条目，再抓
+  `window.__DSH_BOOT__.entries` 里该条目的 `url` 并 `fetch` 它，列出其
+  `require("<包>")` 清单，对照 0.1.6 的 `@deepseek-ai/` 是否还有该包。已知一例：
+  `dsh-message-edit` 的客户端要旧面的 `dsh-client-runtime/client`（0.1.6 已无此
+  模块）→ 修复见 `profiles/web/patches/dsh-message-edit@0.2.3.patch` 的 client.js
+  hunk（新面优先 + 旧面回退，两线通用）。改补丁后记得同步 `pnpm-lock.yaml` 的
+  `patchedDependencies` 哈希。
 
 - **构建契约报"manifest 比产物新"**：该检查只对**有构建脚本**的包生效。命中时跑
   该包的 `pnpm bundle`（fairy-memory：`node scripts/bundle.mjs`）重建产物。
