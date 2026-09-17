@@ -1177,6 +1177,10 @@ test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲�
   const palette = await read('../src/client/mascot-palette-control.js');
   assert.doesNotMatch(palette, /addEventListener|setControllerSetting/, '调色盘读数条必须只读：不得监听点击或写设置');
   assert.match(styleSource, /data-dsh-fairy-palette-control="true"/, '调色盘读数条样式必须保留');
+  assert.doesNotMatch(styleSource, /composer-animation-speed-control/, '零生产者选择器不得回归');
+  assert.doesNotMatch(styleSource, /\[data-dsh-fairy-mascot-(?:animation-speed|scale)-control="true"\]\{[^}]*pointer-events:auto/, '读数条不得再带交互期 pointer-events:auto');
+  assert.doesNotMatch(styleSource, /mascot-animation-speed-control="true"\]\{[^}]*cursor:grab/, '读数条不得再带拖拽期 cursor（缩放手柄的合法 cursor:grab 不受影响）');
+  assert.doesNotMatch(styleSource, /\[data-dsh-fairy-mascot-animation-speed-control="true"\]\[data-dragging="true"\]/, '拖拽作用域的读数条从句不得回归');
   // 生命周期对齐：restoreSeat（禁用/换座路径）必须释放全部四条读数条，
   // 只清 scale/speed 会让 position/palette 以裸控件形态留在宿主作曲栏卡片上。
   const restoreStart = composerDockSource.indexOf('  const restoreSeat =');
