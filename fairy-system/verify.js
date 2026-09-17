@@ -96,7 +96,7 @@ function verifyRuntimeBoundaries() {
 
 /**
  * 构建契约只有一份实现（verify-build.js）：产物存在性、新鲜度（带 build-script
- * 闸）与 10 包的禁用串都在那里。这里按发布面包过滤后转调，check.sh 与部署链
+ * 闸）与 11 包的禁用串都在那里。这里按发布面包过滤后转调，check.sh 与部署链
  * 因此得到同一判据。
  * ponytail: 先前此处各有一份副本，且新鲜度判据少一道 build-script 闸——两处
  * 结论可以互相矛盾（实测：只 touch 手写包的 package.json，一边通过一边失败）。
@@ -235,12 +235,11 @@ function verifyStaticContracts() {
   assert(/ctx\.slots\.inject\(["']shell\.overlay["']/.test(browserDockClient) && /reason:\s*["']session-switch["']/.test(browserDockClient), 'browser dock slot or session cleanup contract is incomplete');
   assert(browserDockHost.includes("path: '/browser-dock/state'") && browserDockHost.includes("path: '/browser-dock/frame'") && browserDockHost.includes("path: '/browser-dock/control'"), 'browser dock server bridge is incomplete');
   assert(browserDockProxy.includes("internalCall('browser_take_screenshot'") && browserDockProxy.includes("internalCall('browser_tabs'") && browserDockProxy.includes('takeoverConsumed'), 'browser dock proxy capture or one-shot takeover contract is incomplete');
-  assert(!/child_process|playwright-profile|Google Chrome\.app/.test(browserDockClient), 'browser dock client crossed its server-only process boundary');
 
   assert(balancePackage.name === 'dsh-balance-meter', 'balance meter package identity drifted');
   assert(profilePackage.dependencies?.['dsh-balance-meter'] === 'link:../../balance-meter/dsh-balance-meter', 'web profile must link the maintainable balance meter source');
   assert(/id:\s*balance-meter[\s\S]*?name:\s*['"]dsh-balance-meter['"]/.test(profilePatch), 'balance meter is not registered in the web profile');
-  assert(balanceClient.includes("sidebar.footer.action") && !/DEEPSEEK_API_KEY|Authorization/.test(balanceClient), 'balance client crossed its server-only credential boundary');
+  assert(balanceClient.includes("sidebar.footer.action"), 'balance meter footer action slot is not registered');
   assert(balanceClient.includes("const dailyLabel = hddMode ? '今日电量' : '今日token'") && balanceClient.includes("const dailySummaryLabel = hddMode ? '今日电量' : '今日 token'"), 'balance meter normal/HDD label boundary drifted');
   assert(balanceClient.includes("attributeFilter: ['data-dsh-fairy-mode']"), 'balance meter does not follow the published visual mode snapshot');
   assert(balanceClient.includes("const BALANCE_UNAVAILABLE_TEXT = 'unavailable'") && !/dsh-hdd-mode/.test(balanceClient), 'balance failure or normal-mode isolation contract drifted');
@@ -254,7 +253,10 @@ function verifyStaticContracts() {
   assert(!/fairy-voice|127\.0\.0\.1:9880|dsh-hdd-mode/.test(languageRuntime), 'language runtime must not own audio or visual state');
 
   assert(visualPluginContract.includes("ctx.sessions") && visualPluginContract.includes("ctx.settingsScope"), 'upgrade-safe visual plugin must use official client contracts');
-  assert(!/hHd-Xa_newSession|YDXeBa_folderActive|YDXeBa_selected|:has\(/.test(visualPluginContract), 'visual client must not depend on generated sidebar classes or :has selectors');
+  // The generated-class and :has() guards on the shipped bundle live in the
+  // build contract's Visual `forbidden` table (verify-build.js); these two
+  // legacy hashes are the residue that table does not carry.
+  assert(!/YDXeBa_folderActive|YDXeBa_selected/.test(visualPluginContract), 'visual client must not depend on generated sidebar classes');
   assert(visualClientEntrySource.split('\n').length < 1000, 'visual client entrypoint must remain below 1,000 lines');
   for (const [name, source] of [
     ['semantic markers', visualSemanticManagerSource],
@@ -290,9 +292,11 @@ function verifyStaticContracts() {
   // is the old cross-module `window/globalThis.__dshFairy*` state channel.
   const legacyVisualGlobal = /\b(?:window|globalThis)\.__dshFairy[A-Za-z0-9_$]*/;
   assert(!/localStorage|sessionStorage|startSession\(/.test(visualPluginContract) && !legacyVisualGlobal.test(visualPluginContract), 'visual plugin must not use browser storage, legacy globals, or session actions');
-  // The Visual package may reference the shared voice-control attribute name;
-  // only actual language hooks or Voice service endpoints indicate ownership.
-  assert(!/agent\/pre-step|createUserMessage|127\.0\.0\.1:9880|fairy-voice\/(?:tts|status|prepare|brain)/.test(visualPluginClient + visualPluginHost), 'visual plugin must not own language or audio behavior');
+  // The Visual package may reference the shared voice-control attribute name.
+  // The agent hook and the Voice paths/endpoints are guarded by the build
+  // contract's Visual `forbidden` table (verify-build.js); only the language
+  // turn path itself is not expressible there.
+  assert(!/createUserMessage/.test(visualPluginClient + visualPluginHost), 'visual plugin must not own the language turn path');
   assert(visualContracts.includes("FAIRY_VISUAL_SETTINGS_NAMESPACE = 'fairy-visual'"), 'shared visual settings contract is missing');
   assert(visualContracts.includes('FAIRY_VISUAL_SETTINGS_VERSION = 2'), 'visual settings contract version drifted');
   assert(visualPluginHost.includes("theme: z.union(['dark', 'light']).default('dark')"), 'visual host schema is missing theme ownership');
@@ -312,7 +316,6 @@ function verifyStaticContracts() {
   assert(lifecycleOwnerCount === 13, 'lifecycle ownership contract count drifted');
 
   assert(startupClient.includes('sessions.clear()') && startupClient.includes('workspaces.startSession()'), 'fresh-session startup policy is absent');
-  assert(!/fairy-visual|fairy-voice|localStorage|sessionStorage/.test(startupClient), 'startup plugin crossed a language, visual, voice, or storage boundary');
   assert(startupClient.includes('STARTUP_RESET_ATTR') && startupClient.includes('root.hasAttribute(STARTUP_RESET_ATTR)') && startupClient.includes("root.setAttribute(STARTUP_RESET_ATTR, 'true')"), 'startup duplicate-mount guard is absent');
   assert(countOccurrences(startupClient, 'sessions.clear()') === 1 && countOccurrences(startupClient, 'workspaces.startSession()') === 1, 'startup actions must have one owner');
   assert(profilePackage.dependencies?.['dsh-fairy-startup'] === 'link:../../fairy-startup/dsh-fairy-startup', 'web profile must link the startup package');
@@ -328,7 +331,6 @@ function verifyStaticContracts() {
   assert(audioProviders.includes('127.0.0.1:9880'), 'audio provider default endpoint is missing from lib/providers/local-sovits.js');
   assert(audioProviders.includes("join(homedir(), '.dsh', 'fairy-voice'"), 'audio reference path must be rooted at the current DSH home');
   assert(audioClient.includes('conversation.chat.assistant-actions') && audioClient.includes('conversation.input.left'), 'audio client slots are not registered');
-  assert(!/dsh-hdd-mode|agent\/pre-step|\.agent-presets/.test(audioServer + audioClient), 'audio module must not own language or visual state');
   assert(fs.existsSync(path.join(paths.audio, 'runtime', 'reference', 'fairy_ref.wav')), 'audio reference file is missing');
   assert(audioLaunchAgent.includes('com.origen.fairy-voice-api') && audioLaunchAgent.includes('<key>KeepAlive</key>') && audioLaunchAgent.includes('127.0.0.1'), 'audio LaunchAgent contract is incomplete');
   assert(audioStop.includes('/control?command=exit') && !audioStop.includes("-X POST"), 'audio shutdown helper must use the service\'s registered control endpoint');
