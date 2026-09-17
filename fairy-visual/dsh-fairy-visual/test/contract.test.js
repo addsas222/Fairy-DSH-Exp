@@ -358,15 +358,16 @@ test('keeps both themes explicit and preserves the original Fairy visual primiti
 
 test('keeps animation speed selection and mascot rate synchronized through the settings path', () => {
   // 速度控件已收进设置卡：写入走 settings 通道，应用走 StageHost 的 mount(…, speed)；
-  // 运行时的 SPEED_EVENT 通道保留为扩展点，作曲栏不再有速度控件条。
+  // 运行时的 SPEED_EVENT 通道保留为扩展点；作曲栏的速度条回归但只读（显示当前档位）。
   assert.match(clientEntrySource, /const MASCOT_SPEED_OPTIONS = SPEED_STOPS\.map/);
   assert.match(clientEntrySource, /form\.change\('mascotAnimationSpeed', Number\(next\)\)/);
   assert.match(clientEntrySource, /mascot\?\.mount\?\.\(stageNode, owner, state\.settings\.mascotAnimationSpeed\)/);
   assert.match(clientEntrySource, /state\.settings\.mascotAnimationSpeed, state\.settings\.mascotPosition\]\)/);
   assert.match(mascotRuntimeSource, /motionClock\.setRate\(rate\)/);
   assert.match(speedControlSource, /SPEED_EVENT/);
-  assert.doesNotMatch(speedControlSource, /createMascotAnimationSpeedBase|selectedPosition|bindVisualDrag/);
-  assert.doesNotMatch(styleSource, /mascot-animation-speed-(base|control|tick|thumb)/);
+  assert.match(speedControlSource, /createMascotAnimationSpeedBase[\s\S]*POSITION_ATTR/, '速度读数条必须已回归作曲栏且由设置驱动点位');
+  assert.doesNotMatch(speedControlSource, /addEventListener|setControllerSetting|selectedPosition|bindVisualDrag/, '速度读数条必须只读：不得监听指针或写设置');
+  assert.match(styleSource, /mascot-animation-speed-(base|control|tick|thumb)/, '速度读数条样式必须保留');
 });
 
 test('keeps the mascot body under one scoped style and state owner', () => {
@@ -594,8 +595,8 @@ test('shares the new-session material with the voice volume hardware', () => {
   assert.match(styleSource, /data-dsh-fairy-theme="light"[^}]*data-dsh-fairy-composer-voice-control="true"\]\{--dsh-card-fill:#f4f5f6/);
   assert.match(styleSource, /data-dsh-fairy-composer-voice-control="true"\] \[data-dsh-fairy-volume-input="true"\]\{[^}]*opacity:0!important/);
   assert.match(styleSource, /data-dsh-fairy-wave-bar="true"\]\{width:2px!important;min-width:0!important;max-width:2px!important;flex:1 1 2px!important/);
-  assert.doesNotMatch(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px/);
-  assert.doesNotMatch(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{box-shadow:-4px -4px 9px rgba\(255,255,255,\.46\)/);
+  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{top:31px/, '大小读数条样式必须保留（只读形态）');
+  assert.match(styleSource, /data-dsh-fairy-mascot-scale-control="true"\]\{box-shadow:-4px -4px 9px rgba\(255,255,255,\.46\)/);
 });
 
 test('keeps the Composer command control aligned with the input edge inset', () => {
@@ -965,15 +966,16 @@ test('keeps Fairy scale control removed from the voice hardware', () => {
 
 test('applies the Fairy scale through the settings path without composer controls', () => {
   // 大小控件已收进设置卡；应用仍走 scheduleMascotScale(settings.mascotScale)，
-  // 作曲栏的滑杆与外壳控件全部撤出，对应 CSS 一并删除。
+  // 作曲栏的滑杆与外壳控件回归但只读（显示当前大小）。
   assert.match(mascotScaleSource, /function applyMascotScale\(value, documentRef = document\)/);
   assert.match(mascotScaleSource, /function scheduleMascotScale\(value, documentRef = document\)/);
   assert.match(mascotScaleSource, /root\.setAttribute\('data-dsh-fairy-mascot-scale', String\(scale\)\)/);
   assert.match(clientEntrySource, /scheduleMascotScale\(state\.settings\.mascotScale\)/);
   assert.match(clientEntrySource, /const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS\.map/);
   assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);
-  assert.doesNotMatch(mascotScaleSource, /createMascotScaleBase|createMascotScaleControl|BASE_ATTR|INPUT_ATTR/);
-  assert.doesNotMatch(styleSource, /mascot-scale-(base|control|input)/);
+  assert.match(mascotScaleSource, /createMascotScaleBase|createMascotScaleControl|INPUT_ATTR/, '大小读数条必须已回归作曲栏');
+  assert.doesNotMatch(mascotScaleSource, /addEventListener|setControllerSetting/, '大小读数条必须只读：不得监听输入或写设置');
+  assert.match(styleSource, /mascot-scale-(base|control|input)/, '滑杆样式必须保留');
 });
 
 test('keeps the voice volume tooltip in the Fairy control material language', () => {
@@ -1140,9 +1142,9 @@ test('弹层打开期间：拖拽把手不得吞掉菜单点击（网格扫描�
   assert.match(styleSource, /\[data-dsh-fairy-composer-popover="true"\] \.dsh-fairy-composer-resizer\{pointer-events:none!important\}/, '弹层打开期间把手必须指针穿透');
 });
 
-test('大眼睛位置设置项：设置卡写入 + 根属性应用（控件条已撤出 UI）', async () => {
+test('大眼睛位置设置项：设置卡写入 + 根属性应用（作曲栏只保留只读读数条）', async () => {
   // 需求：眼睛位置在设置里改。属性落在吉祥物根上，由 CSS 翻译成内层 float 的
-  // translate 位移；作曲栏不再有位置控件条。
+  // translate 位移；作曲栏的位置条回归但只读（点亮当前锚点、不响应点击）。
   assert.ok(styleSource.includes('--dsh-fairy-mascot-shift-x'), '缺位移令牌');
   assert.ok(styleSource.includes('.dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x)'), '缺 float 位移规则');
   assert.ok(styleSource.includes('data-dsh-fairy-mascot-position='), '缺锚点选择器');
@@ -1154,10 +1156,13 @@ test('大眼睛位置设置项：设置卡写入 + 根属性应用（控件条�
   assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
   assert.ok((await read('../lib/client.js')).includes('dsh-fairy-mascot-position'), '客户端 bundle 没带上位置设置项');
   const dock = await read('../src/client/composer-dock.js');
-  assert.ok(!dock.includes('MascotPositionBase'), '位置控件条必须已撤出作曲栏');
+  assert.ok(dock.includes('createMascotPositionBase'), '位置读数条必须已回归作曲栏');
+  const position = await read('../src/client/mascot-position-control.js');
+  assert.doesNotMatch(position, /addEventListener|setControllerSetting/, '位置读数条必须只读：不得监听点击或写设置');
+  assert.match(styleSource, /data-dsh-fairy-mascot-position-control="true"/, '位置读数条样式必须保留');
 });
 
-test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（控件条已撤出 UI）', async () => {
+test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲栏只保留只读读数条）', async () => {
   // 需求：HDD 自有 chrome 的调色盘（hdd/ink/ember）。hdd=属性缺省（默认零变化），
   // 非 hdd 落 data-dsh-fairy-palette；令牌层整体覆写卡片/键帽语义面，写入走 settings 通道。
   assert.ok(constantsSource.includes('PALETTE_ATTR'), '缺调色盘属性常量');
@@ -1168,7 +1173,10 @@ test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（控件�
   assert.ok((await read('../lib/index.js')).includes('palette:'), 'host schema 缺 palette');
   assert.ok((await read('../lib/client.js')).includes('dsh-fairy-visual-palette'), '客户端 bundle 没带上调色盘设置项');
   const dock = await read('../src/client/composer-dock.js');
-  assert.ok(!dock.includes('MascotPaletteBase'), '调色盘控件条必须已撤出作曲栏');
+  assert.ok(dock.includes('createMascotPaletteBase'), '调色盘读数条必须已回归作曲栏');
+  const palette = await read('../src/client/mascot-palette-control.js');
+  assert.doesNotMatch(palette, /addEventListener|setControllerSetting/, '调色盘读数条必须只读：不得监听点击或写设置');
+  assert.match(styleSource, /data-dsh-fairy-palette-control="true"/, '调色盘读数条样式必须保留');
 });
 
 test('创作工坊：设置分区 + 只读状态端点 + 设计指令复制', async () => {
