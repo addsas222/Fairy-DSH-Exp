@@ -116,3 +116,30 @@ Rules:
   `lstatSync(link).isSymbolicLink()`). Recovering a poisoned home means fixing
   that one entry or re-pointing links for the intended line, not reinstalling
   the profile ad hoc.
+
+## 2026-09-17 legacy `fairy/mode` logs
+
+`fairy-modes` used to append the out-of-vocabulary `fairy/mode` event; every
+harness line then refused the whole log
+(`SessionFormatUnsupportedError … event type "fairy/mode" … not marked
+ignorable`), because `session.append` cannot set the envelope's `ignorable`
+marker on 0.1.1 or 0.1.6-alpha.1. The plugin now mirrors the mode under
+`$DSH_HOME/fairy-modes/modes.json` and writes no log event at all; the
+projection and `loggedMode()` keep a read-only fallback for old logs.
+
+The deployed home's existing logs were repaired in place: every `fairy/mode`
+event gained `"ignorable": true`, nothing else changed, originals backed up
+outside the home (`C:/tmp/fairy-session-backup-20260917b`). Verify a repaired
+log through the API the UI itself uses — `session.history` must answer
+`ok:true`, and the event must come back carrying the marker.
+
+Two traps for the next repair:
+
+- The log is a multi-frame zstd stream and both `zstdDecompressSync` and
+  `createZstdDecompress` stop after the **first frame**; read frame by frame
+  (scan for the magic `28 b5 2f fd`, decode each slice, extend a slice that
+  does not decode alone).
+- The frame layout is semantic: the first frame must be exactly the header
+  line. Rewriting a log as one frame breaks session listing with
+  `corrupt Zstandard session log: first frame is not exactly one header line`.
+  Write one frame per event line.
