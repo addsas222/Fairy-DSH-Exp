@@ -33,8 +33,9 @@ if not exist "%ISO_HOME%\profiles\web\package.json" (
 rem 底座线:默认 0.1.1-rc.2(本仓长期运行的那条)。跑 0.1.5 时用环境变量覆盖:
 rem   set DSH_FAIRY_RUNTIME=C:\tmp\dsh-015\node_modules\@deepseek-ai\dsh\lib\bin.js
 rem   set DSH_FAIRY_BASE=015
+rem 0.1.6-alpha.1(最新非稳定线)同理:指向它的 runtime 并 set DSH_FAIRY_BASE=016。
 rem DSH_FAIRY_BASE 会被 profiles\web\cordis.patch.yml 里的行条件读走
-rem (0.1.5 起底座自带 web-fetch-http 行,0.1.1 只能由本仓挂 ⇒ 不能两边都挂)。
+rem (0.1.5/0.1.6 起底座自带 web-fetch-http 行,0.1.1 只能由本仓挂 ⇒ 不能两边都挂)。
 set "RUNTIME=%DSH_FAIRY_RUNTIME%"
 if "%RUNTIME%"=="" set "RUNTIME=C:\tmp\dsh-011\node_modules\@deepseek-ai\dsh\lib\bin.js"
 set "DSH_FAIRY_BASE=%DSH_FAIRY_BASE%"

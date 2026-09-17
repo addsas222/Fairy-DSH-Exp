@@ -33,9 +33,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const IS_WINDOWS = process.platform === 'win32';
 const DEFAULT_HOME = join(homedir(), '.dsh-fairy');
 /** 底座线 → profile 行条件用的标记（见 profiles/web/cordis.patch.yml）。 */
-const KNOWN_BASES = ['011', '015'];
+const KNOWN_BASES = ['011', '015', '016'];
 /** 各底座线的默认安装版本（--install-runtime 不带版本号时用）。 */
-const BASE_RUNTIME_VERSIONS = { '011': '0.1.1-rc.2', '015': '0.1.5-rc.1' };
+const BASE_RUNTIME_VERSIONS = { '011': '0.1.1-rc.2', '015': '0.1.5-rc.1', '016': '0.1.6-alpha.1' };
 
 const log = (message) => console.log(`\u001b[36m[install]\u001b[0m ${message}`);
 const warn = (message) => console.warn(`\u001b[33m[install]\u001b[0m ${message}`);
@@ -143,12 +143,14 @@ function inspectRuntime(input) {
 
 /** 底座线：0.1.5 起 profile 的抓取通道由底座自带，行条件据此开关。 */
 function baseFor(version) {
-  // 底座线看版本号的**次版本第三段**：0.1.1 → 011、0.1.5 → 015；更高的线（0.2+）按新形态算。
-  // 曾误取第二段（`0.1` 里的 1），把 0.1.5 推成 011。
+  // 底座线看版本号的**次版本第三段**：0.1.1 → 011、0.1.5 → 015、0.1.6 → 016；
+  // 更高的线（0.2+）按最新形态算。曾误取第二段（`0.1` 里的 1），把 0.1.5 推成 011。
+  // 抓取通道在 015 与 016 上同为「底座自带」，两条线共用一个判据（见 cordis.patch.yml）。
   const match = /(\d+)\.(\d+)\.(\d+)/.exec(version);
   if (!match) return '011';
   const [, major, minor, patch] = match.map(Number);
-  return (major > 0 || minor > 1 || patch >= 5) ? '015' : '011';
+  if (major > 0 || minor > 1 || patch >= 6) return '016';
+  return patch >= 5 ? '015' : '011';
 }
 
 function detectRuntime(options) {

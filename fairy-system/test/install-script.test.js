@@ -11,21 +11,23 @@ const { baseFor, launcherBody, BASE_RUNTIME_VERSIONS, KNOWN_BASES } = await impo
   new URL(`file://${resolve(scriptsDir, 'install.mjs').replace(/\\/g, '/')}`).href
 );
 
-test('底座线按版本号第三段判定（0.1.1 → 011、0.1.5 → 015）', () => {
+test('底座线按版本号第三段判定（0.1.1 → 011、0.1.5 → 015、0.1.6 → 016）', () => {
   // 曾误取第二段（`0.1` 里的 1），把 0.1.5 推成 011 —— 那条线决定 profile 里
   // 抓取通道是否启用，推错会静默改变行为，所以钉死在这里。
   assert.equal(baseFor('0.1.1-rc.2'), '011');
   assert.equal(baseFor('0.1.5-rc.1'), '015');
   assert.equal(baseFor('0.1.5-rc.2'), '015');
-  assert.equal(baseFor('0.1.6-alpha.1'), '015');
-  assert.equal(baseFor('0.2.0'), '015');
+  assert.equal(baseFor('0.1.6-alpha.1'), '016', '最新非稳定线（0.1.6-alpha）单独成线');
+  assert.equal(baseFor('0.1.7'), '016', '更高的线沿用最新形态');
+  assert.equal(baseFor('0.2.0'), '016');
   assert.equal(baseFor('未知名'), '011', '认不出来时按长期运行的那条线');
 });
 
 test('各底座线的默认安装版本与线一致', () => {
-  assert.deepEqual(KNOWN_BASES, ['011', '015']);
+  assert.deepEqual(KNOWN_BASES, ['011', '015', '016']);
   assert.match(BASE_RUNTIME_VERSIONS['011'], /^0\.1\.1/);
   assert.match(BASE_RUNTIME_VERSIONS['015'], /^0\.1\.5/);
+  assert.match(BASE_RUNTIME_VERSIONS['016'], /^0\.1\.6/, '016 线默认装最新非稳定版本');
 });
 
 test('启动器正文：Windows 用 CRLF、Unix 用 LF，且都写入运行时与底座线', () => {
@@ -45,6 +47,9 @@ test('启动器正文：Windows 用 CRLF、Unix 用 LF，且都写入运行时�
   assert.match(unix, /PORT="\$\{1:-3081\}"/, '端口可用 $1 覆盖，默认 3081');
   assert.match(unix, /exec node "\$RUNTIME" --profile web --no-open --port "\$PORT"/);
   assert.match(unix, /export DSH_FAIRY_PROFILE_ROOT="\$ISO_HOME\/profiles\/web"/);
+
+  const unix016 = launcherBody('linux', { bin: '/opt/dsh/lib/bin.js' }, '016');
+  assert.match(unix016, /DSH_FAIRY_BASE="016"/, '0.1.6-alpha 线同样要写进启动器（profile 行条件据此关行）');
 });
 
 test('install.mjs 只有在被当作入口执行时才跑部署（否则 import 会误触发）', () => {

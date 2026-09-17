@@ -16,6 +16,7 @@
 | 项 | 值 |
 | --- | --- |
 | DSH | **0.1.1-rc.2**（capability matrix、官方 runtime SHA-256、upgrade-preflight 批准记录都以它为准） |
+| DSH 底座线 | `011`=0.1.1-rc.2（长期运行、门禁钉定）；`015`=0.1.5-rc.1；`016`=**0.1.6-alpha.1**（最新非稳定线，2026-09-17 纳入）。线号决定 profile 抓取通道行是否禁用（015/016 上底座自带，未禁用会 `WEB_DUPLICATE_PROVIDER`），装成哪条线由 `scripts/install.mjs` 的 `baseFor`/`KNOWN_BASES` 与启动器导出的 `DSH_FAIRY_BASE` 同源决定；除 011 外的线仅供安装/启动，门禁仍钉 0.1.1-rc.2 |
 | Node | CI 固定 **22**（`.github/workflows/test.yml`）；各包未声明 `engines`，测试用内置 `node --test` |
 | pnpm | ≥ 11（每个包各自带 lockfile，逐包安装） |
 | 社区包 dsh-web | 需 **≥ 0.1.5-rc.1**，与本仓分居客户端面孔切换线两侧（0.1.2 起移除 `@deepseek-ai/dsh-client-runtime`），同一 profile 不能共跑；详见 `fairy-system/DSH-WEB-COMPAT.md` |

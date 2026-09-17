@@ -17,6 +17,18 @@ profile 机制挂载（`dsh plugin --profile web add @linxin666/dsh-web-all@late
 验收）。这不是本优化能代为决定的：官方 UI 的 slot/selector/ARIA 契约在 0.1.5
 可能已漂移，`fairy-visual` 的 DOM 适配层需要按新 capability matrix 重新验收。
 
+### 底座线（`DSH_FAIRY_BASE`）
+
+| 线 | 运行时 | 状态 |
+| --- | --- | --- |
+| `011` | 0.1.1-rc.2 | 长期运行线：capability matrix、runtime SHA-256、accepted baseline 与全部门禁都以它为准 |
+| `015` | 0.1.5-rc.1 | 可安装/可启动（`.dsh-test-home-015` 为对照镜像） |
+| `016` | 0.1.6-alpha.1 | 最新非稳定线（2026-09-17 纳入）：可安装/可启动；门禁不覆盖，UI 契约未重新验收 |
+
+015/016 的共同点：底座自带 `@deepseek-ai/dsh-web-fetch-http`，profile 的
+`fairy-web-fetch-http` 行必须禁用（行条件见 `profiles/web/cordis.patch.yml`）——
+未禁用会以 `WEB_DUPLICATE_PROVIDER` 在启动期失败（0.1.6-alpha.1 实测）。
+
 ## 软兼容面（同 cohort 前提下实测为干净）
 
 - 设置命名空间零冲突：dsh-web 用 `pet`/`doctor`/`task-board`/`dsh-ssh`/`dsh-usage`
