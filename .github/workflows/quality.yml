@@ -47,6 +47,7 @@ jobs:
             fairy-search/dsh-fairy-search/pnpm-lock.yaml
             fairy-memory/dsh-fairy-memory/pnpm-lock.yaml
             fairy-roleplay/dsh-fairy-roleplay/pnpm-lock.yaml
+            fairy-eval/dsh-fairy-eval/pnpm-lock.yaml
 
       # 各包的 link: 依赖必须先逐包安装，否则包测试会 ERR_MODULE_NOT_FOUND。
       # 这一步用的就是 .agent/checks/unit.yaml 的 requires(package-deps) 的 local 安装命令。

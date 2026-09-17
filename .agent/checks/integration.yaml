@@ -1,7 +1,7 @@
 # 检查项 integration：跨包/镜像集成 + fairy-system 套件。
 #
 # 子检查（真实命令，逐个记录退出码与输出尾部）：
-#   1) fairy-system/verify-build.js                 构建契约（10 包；需要已部署的 DSH_HOME）
+#   1) fairy-system/verify-build.js                 构建契约（11 包；需要已部署的 DSH_HOME）
 #   2) fairy-system/image-manifest.js --self-test   镜像清单/prune 自检
 #   3) fairy-system/skill-audit.js --self-test      技能/插件冗余审计自检
 #   4) fairy-system/scaffold-plugin.js --self-test  插件脚手架自检

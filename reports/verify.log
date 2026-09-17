@@ -155,3 +155,16 @@
   - passed   integration        4.1s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
   - passed   e2e                3.2s scenarios=7, passed=7, failed=0, pass_rate=100
   - skipped  mutation           1.1s skipped=true, targets=0
+[2026-09-17T04:59:45.788Z] run status=pass platform=windows node=v26.7.0 checks=11
+  selection stages=* only=*
+  - passed   format             1.4s files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12
+  - passed   lint               1.5s files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0
+  - passed   repo-contracts     1.2s errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0
+  - passed   secret-scan        1.4s files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0
+  - disabled typecheck          0.0s 
+  - passed   gherkin            4.9s features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0
+  - passed   unit               14.2s packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0
+  - passed   coverage           28.1s scope_changed_lines=0, lines_pct=90.25, blocks_pct=73.49, files_measured=76, unexecuted_production_files=78, workload_failures=0
+  - passed   integration        3.8s subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100
+  - passed   e2e                3.1s scenarios=7, passed=7, failed=0, pass_rate=100
+  - skipped  mutation           1.1s skipped=true, targets=0

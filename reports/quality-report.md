@@ -1,9 +1,9 @@
 # Fairy-DSH 质量报告
 
-- 生成时间：2026-09-17T04:57:06.751Z
+- 生成时间：2026-09-17T04:59:45.788Z
 - 仓库：`C:\tmp\fairy-dsh`
 - 平台：windows（Node v26.7.0）
-- 提交：`c1f2062`（分支 main，工作树有未提交改动）
+- 提交：`83efa8c`（分支 main，工作树有未提交改动）
 - 筛选：阶段=全部；检查项=全部；标签=全部
 - 门禁：**PASS（全绿）**
 
@@ -13,31 +13,31 @@
 
 | 检查项 | 状态 | 耗时 | 关键指标 | 阈值判定 |
 | --- | --- | --- | --- | --- |
-| `format` 文本形态（行尾/BOM/空行） | 通过 | 1.5s | files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12 | 全部满足 |
-| `lint` 语法解析与项目规则 | 通过 | 1.8s | files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0 | 全部满足 |
-| `repo-contracts` 质量体系自洽与仓库契约 | 通过 | 1.4s | errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0 | 全部满足 |
-| `secret-scan` 密钥/凭据扫描 | 通过 | 1.7s | files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0 | 全部满足 |
+| `format` 文本形态（行尾/BOM/空行） | 通过 | 1.4s | files_scanned=420, errors=0, error_rate=0, advisories=0, baseline_exemptions=12 | 全部满足 |
+| `lint` 语法解析与项目规则 | 通过 | 1.5s | files_scanned=273, errors=0, parse_errors=0, rule_findings=11, advisories=11, error_rate=0 | 全部满足 |
+| `repo-contracts` 质量体系自洽与仓库契约 | 通过 | 1.2s | errors=0, checks_scanned=11, docs_scanned=11, packages_checked=11, error_rate=0 | 全部满足 |
+| `secret-scan` 密钥/凭据扫描 | 通过 | 1.4s | files_scanned=426, findings=0, advisories=1, allowed=17, finding_rate=0 | 全部满足 |
 | `typecheck` TypeScript 类型检查 | 未启用 | 0.0s | — | — |
 
 ## 阶段 test — 测试
 
 | 检查项 | 状态 | 耗时 | 关键指标 | 阈值判定 |
 | --- | --- | --- | --- | --- |
-| `gherkin` Gherkin 行为用例 | 通过 | 6.0s | features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0 | 全部满足 |
-| `unit` 单元测试（全量 node --test） | 通过 | 15.2s | packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0 | 全部满足 |
+| `gherkin` Gherkin 行为用例 | 通过 | 4.9s | features=3, scenarios=32, passed=32, failed=0, pending=0, undefined_steps=0 | 全部满足 |
+| `unit` 单元测试（全量 node --test） | 通过 | 14.2s | packages=11, packages_failed=0, tests=533, passed=533, failed=0, skipped=0 | 全部满足 |
 
 ## 阶段 verify — 验证
 
 | 检查项 | 状态 | 耗时 | 关键指标 | 阈值判定 |
 | --- | --- | --- | --- | --- |
-| `coverage` 覆盖率（全量 + 变更行/变更块） | 通过 | 31.4s | scope_changed_lines=0, lines_pct=90.25, blocks_pct=73.49, files_measured=76, unexecuted_production_files=78, workload_failures=0 | 全部满足 |
-| `integration` 跨包/镜像集成与 fairy-system 套件 | 通过 | 4.1s | subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100 | 全部满足 |
+| `coverage` 覆盖率（全量 + 变更行/变更块） | 通过 | 28.1s | scope_changed_lines=0, lines_pct=90.25, blocks_pct=73.49, files_measured=76, unexecuted_production_files=78, workload_failures=0 | 全部满足 |
+| `integration` 跨包/镜像集成与 fairy-system 套件 | 通过 | 3.8s | subchecks=5, passed=3, failed=0, skipped=2, pass_rate=100 | 全部满足 |
 
 ## 阶段 deep — 深度验证
 
 | 检查项 | 状态 | 耗时 | 关键指标 | 阈值判定 |
 | --- | --- | --- | --- | --- |
-| `e2e` 端到端（夹具仓库跑真 CLI + 报告闭环） | 通过 | 3.2s | scenarios=7, passed=7, failed=0, pass_rate=100 | 全部满足 |
+| `e2e` 端到端（夹具仓库跑真 CLI + 报告闭环） | 通过 | 3.1s | scenarios=7, passed=7, failed=0, pass_rate=100 | 全部满足 |
 | `mutation` 变异测试（变更文件，加载器替换，不落盘） | 跳过 | 1.1s | skipped=true, targets=0 | 未满足：变更文件变异分数（%） 缺失（要求 >=80）；存活变异体 缺失（要求 ）；被杀变异体 缺失（要求 ）；采样的变异体数 缺失（要求 ） |
 
 ## 警告（不阻断门禁）

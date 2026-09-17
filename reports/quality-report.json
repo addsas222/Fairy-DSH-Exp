@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-17T04:57:06.751Z",
-  "finished_at": "2026-09-17T04:58:09.950Z",
+  "generated_at": "2026-09-17T04:59:45.788Z",
+  "finished_at": "2026-09-17T05:00:42.938Z",
   "repo": "C:\\tmp\\fairy-dsh",
   "platform": "windows",
   "node_version": "v26.7.0",
@@ -47,7 +47,7 @@
     "checks_dir": ".agent/checks"
   },
   "git": {
-    "commit": "c1f2062",
+    "commit": "83efa8c",
     "branch": "main",
     "dirty": true
   },
@@ -72,7 +72,7 @@
       "docs": "docs/quality/format.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 1527,
+      "duration_ms": 1372,
       "exit_code": 0,
       "metrics": {
         "files_scanned": 420,
@@ -129,7 +129,7 @@
       "docs": "docs/quality/lint.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 1767,
+      "duration_ms": 1470,
       "exit_code": 0,
       "metrics": {
         "files_scanned": 273,
@@ -196,7 +196,7 @@
       "docs": "docs/quality/repo-contracts.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 1446,
+      "duration_ms": 1209,
       "exit_code": 0,
       "metrics": {
         "errors": 0,
@@ -253,7 +253,7 @@
       "docs": "docs/quality/secret-scan.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 1673,
+      "duration_ms": 1383,
       "exit_code": 0,
       "metrics": {
         "files_scanned": 426,
@@ -340,7 +340,7 @@
       "docs": "docs/quality/gherkin.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 5977,
+      "duration_ms": 4900,
       "exit_code": 0,
       "metrics": {
         "features": 3,
@@ -431,7 +431,7 @@
       "docs": "docs/quality/unit.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 15228,
+      "duration_ms": 14246,
       "exit_code": 0,
       "metrics": {
         "packages": 11,
@@ -512,7 +512,7 @@
       "docs": "docs/quality/coverage.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 31416,
+      "duration_ms": 28085,
       "exit_code": 0,
       "metrics": {
         "scope_changed_lines": 0,
@@ -634,7 +634,7 @@
       "description": "",
       "status": "passed",
       "on_missing": "skip",
-      "duration_ms": 4096,
+      "duration_ms": 3828,
       "exit_code": 0,
       "metrics": {
         "subchecks": 5,
@@ -699,7 +699,7 @@
       "docs": "docs/quality/e2e.md",
       "description": "",
       "status": "passed",
-      "duration_ms": 3217,
+      "duration_ms": 3108,
       "exit_code": 0,
       "metrics": {
         "scenarios": 7,
@@ -757,7 +757,7 @@
       "description": "",
       "status": "skipped",
       "on_missing": "skip",
-      "duration_ms": 1093,
+      "duration_ms": 1106,
       "exit_code": 3,
       "metrics": {
         "skipped": true,
