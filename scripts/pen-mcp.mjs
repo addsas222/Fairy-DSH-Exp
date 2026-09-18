@@ -142,15 +142,45 @@ const INSTALL_GUIDE = [
   '      这两条不满足时 Pen 侧会报 "failed to connect" / "a file needs to be open"。',
 ].join('\n');
 
-/** 幂等：patch 里已有 pen 行就跳过；否则插到 insert 列表最前面。 */
+/**
+ * 已有 mcp-pen 行时，判断它下面写着的 command 路径为什么需要重写；不需要则为 null。
+ * 幂等原本只看「行在不在」，于是换盘/重装之后那条旧路径会一直留着 —— 症状是插件里
+ * 「已接入但记录的路径已失效」，而重跑本脚本却说「无需改动」。这里要求路径真的存在。
+ */
+export function penRowRefreshReason(text, mcpPath) {
+  // command 行上的分隔符是字面量：早期写入端多转义一层，于是历史值可能是双反斜杠，
+  // 两种都要认得（按分隔符切段再拼回来）。
+  const raw = /^\s*command:\s*'([^']*)'\s*$/m.exec(text)?.[1];
+  if (!raw) return 'patch 里的 mcp-pen 行没有 command';
+  const recorded = raw.split(/\\+/).filter(Boolean).join('\\');
+  if (!mcpPath) return null; // 没探测到 Pen：无从比较，保持原样（另有未安装提示）。
+  if (recorded === mcpPath) return null;
+  return existsSync(recorded)
+    ? `记录的路径指向另一份 Pen（${recorded}），当前探测到的是 ${mcpPath}`
+    : `记录的路径已不存在（${recorded}），当前探测到的是 ${mcpPath}`;
+}
+
+/** 幂等：patch 里已有 pen 行、且路径仍然有效就跳过；否则补行 / 就地改路径。 */
 function ensureProfileRow(patchPath, mcpPath, appId, agent, dryRun) {
   if (!existsSync(patchPath)) {
     warn(`profile patch 不存在：${patchPath}（先跑一次部署，或 --profile-patch 指定）`);
     return false;
   }
-  const text = readFileSync(patchPath, 'utf8');
+  let text = readFileSync(patchPath, 'utf8');
   if (/^\s*-\s*id:\s*mcp-pen\s*$/m.test(text)) {
-    log(`pen MCP 已在 profile 里（${patchPath}）：无需改动`);
+    const reason = penRowRefreshReason(text, mcpPath);
+    if (!reason) {
+      log(`pen MCP 已在 profile 里（${patchPath}）：无需改动`);
+      return true;
+    }
+    // 只换 command 那一行：行内其它字段（variant/-agent/failOnStartupError）原样保留，
+    // 与首次写入用的是同一个值，所以不会把别的东西改掉。行尾空白单独捕获并放回 ——
+    // 否则 CRLF 文件会被这一改整份降级成 LF（逐行比对时表现为「改了两行」）。
+    const next = text.replace(/^([ \t]*command:[ \t]*)'[^']*'([ \t]*)$/im, (line, head, tail) => `${head}'${mcpPath}'${tail}`);
+    if (next === text) { warn(`需要改写 pen MCP 路径但没匹配到 command 行：${reason}`); return false; }
+    if (dryRun) { log(`[dry-run] 会改写 command：${reason}`); return true; }
+    writeFileSync(patchPath, next);
+    log(`已就地更新 pen MCP 路径（${patchPath}）：${reason}`);
     return true;
   }
   // YAML 单引号标量里的反斜杠是字面量，路径**原样**写即可。早先这里多转义了一层，结果

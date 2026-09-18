@@ -279,6 +279,22 @@ not run the legacy patch install script during normal operation, and do not trea
 `fairy-hdd/verify-live-runtime.js` as a current-health check: it verifies the
 retired patch fingerprint.
 
+## 2026-09-18 创作工坊的 pen 定位判据
+
+`/fairy-visual/workshop` 是「pen 是否可用」的唯一判据来源，判据本体在
+`src/workshop-pen.cjs`（纯函数，仓库树里也能直接测 —— 宿主入口顶层 import 了
+`@deepseek-ai/dsh-settings`，直接 import 它在仓库树里必然 ERR_MODULE_NOT_FOUND）。
+
+Windows 上 Pen 的 MCP 只可能在 `盘符:\<用户目录>\AppData\Local\Programs\Pen\<...>` 下，
+而盘符由安装时选：本机装在 **F:**，早先只扫 C:/D:/E: 会把装好的 Pen 报成「未安装」。
+现在先向注册表卸载键要真实安装路径（`InstallLocation` 常为空，退取卸载器路径的目录），
+再按 `CDEF…ZAB` 全盘枚举兜底，`DSH_PEN_DIR` 始终是最优先的覆盖口；
+`scripts/pen-mcp.mjs` 用同一串盘符顺序，contract 测试钉住两边一致。
+
+The MCP row additionally reports `recorded`（patch 里写下的路径）与 `installed`（该路径是否真的存在）：
+换盘/重装之后这两个值会不一致，面板据此显示「已接入但记录的路径已失效」，
+`scripts/pen-mcp.mjs --ensure` 会只改 `command:` 一行把它指回当前安装。
+
 ## Verification
 
 ```sh
