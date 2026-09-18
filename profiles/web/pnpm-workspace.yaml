@@ -8,3 +8,10 @@ minimumReleaseAgeExclude:
 patchedDependencies:
   dsh-message-edit@0.2.3: patches/dsh-message-edit@0.2.3.patch
   dsh-reasoning-effort@0.6.2: patches/dsh-reasoning-effort@0.6.2.patch
+# dsh-web 依赖链里的原生构建件（prepare/install 脚本）：明示放行，否则
+# pnpm 的 supply-chain 策略会在 add 阶段整组拦住（2026-09-18 实测）。
+allowBuilds:
+  cloudflared: true
+  cpu-features: true
+  node-pty: true
+  ssh2: true

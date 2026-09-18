@@ -18,6 +18,7 @@
     "dsh-fairy-voice": "link:../../fairy-voice/dsh-fairy-voice",
     "dsh-message-edit": "0.2.3",
     "dsh-reasoning-effort": "github:HanaAyane/dsh-reasoning-effort#83bc8c548749d7156a03d11d875d8117e9b5d994",
+    "dsh-web": "github:zhu1090093659/dsh-web",
     "hono": "4.13.2"
   },
   "dsh": {
