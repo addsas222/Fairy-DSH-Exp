@@ -27,7 +27,8 @@
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
         "dsh-message-edit",
-        "dsh-reasoning-effort"
+        "dsh-reasoning-effort",
+        "dsh-web"
       ]
     }
   }
