@@ -34,6 +34,9 @@ export const FairyVisualSettings = z.object({
     z.const('middle-left'), z.const('center'), z.const('middle-right'),
     z.const('bottom-left'), z.const('bottom-center'), z.const('bottom-right'),
   ]).default('center'),
+  // 大眼站位模式：static=始终用 mascotPosition（既有行为）；dynamic=空载居中、
+  // 思考（会话运行中）移到右中一侧。客户端 Stage 按活动态解析，锚点→translate 管线不变。
+  mascotPositionMode: z.union([z.const('static'), z.const('dynamic')]).default('static'),
   powerMode: z.union(['normal', 'low-power']).default('normal'),
   composerDockHeight: z.number().step(1).min(132).max(420).default(132),
 });

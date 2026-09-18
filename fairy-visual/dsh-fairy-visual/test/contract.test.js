@@ -362,7 +362,7 @@ test('keeps animation speed selection and mascot rate synchronized through the s
   assert.match(clientEntrySource, /const MASCOT_SPEED_OPTIONS = SPEED_STOPS\.map/);
   assert.match(clientEntrySource, /form\.change\('mascotAnimationSpeed', Number\(next\)\)/);
   assert.match(clientEntrySource, /mascot\?\.mount\?\.\(stageNode, owner, state\.settings\.mascotAnimationSpeed\)/);
-  assert.match(clientEntrySource, /state\.settings\.mascotAnimationSpeed, state\.settings\.mascotPosition\]\)/);
+  assert.match(clientEntrySource, /state\.settings\.mascotAnimationSpeed, state\.settings\.mascotPosition, state\.settings\.mascotPositionMode\]\)/);
   assert.match(mascotRuntimeSource, /motionClock\.setRate\(rate\)/);
   assert.match(speedControlSource, /SPEED_EVENT/);
   assert.match(speedControlSource, /createMascotAnimationSpeedBase[\s\S]*POSITION_ATTR/, '速度读数条必须已回归作曲栏且由设置驱动点位');
@@ -1152,7 +1152,7 @@ test('大眼睛位置设置项：设置卡写入 + 根属性应用（作曲栏�
   assert.match(utilsSource, /setAttribute\(MASCOT_POSITION_ATTR, normalizeMascotPosition\(value\)\)/);
   assert.match(constantsSource, /export const MASCOT_POSITION_LABELS/);
   assert.match(clientEntrySource, /form\.change\('mascotPosition', next\)/);
-  assert.match(clientEntrySource, /applyMascotPosition\(state\.settings\.mascotPosition\)/);
+  assert.match(clientEntrySource, /applyMascotPosition\(state\.settings\.mascotPositionMode === 'dynamic' && state\.activity === 'thinking' \? 'middle-right' : state\.settings\.mascotPosition\)/);
   assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
   assert.ok((await read('../lib/client.js')).includes('dsh-fairy-mascot-position'), '客户端 bundle 没带上位置设置项');
   const dock = await read('../src/client/composer-dock.js');
@@ -1160,6 +1160,20 @@ test('大眼睛位置设置项：设置卡写入 + 根属性应用（作曲栏�
   const position = await read('../src/client/mascot-position-control.js');
   assert.doesNotMatch(position, /addEventListener|setControllerSetting/, '位置读数条必须只读：不得监听点击或写设置');
   assert.match(styleSource, /data-dsh-fairy-mascot-position-control="true"/, '位置读数条样式必须保留');
+});
+
+test('大眼站位模式：动态（空载居中 · 思考让位）与静态模式分开', async () => {
+  // 需求：空载时大 Fairy 在中间，思考时移到一边；动态模式与静态模式分开、可切换。
+  // 解析只发生在客户端 Stage 投影：static 逐字节保持既有行为，dynamic 按活动态取锚点。
+  assert.match(serverSource, /mascotPositionMode: z\.union\(\[z\.const\('static'\), z\.const\('dynamic'\)\]\)\.default\('static'\)/, 'host schema 缺 mascotPositionMode');
+  assert.match(constantsSource, /mascotPositionMode: 'static'/, '客户端默认表缺 mascotPositionMode');
+  assert.match(clientEntrySource, /form\.change\('mascotPositionMode', next\)/);
+  assert.match(clientEntrySource, /data-dsh-fairy-mascot-position-mode/, '动态模式必须把模式属性投影到吉祥物根');
+  assert.match(styleSource, /data-dsh-fairy-mascot-position-mode="dynamic"\] \.dsh-fairy-float\{transition:translate/, '动态模式缺位移过渡');
+  const normalizer = await read('../src/client/settings-normalizer.cjs');
+  assert.match(normalizer, /mascotPositionMode: source\.mascotPositionMode === 'dynamic' \? 'dynamic' : 'static'/, 'normalizer 未收编 mascotPositionMode');
+  const bundleSource = await read('../lib/client.js');
+  assert.ok(bundleSource.includes('mascotPositionMode'), '客户端 bundle 未带上动态站位设置');
 });
 
 test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲栏只保留只读读数条）', async () => {

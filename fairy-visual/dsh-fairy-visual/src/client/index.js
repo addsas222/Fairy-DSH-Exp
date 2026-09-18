@@ -357,8 +357,16 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
         const mascot = mascotRuntime;
         mascot?.mount?.(stageNode, owner, state.settings.mascotAnimationSpeed);
         mascot?.setVisualActive?.(visible, owner);
-        applyMascotPosition(state.settings.mascotPosition);
-      }, [visible, state.activity, state.settings.powerMode, state.settings.mascotAnimationSpeed, state.settings.mascotPosition]);
+        // 大眼站位模式：static=固定用 mascotPosition（既有行为）；dynamic=空载居中、
+        // 思考（会话运行中）移到右中。只产出九宫格锚点，锚点→translate 管线不变。
+        applyMascotPosition(state.settings.mascotPositionMode === 'dynamic' && state.activity === 'thinking' ? 'middle-right' : state.settings.mascotPosition);
+        // 动态模式才落过渡开关属性：CSS 据此开启 translate 过渡；静态模式 DOM 与既有逐字节一致。
+        const mascotRoot = document.getElementById('dsh-fairy-root');
+        if (mascotRoot?.setAttribute) {
+          if (state.settings.mascotPositionMode === 'dynamic') mascotRoot.setAttribute('data-dsh-fairy-mascot-position-mode', 'dynamic');
+          else mascotRoot.removeAttribute('data-dsh-fairy-mascot-position-mode');
+        }
+      }, [visible, state.activity, state.settings.powerMode, state.settings.mascotAnimationSpeed, state.settings.mascotPosition, state.settings.mascotPositionMode]);
 
       React.useLayoutEffect(() => {
         if (!enabled) return undefined;
@@ -810,7 +818,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
     const askKit = createAskKit({ React, jsx, jsxs, primitives: uiPrimitives });
 
     /** 本卡提问的视觉字段（写回 `fairy-visual`）与身份字段（写回 `fairy-identity`）。 */
-    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode', 'contentFade', 'palette', 'mascotPosition', 'mascotScale', 'mascotAnimationSpeed'];
+    const VISUAL_FIELDS = ['enabled', 'theme', 'mascotVisible', 'powerMode', 'contentFade', 'palette', 'mascotPosition', 'mascotPositionMode', 'mascotScale', 'mascotAnimationSpeed'];
     const IDENTITY_TEXT_FIELDS = ['customName', 'secondAssistant'];
     const IDENTITY_MODE_OPTIONS = [
       { value: 'ling', label: '铃' },
@@ -830,6 +838,10 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       { value: 'ember', label: '炭' },
     ];
     const MASCOT_POSITION_OPTIONS = MASCOT_POSITIONS.map((anchor) => ({ value: anchor, label: MASCOT_POSITION_LABELS[anchor] }));
+    const MASCOT_POSITION_MODE_OPTIONS = [
+      { value: 'static', label: '静态（固定锚点）' },
+      { value: 'dynamic', label: '动态（空载居中 · 思考移到右中）' },
+    ];
     const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({ value: String(stop), label: `${Math.round(stop * 100)}%${stop === 1 ? '（默认）' : ''}` }));
     const MASCOT_SPEED_OPTIONS = SPEED_STOPS.map((rate) => ({ value: String(rate), label: `${rate}×${rate === 1 ? '（默认）' : ''}` }));
 
@@ -846,6 +858,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
       contentFade: visual.contentFade === true,
       palette: PALETTES.includes(visual.palette) ? visual.palette : 'hdd',
       mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : 'center',
+      mascotPositionMode: visual.mascotPositionMode === 'dynamic' ? 'dynamic' : 'static',
       mascotScale: nearestScaleStop(visual.mascotScale),
       mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
       mode: identity.mode || 'ling',
@@ -927,6 +940,7 @@ const diagnostics = createFairyDiagnostics('dsh-fairy-visual');
           jsx(AskToggle, { id: 'dsh-fairy-visual-content-fade', label: '内容遮罩', hint: '开启时主视觉会遮住其下的正文（生成期间新文字会变淡）；关闭后正文始终可读。', checked: value('contentFade'), disabled: !writable, onChange: (next) => form.change('contentFade', next) }, 'contentFade'),
           jsx(AskRow, { id: 'dsh-fairy-visual-palette', label: '皮肤（调色盘）：', hint: '岩=现值默认；墨=冷灰蓝；炭=暖炭。', children: jsx(AskSelect, { id: 'dsh-fairy-visual-palette', value: value('palette'), options: PALETTE_OPTIONS, disabled: !writable, onChange: (next) => form.change('palette', next) }) }, 'palette'),
           jsx(AskRow, { id: 'dsh-fairy-mascot-position', label: '大眼睛位置：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-position', value: value('mascotPosition'), options: MASCOT_POSITION_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotPosition', next) }) }, 'mascotPosition'),
+          jsx(AskRow, { id: 'dsh-fairy-mascot-position-mode', label: '大眼站位模式：', hint: '动态=空载居中，思考时移到右中；静态=始终用上方固定位置。', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-position-mode', value: value('mascotPositionMode'), options: MASCOT_POSITION_MODE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotPositionMode', next) }) }, 'mascotPositionMode'),
           jsx(AskRow, { id: 'dsh-fairy-mascot-scale', label: '大眼睛大小：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-scale', value: String(value('mascotScale')), options: MASCOT_SCALE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotScale', Number(next)) }) }, 'mascotScale'),
           jsx(AskRow, { id: 'dsh-fairy-mascot-speed', label: '大眼睛动画速度：', children: jsx(AskSelect, { id: 'dsh-fairy-mascot-speed', value: String(value('mascotAnimationSpeed')), options: MASCOT_SPEED_OPTIONS, disabled: !writable, onChange: (next) => form.change('mascotAnimationSpeed', Number(next)) }) }, 'mascotAnimationSpeed'),
           jsx(AskRow, { id: 'dsh-fairy-identity-mode', label: 'Fairy 当前将我识别为：', children: jsx(AskSelect, { id: 'dsh-fairy-identity-mode', value: value('mode'), options: IDENTITY_MODE_OPTIONS, disabled: !writable, onChange: (next) => form.change('mode', next) }) }, 'mode'),

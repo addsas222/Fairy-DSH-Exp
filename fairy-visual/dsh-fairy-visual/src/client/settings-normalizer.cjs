@@ -36,6 +36,7 @@ function migrateVisualSettings(input = {}) {
     mascotAnimationSpeed: Number.isFinite(numericSpeed) ? nearest(numericSpeed, SPEED_STOPS) : 1,
     // 这个对象是**逐字段重建**的：漏一个字段就等于把它丢掉（mascotPosition 曾因此写入无效）。
     mascotPosition: MASCOT_POSITIONS.includes(source.mascotPosition) ? source.mascotPosition : 'center',
+    mascotPositionMode: source.mascotPositionMode === 'dynamic' ? 'dynamic' : 'static',
     palette: PALETTES.includes(source.palette) ? source.palette : 'hdd',
     powerMode: source.powerMode === 'low-power' ? 'low-power' : 'normal',
     composerDockHeight: Number.isFinite(numericComposerHeight) ? Math.round(clamp(numericComposerHeight, 132, 420)) : 132,

@@ -46,6 +46,7 @@ The host settings namespace is `fairy-visual`:
   "mascotScale": 1,
   "mascotAnimationSpeed": 1,
   "mascotPosition": "center",
+  "mascotPositionMode": "static",
   "palette": "hdd",
   "powerMode": "normal",
   "composerDockHeight": 132
@@ -56,6 +57,12 @@ The host settings namespace is `fairy-visual`:
 existing session. Fresh-document session selection belongs to the separate
 `dsh-fairy-startup` plugin; this package never starts, clears, or opens a
 session.
+
+大眼站位模式（`mascotPositionMode`）：`static`（默认）始终用 `mascotPosition` 锚点，
+行为与历史版本逐字节一致；`dynamic`（动态模式）由客户端 Stage 按会话活动态即时解析
+——空载（`normal`）与完成、安抚状态居中，思考（`thinking`）时移到右中。位移仍走
+锚点→translate 管线，仅动态模式落 `data-dsh-fairy-mascot-position-mode` 属性并带
+520ms 过渡。
 
 The visual controller projects one activity value from the active session:
 `normal`, `thinking`, or `comforting`. Its current session lifecycle projection

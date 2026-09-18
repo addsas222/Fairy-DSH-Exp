@@ -38,6 +38,7 @@ test('Visual settings schema keeps the registered fields, defaults, and bounds',
     'mascotAnimationSpeed',
     'palette',
     'mascotPosition',
+    'mascotPositionMode',
     'powerMode',
     'composerDockHeight',
   ]);
@@ -53,6 +54,7 @@ test('Visual settings schema keeps the registered fields, defaults, and bounds',
   assert.equal(fields.mascotAnimationSpeed.meta.default, 1);
   assert.equal(fields.palette.meta.default, 'hdd');
   assert.equal(fields.mascotPosition.meta.default, 'center');
+  assert.equal(fields.mascotPositionMode.meta.default, 'static');
   assert.equal(fields.powerMode.meta.default, 'normal');
   assert.deepEqual(
     { step: fields.composerDockHeight.meta.step, min: fields.composerDockHeight.meta.min, max: fields.composerDockHeight.meta.max, default: fields.composerDockHeight.meta.default },

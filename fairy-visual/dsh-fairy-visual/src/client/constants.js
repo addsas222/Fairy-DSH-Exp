@@ -32,6 +32,9 @@ export const DEFAULT = {
   // 大眼睛位置：九宫格锚点，默认居中（= 既有无位移观感）。客户端默认表必须列全，
   // 否则写入会被判非法字段而被丢弃（实测：点击控件属性不生效）。
   mascotPosition: 'center',
+  // 站位模式：static=固定用上方锚点（既有观感）；dynamic=空载居中、思考时移到右中。
+  // 客户端默认表必须列全，否则写入会被判非法字段而被丢弃（实测教训）。
+  mascotPositionMode: 'static',
   // 调色盘（palette）：hdd=现值（属性缺省，默认零变化），ink=冷灰蓝，ember=暖炭。
   palette: 'hdd',
   powerMode: 'normal',

@@ -633,6 +633,7 @@ window.__ModuleLoader__.load({
 			mascotScale: 1,
 			mascotAnimationSpeed: 1,
 			mascotPosition: "center",
+			mascotPositionMode: "static",
 			palette: "hdd",
 			powerMode: "normal",
 			composerDockHeight: 132
@@ -920,7 +921,7 @@ html[data-dsh-fairy-visual] body :where(.dsh-fairy-session-metrics-panel,.dsh-fa
 				0,
 				26
 			][Math.floor(index / 3)]}%}`;
-		}).join("") + "html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}");
+		}).join("") + "html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"] .dsh-fairy-float{translate:var(--dsh-fairy-mascot-shift-x) var(--dsh-fairy-mascot-shift-y)}html[data-dsh-fairy-visual] [data-dsh-fairy-mascot-root=\"true\"][data-dsh-fairy-mascot-position-mode=\"dynamic\"] .dsh-fairy-float{transition:translate 520ms cubic-bezier(.22,.61,.36,1)}");
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"]{position:absolute!important;z-index:12!important;right:7px!important;top:110px!important;width:max-content!important;height:18px!important;display:flex!important;align-items:center!important;gap:1px!important;padding:2px 3px!important;box-sizing:border-box!important;border-radius:999px!important;border:0!important;background:var(--dsh-card-fill,#30353a)!important;color:var(--dsh-palette-text-dim,rgba(255,255,255,.72))!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button]{appearance:none!important;width:10px!important;height:10px!important;padding:0!important;border-radius:4px!important;border:1px solid var(--dsh-palette-line,rgba(255,255,255,.18))!important;background:transparent!important;color:var(--dsh-palette-text-dim,rgba(255,255,255,.72))!important;font:600 8px/1 system-ui,sans-serif!important}`);
 		appendSection(`html[data-dsh-fairy-visual] [data-dsh-fairy-composer-dock="true"] [data-dsh-fairy-mascot-position-control="true"] [data-dsh-fairy-mascot-position-button][aria-pressed="true"]{background:var(--dsh-fairy-keycap-face,#555f68)!important;border-color:var(--dsh-fairy-keycap-edge,#3d444b)!important;color:#fff!important}`);
@@ -6809,6 +6810,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				mascotScale: Number.isFinite(numericScale) ? clamp(numericScale, .55, 1) : 1,
 				mascotAnimationSpeed: Number.isFinite(numericSpeed) ? nearest(numericSpeed, SPEED_STOPS) : 1,
 				mascotPosition: MASCOT_POSITIONS.includes(source.mascotPosition) ? source.mascotPosition : "center",
+				mascotPositionMode: source.mascotPositionMode === "dynamic" ? "dynamic" : "static",
 				palette: PALETTES.includes(source.palette) ? source.palette : "hdd",
 				powerMode: source.powerMode === "low-power" ? "low-power" : "normal",
 				composerDockHeight: Number.isFinite(numericComposerHeight) ? Math.round(clamp(numericComposerHeight, 132, 420)) : 132
@@ -7822,13 +7824,19 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				const mascot = mascotRuntime;
 				mascot?.mount?.(stageNode, owner, state.settings.mascotAnimationSpeed);
 				mascot?.setVisualActive?.(visible, owner);
-				applyMascotPosition(state.settings.mascotPosition);
+				applyMascotPosition(state.settings.mascotPositionMode === "dynamic" && state.activity === "thinking" ? "middle-right" : state.settings.mascotPosition);
+				const mascotRoot = document.getElementById("dsh-fairy-root");
+				if (mascotRoot?.setAttribute) {
+					if (state.settings.mascotPositionMode === "dynamic") mascotRoot.setAttribute("data-dsh-fairy-mascot-position-mode", "dynamic");
+					else mascotRoot.removeAttribute("data-dsh-fairy-mascot-position-mode");
+				}
 			}, [
 				visible,
 				state.activity,
 				state.settings.powerMode,
 				state.settings.mascotAnimationSpeed,
-				state.settings.mascotPosition
+				state.settings.mascotPosition,
+				state.settings.mascotPositionMode
 			]);
 			React.useLayoutEffect(() => {
 				if (!enabled) return void 0;
@@ -8333,6 +8341,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			"contentFade",
 			"palette",
 			"mascotPosition",
+			"mascotPositionMode",
 			"mascotScale",
 			"mascotAnimationSpeed"
 		];
@@ -8381,6 +8390,13 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			value: anchor,
 			label: MASCOT_POSITION_LABELS[anchor]
 		}));
+		const MASCOT_POSITION_MODE_OPTIONS = [{
+			value: "static",
+			label: "静态（固定锚点）"
+		}, {
+			value: "dynamic",
+			label: "动态（空载居中 · 思考移到右中）"
+		}];
 		const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({
 			value: String(stop),
 			label: `${Math.round(stop * 100)}%${stop === 1 ? "（默认）" : ""}`
@@ -8401,6 +8417,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			contentFade: visual.contentFade === true,
 			palette: PALETTES.includes(visual.palette) ? visual.palette : "hdd",
 			mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : "center",
+			mascotPositionMode: visual.mascotPositionMode === "dynamic" ? "dynamic" : "static",
 			mascotScale: nearestScaleStop(visual.mascotScale),
 			mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
 			mode: identity.mode || "ling",
@@ -8521,6 +8538,18 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 							onChange: (next) => form.change("mascotPosition", next)
 						})
 					}, "mascotPosition"),
+					jsx(AskRow, {
+						id: "dsh-fairy-mascot-position-mode",
+						label: "大眼站位模式：",
+						hint: "动态=空载居中，思考时移到右中；静态=始终用上方固定位置。",
+						children: jsx(AskSelect, {
+							id: "dsh-fairy-mascot-position-mode",
+							value: value("mascotPositionMode"),
+							options: MASCOT_POSITION_MODE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotPositionMode", next)
+						})
+					}, "mascotPositionMode"),
 					jsx(AskRow, {
 						id: "dsh-fairy-mascot-scale",
 						label: "大眼睛大小：",
