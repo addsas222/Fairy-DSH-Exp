@@ -9,6 +9,7 @@ import {
   FAIRY_VISUAL_SETTINGS_VERSION,
 } from 'dsh-fairy-contracts';
 import { createFairyDiagnostics } from 'dsh-fairy-contracts/diagnostics';
+import { findPenMcp, recordedPenPath } from './workshop-pen.cjs';
 
 const settingsNamespaceName = FAIRY_VISUAL_SETTINGS_NAMESPACE;
 const FAIRY_VISUAL_SETTINGS = settingsNamespace(settingsNamespaceName);
@@ -56,43 +57,17 @@ export const name = 'dsh-fairy-visual';
  * 是否已写进 home 的 profiles/web/cordis.patch.yml、preset 技能槽位里有哪些设计技能。
  */
 const WORKSHOP_PATH = '/fairy-visual/workshop';
-const PEN_MCP_NAMES = ['mcp-server-windows-x64.exe', 'mcp-server-darwin-arm64', 'mcp-server-darwin-x64', 'mcp-server-linux-x64', 'mcp-server-linux-arm64'];
-
-function findPenMcp() {
-  let hit = null;
-  const probe = (dir) => {
-    if (hit || !dir || !existsSync(dir)) return;
-    for (const name of PEN_MCP_NAMES) {
-      const candidate = join(dir, name);
-      if (existsSync(candidate)) { hit = candidate; return; }
-    }
-  };
-  // 本机的 Pen 可能不在系统盘（实测这台在 D:），与 pen-mcp.mjs 一样遍历三个盘符。
-  const penDirs = [process.env.DSH_PEN_DIR, join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Pen')].filter(Boolean);
-  if (process.platform === 'win32') {
-    const profileRoot = (process.env.USERPROFILE ?? '').replace(/^[A-Za-z]:/, '');
-    for (const drive of ['C:', 'D:', 'E:']) penDirs.push(join(`${drive}\\`, profileRoot, 'AppData', 'Local', 'Programs', 'Pen'));
-  }
-  for (const root of penDirs) {
-    probe(join(root, 'resources', 'app.asar.unpacked', 'out'));
-    probe(join(root, 'app.asar.unpacked', 'out'));
-  }
-  const pencilRoot = join(homedir(), '.pencil', 'mcp');
-  probe(pencilRoot);
-  if (!hit && existsSync(pencilRoot)) {
-    for (const entry of readdirSync(pencilRoot)) probe(join(pencilRoot, entry));
-  }
-  return hit;
-}
+// pen 定位与 patch 路径解码在 ./workshop-pen.cjs（纯函数，仓库树里也能直接测）。
 
 function workshopStatus() {
   const home = process.env.DSH_HOME || join(homedir(), '.dsh');
   const penPath = findPenMcp();
   const patch = join(home, 'profiles', 'web', 'cordis.patch.yml');
-  let mcpWired = false;
-  try {
-    mcpWired = /^\s*-\s*id:\s*mcp-pen\s*$/m.test(readFileSync(patch, 'utf8'));
-  } catch { /* 未部署 profile 时按未接入报 */ }
+  let patchText = '';
+  try { patchText = readFileSync(patch, 'utf8'); } catch { /* 未部署 profile 时按未接入报 */ }
+  // 取 patch 里写下的那条路径（解引号的事交给 recordedPenPath），是否真存在由返回值说明。
+  const recorded = recordedPenPath(patchText);
+  const mcpWired = /^\s*-\s*id:\s*mcp-pen\s*$/m.test(patchText);
   const skills = [];
   const presetsRoot = join(home, '.agent-presets');
   try {
@@ -115,7 +90,9 @@ function workshopStatus() {
   return {
     home,
     pen: { installed: Boolean(penPath), path: penPath },
-    mcp: { wired: mcpWired, patch },
+    // recorded 是 profile patch 里写着的那条路径，不一定还存在（换盘/重装后会留旧值）；
+    // installed 只看文件是否真在——两者不一致就是「配了但失效」，面板照实说，不猜。
+    mcp: { wired: mcpWired, patch, recorded, installed: Boolean(recorded) && existsSync(recorded) },
     skills: [...new Set(skills)].sort(),
   };
 }

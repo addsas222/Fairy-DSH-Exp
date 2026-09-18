@@ -20,13 +20,15 @@
  *   默认 --ensure（= 探测 + 能配就配 + 配置后打印下一步）。
  * 退出码：0 配好或已存在；3 未装 Pen（已打印安装指引，不视为失败）；1 其他错误。
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const IS_WINDOWS = process.platform === 'win32';
+/** 全盘枚举顺序：C: 打头（绝大多数机器装系统盘），其余字母顺次，F:/D: 这些非系统盘自然被覆盖。 */
+const DRIVE_LETTERS = 'CDEFGHIJKLMNOPQRSTUVWXYZAB'.split('');
 const log = (m) => console.log(`\u001b[36m[pen-mcp]\u001b[0m ${m}`);
 const warn = (m) => console.warn(`\u001b[33m[pen-mcp]\u001b[0m ${m}`);
 
@@ -53,6 +55,56 @@ function printHelp() {
   for (const line of source.slice(start + 1, end)) console.log(line.replace(/^ \* ?/, ''));
 }
 
+/**
+ * Windows 上 Pen 的 MCP **只可能**在盘符 + 用户 profile 相对路径两段里，而盘符由用户
+ * 安装时选（实测这台装在 F:，早先写死 C:/D:/E: 会把装好的 Pen 报成「未安装」）。
+ * 所以先问注册表的卸载键要真实安装路径，拿不到再全盘枚举 —— 顺序即优先级。
+ * 32/64 位注册表各自可能有一份，两份都读；读不到（非 Windows / 键缺失）就当没有。
+ */
+export function registryPenRoots() {
+  const roots = [];
+  const keys = [
+    'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  ];
+  for (const key of keys) {
+    let out = '';
+    try {
+      // 键不存在时 reg 会往 stderr 抱怨，只认 stdout 即可。
+      out = execFileSync('reg', ['query', key, '/s', '/f', 'Pen', '/d'], { encoding: 'utf8', timeout: 10000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch { continue; }
+    // InstallLocation 优先；本机实测它是空的，退而取卸载器路径里的安装目录。
+    for (const line of out.split(/\r?\n/)) {
+      const match = /^\s*(InstallLocation|UninstallString)\s+REG_[A-Z_]+\s+(.+?)\s*$/i.exec(line);
+      if (!match) continue;
+      if (match[1].toLowerCase() === 'installlocation') { roots.unshift(match[2]); continue; }
+      const fromExe = /^"?([^"]+\.exe)/.exec(match[2].trim())?.[1];
+      if (fromExe && dirname(fromExe) !== '.') roots.push(dirname(fromExe));
+    }
+  }
+  return roots.filter((root, index) => root && roots.indexOf(root) === index);
+}
+
+/** Pen 各平台的候选安装根目录；纯计算，测试直接查它的形状。 */
+export function penAppRoots(platform = process.platform, env = process.env) {
+  const dirs = [];
+  if (platform === 'win32') {
+    // DSH_PEN_DIR 是显式覆盖口，排在任何猜测之前；LOCALAPPDATA 猜测只在 Windows 上有意义
+    // （否则在 Linux 机器上带 %LOCALAPPDATA% 的环境里会掺进一条 Windows 路径）。
+    if (env.DSH_PEN_DIR) dirs.push(env.DSH_PEN_DIR);
+    if (env.LOCALAPPDATA) dirs.push(join(env.LOCALAPPDATA, 'Programs', 'Pen'));
+    dirs.push(...registryPenRoots());
+    const profileTail = (env.USERPROFILE ?? '').replace(/^[A-Za-z]:/, '');
+    if (profileTail) for (const letter of DRIVE_LETTERS) dirs.push(join(`${letter}:\\`, profileTail, 'AppData', 'Local', 'Programs', 'Pen'));
+  } else if (platform === 'darwin') {
+    dirs.push('/Applications/Pen.app/Contents/Resources', join(homedir(), 'Applications', 'Pen.app', 'Contents', 'Resources'));
+  } else {
+    dirs.push('/opt/Pen/resources', '/usr/lib/Pen/resources', join(homedir(), '.local', 'share', 'Pen', 'resources'));
+  }
+  return dirs;
+}
+
 /** 找 Pen 的 MCP 可执行文件：先看应用自带的那份，再看 ~/.pencil 下的编辑器变体。 */
 function findPenMcp() {
   const candidates = [];
@@ -70,18 +122,7 @@ function findPenMcp() {
     'mcp-server-windows-x64.exe', 'mcp-server-darwin-arm64', 'mcp-server-darwin-x64',
     'mcp-server-linux-x64', 'mcp-server-linux-arm64',
   ];
-  // 本机的 Pen 可能不在当前盘（实测这台在 D:，而 LOCALAPPDATA 指 C:）⇒ 连同用户 profile
-  // 所在盘一起探，另留 DSH_PEN_DIR 覆盖口。
-  const penDirs = [process.env.DSH_PEN_DIR, join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Pen')].filter(Boolean);
-  if (IS_WINDOWS) {
-    const profileRoot = (process.env.USERPROFILE ?? '').replace(/^[A-Za-z]:/, '');
-    for (const drive of ['C:', 'D:', 'E:']) penDirs.push(join(drive + '\\', profileRoot, 'AppData', 'Local', 'Programs', 'Pen'));
-  }
-  const appRoots = IS_WINDOWS
-    ? penDirs
-    : process.platform === 'darwin'
-      ? ['/Applications/Pen.app/Contents/Resources', join(homedir(), 'Applications', 'Pen.app', 'Contents', 'Resources')]
-      : ['/opt/Pen/resources', '/usr/lib/Pen/resources', join(homedir(), '.local', 'share', 'Pen', 'resources')];
+  const appRoots = penAppRoots();
   // Windows 的应用自带 MCP 在 <Pen>\\resources\\app.asar.unpacked\\out（macOS 的 root 已经是 Contents/Resources）。
   for (const root of appRoots) {
     push(join(root, 'resources', 'app.asar.unpacked', 'out'), names);
@@ -112,7 +153,10 @@ function ensureProfileRow(patchPath, mcpPath, appId, agent, dryRun) {
     log(`pen MCP 已在 profile 里（${patchPath}）：无需改动`);
     return true;
   }
-  const command = mcpPath.replace(/\\/g, '\\\\');
+  // YAML 单引号标量里的反斜杠是字面量，路径**原样**写即可。早先这里多转义了一层，结果
+  // 本机 patch 里留下 `D:\\Users\\...` 这种双反斜杠；虽然 YAML 读回来还是同一个字符串，
+  // 但工作坊面板直接显示它时就成了乱码路径 —— 写入端不再制造这种值。
+  const command = mcpPath;
   const block = [
     '    # 设计工坊：pen.dev 的 MCP（由 scripts/pen-mcp.mjs 自动写入，幂等）。',
     '    # 前提：Pen 应用在运行，且编辑器里打开着一个 .pen 文件。',

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -1219,4 +1220,37 @@ test('创作工坊：设置分区 + 只读状态端点 + 设计指令复制', as
   assert.match(serverSource, /mcp-pen/);
   assert.ok((await read('../lib/index.js')).includes('webServer'), '宿主 bundle 没带上工作坊端点');
   assert.ok((await read('../lib/client.js')).includes('创作工坊'), '客户端 bundle 没带上创作工坊分区');
+});
+
+test('创作工坊：pen 定位只用一处判据（F: 盘安装必须能被找到）', async () => {
+  /* 缺陷现场（2026-09-18）：本机 Pen 1.2.10 装在 F:\...\Programs\Pen，而检测只扫
+   * C:/D:/E: 三个盘符 —— 面板对已装好的 Pen 报「未安装」。修法：注册表卸载键要真实
+   * 安装路径（InstallLocation 可能为空，退取卸载器路径的目录）+ 全盘枚举兜底，判据收进
+   * src/workshop-pen.cjs；具体解析由 test/workshop-pen.test.js 与
+   * fairy-system/test/pen-mcp.test.js 跑行为。这里钉住接线与两处盘符顺序一致。 */
+  const penLocator = await read('../src/workshop-pen.cjs');
+  assert.match(penLocator, /const DRIVE_LETTERS = 'CDEFGHIJKLMNOPQRSTUVWXYZAB'\.split\(''\)/);
+  assert.match(penLocator, /function registryPenRoots\(\)/);
+  assert.match(penLocator, /function penAppRoots\(platform = process\.platform, env = process\.env\)/);
+  assert.match(penLocator, /execFileSync\('reg', \['query'/);
+  assert.ok(penLocator.includes('HKCU\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall'), '注册表卸载键路径不见了');
+  assert.ok(!penLocator.includes("['C:', 'D:', 'E:']"), '又退回写死三个盘符了');
+  assert.match(serverSource, /import \{ findPenMcp, recordedPenPath \} from '\.\/workshop-pen\.cjs'/);
+  assert.match(serverSource, /const WORKSHOP_PATH = '\/fairy-visual\/workshop'/);
+  // 跨树那一条只在仓库树里能查：部署镜像只有插件目录，没有 scripts/。缺了就跳过而不是判失败，
+  // 否则同一套测试在部署树里必红（判据本身仍由 fairy-system/test/pen-mcp.test.js 在两边跑行为）。
+  const penScript = new URL('../../../scripts/pen-mcp.mjs', import.meta.url);
+  if (existsSync(penScript)) {
+    assert.ok((await read(penScript)).includes("const DRIVE_LETTERS = 'CDEFGHIJKLMNOPQRSTUVWXYZAB'.split('')"), '两份 pen 定位判据的盘符顺序必须同一串');
+  }
+});
+
+test('创作工坊：MCP 行的失效态在两端对齐（宿主给字段、客户端会读）', async () => {
+  // 换盘/重装后 profile patch 里会留下指向旧路径的 command —— 面板必须照实报，
+  // 而不是显示「已接入」让主人以为能用。
+  const workshop = await read('../src/client/workshop.js');
+  assert.match(serverSource, /recorded, installed: Boolean\(recorded\) && existsSync\(recorded\)/);
+  assert.match(workshop, /function describeMcp\(mcp\)/);
+  assert.match(workshop, /mcp\.installed === false/);
+  assert.match(workshop, /mcp\.recorded/);
 });

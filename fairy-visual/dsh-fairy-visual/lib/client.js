@@ -6852,6 +6852,25 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			jsxs: jsxs$1,
 			primitives: uiPrimitives$1
 		});
+		/** MCP 行的四种状态由宿主算：没接 / 接了但写下的路径已失效（换盘、重装）/ 正常 / 未知。 */
+		function describeMcp(mcp) {
+			if (!mcp?.wired) return {
+				ok: false,
+				text: "MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）"
+			};
+			if (mcp.installed === false) return {
+				ok: false,
+				text: `MCP：已接入但记录的路径已失效——重跑一键安装器重新指向当前安装（${mcp.recorded?.split("\\").pop() ?? "旧路径"}）`
+			};
+			if (mcp.installed === true) return {
+				ok: true,
+				text: "MCP：已接入 web profile（用前：Pen 在运行且打开着 .pen）"
+			};
+			return {
+				ok: true,
+				text: "MCP：已接入 web profile（路径未记录，无法核对是否失效）"
+			};
+		}
 		function Workshop() {
 			const { ASK_TEXT, AskSection, AskResult, AskActions } = askKit;
 			const [status, setStatus] = React$1.useState(null);
@@ -6889,13 +6908,15 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			}, "workshop-error"));
 			else {
 				const skills = Array.isArray(status.skills) ? status.skills : [];
+				const penInstalled = Boolean(status.pen?.installed);
 				rows.push(jsx$1(AskResult, {
-					ok: Boolean(status.pen?.installed),
-					text: status.pen?.installed ? `pen.dev：已安装（${status.pen.path}）` : "pen.dev：未安装——先到 pen.dev 官网安装"
+					ok: penInstalled,
+					text: penInstalled ? `pen.dev：已安装（${status.pen.path}）` : "pen.dev：未安装——先到 pen.dev 官网安装"
 				}, "workshop-pen"));
+				const mcp = describeMcp(status.mcp);
 				rows.push(jsx$1(AskResult, {
-					ok: Boolean(status.mcp?.wired),
-					text: status.mcp?.wired ? "MCP：已接入 web profile（用前：Pen 在运行且打开着 .pen）" : "MCP：未接入——重跑一键安装器即会自动补上（scripts/install.mjs）"
+					ok: mcp.ok,
+					text: mcp.text
 				}, "workshop-mcp"));
 				rows.push(jsx$1(AskResult, {
 					ok: skills.includes("huashu-design"),
