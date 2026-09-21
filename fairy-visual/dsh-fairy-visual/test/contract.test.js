@@ -41,6 +41,7 @@ const selectionGuardSource = await read('../src/client/selection-guard.js');
 const mascotScaleSource = await read('../src/client/mascot-scale-control.js');
 const speedControlSource = await read('../src/client/mascot-animation-speed-control.js');
 const workshopSource = await read('../src/client/workshop.js');
+const settingsSectionsSource = await read('../src/client/settings-sections.js');
 const settingsWriteSource = await read('../src/client/settings-write.js');
 const observerManagerSource = await read('../src/client/dom-observer-manager.js');
 const semanticManagerSource = await read('../src/client/semantic-markers-manager.js');
@@ -54,7 +55,7 @@ const mascotEffectsSvgSource = await read('../src/client/mascot-effects-svg.js')
 const mascotEyeSvgSource = await read('../src/client/mascot-eye-svg.js');
 const mascotGeometrySource = await read('../src/client/mascot-geometry.js');
 const mascotStaticSource = [mascotAssetsSource, mascotStyleSource, mascotEffectsSvgSource, mascotEyeSvgSource, mascotGeometrySource].join('\n');
-const clientSource = [clientEntrySource, semanticManagerSource, sidebarManagerSource, scrollbarsManagerSource, heroProjectionSource, mascotRuntimeSource, mascotStaticSource].join('\n');
+const clientSource = [clientEntrySource, settingsSectionsSource, semanticManagerSource, sidebarManagerSource, scrollbarsManagerSource, heroProjectionSource, mascotRuntimeSource, mascotStaticSource].join('\n');
 const source = [clientSource, constantsSource, utilsSource, styleSource, composerDockSource, composerMarkerSource, composerMaterialSource, composerWorkspaceSource, composerResizeSource, composerInsetSource, composerSessionSource, composerAnchorSource, toBottomSource, adapterSource, lifecycleSource, controllerLifecycleSource, modeThemeSource, stageLifecycleSource, scrollbarSource, semanticMarkerSource, geometrySource, mascotSource, brandGeometrySource, powerModeSource, surfaceUtilsSource, visualTransitionsSource, selectionGuardSource, mascotScaleSource, settingsWriteSource, observerManagerSource].join('\n');
 const bundle = await read('../lib/client.js');
 const manifest = JSON.parse(await read('../package.json'));
@@ -67,7 +68,9 @@ test('keeps the client entrypoint and extracted managers within their module bud
   assert.ok(mascotEyeSvgSource.split('\n').length < 180);
   assert.ok(mascotGeometrySource.split('\n').length < 100);
   assert.ok(workshopSource.split('\n').length < 200);
+  assert.ok(settingsSectionsSource.split('\n').length < 300);
   assert.match(clientEntrySource, /require\('\.\/workshop\.js'\)/);
+  assert.match(clientEntrySource, /require\('\.\/settings-sections\.js'\)/);
   assert.match(mascotRuntimeSource, /require\('\.\/mascot-assets\.js'\)/);
   assert.doesNotMatch(mascotRuntimeSource, /const CSS = `|<svg class="dsh-fairy-eye"/);
   assert.match(mascotAssetsSource, /require\('\.\/mascot-style\.js'\)/);
@@ -360,8 +363,8 @@ test('keeps both themes explicit and preserves the original Fairy visual primiti
 test('keeps animation speed selection and mascot rate synchronized through the settings path', () => {
   // 速度控件已收进设置卡：写入走 settings 通道，应用走 StageHost 的 mount(…, speed)；
   // 运行时的 SPEED_EVENT 通道保留为扩展点；作曲栏的速度条回归但只读（显示当前档位）。
-  assert.match(clientEntrySource, /const MASCOT_SPEED_OPTIONS = SPEED_STOPS\.map/);
-  assert.match(clientEntrySource, /form\.change\('mascotAnimationSpeed', Number\(next\)\)/);
+  assert.match(settingsSectionsSource, /const MASCOT_SPEED_OPTIONS = SPEED_STOPS\.map/);
+  assert.match(settingsSectionsSource, /form\.change\('mascotAnimationSpeed', Number\(next\)\)/);
   assert.match(clientEntrySource, /mascot\?\.mount\?\.\(stageNode, owner, state\.settings\.mascotAnimationSpeed\)/);
   assert.match(clientEntrySource, /state\.settings\.mascotAnimationSpeed, state\.settings\.mascotPosition, state\.settings\.mascotPositionMode\]\)/);
   assert.match(mascotRuntimeSource, /motionClock\.setRate\(rate\)/);
@@ -664,7 +667,7 @@ test('diagnoses visual setting failures through one asynchronous boundary', () =
   assert.match(settingsWriteSource, /const diagnostics = createFairyDiagnostics\('dsh-fairy-visual'\)/);
   assert.match(clientSource, /const save = saveControllerSetting/);
   assert.match(composerDockSource, /settingError\('composerDockHeight', error\)/);
-  assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);
+  assert.match(settingsSectionsSource, /form\.change\('mascotScale', Number\(next\)\)/);
   assert.doesNotMatch(clientSource, /controller\.set\(field, value\)\.catch\(\(\) => \{\}\)/);
 });
 
@@ -972,8 +975,8 @@ test('applies the Fairy scale through the settings path without composer control
   assert.match(mascotScaleSource, /function scheduleMascotScale\(value, documentRef = document\)/);
   assert.match(mascotScaleSource, /root\.setAttribute\('data-dsh-fairy-mascot-scale', String\(scale\)\)/);
   assert.match(clientEntrySource, /scheduleMascotScale\(state\.settings\.mascotScale\)/);
-  assert.match(clientEntrySource, /const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS\.map/);
-  assert.match(clientEntrySource, /form\.change\('mascotScale', Number\(next\)\)/);
+  assert.match(settingsSectionsSource, /const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS\.map/);
+  assert.match(settingsSectionsSource, /form\.change\('mascotScale', Number\(next\)\)/);
   assert.match(mascotScaleSource, /createMascotScaleBase|createMascotScaleControl|INPUT_ATTR/, '大小读数条必须已回归作曲栏');
   assert.doesNotMatch(mascotScaleSource, /addEventListener|setControllerSetting/, '大小读数条必须只读：不得监听输入或写设置');
   assert.match(styleSource, /mascot-scale-(base|control|input)/, '滑杆样式必须保留');
@@ -1152,7 +1155,7 @@ test('大眼睛位置设置项：设置卡写入 + 根属性应用（作曲栏�
   assert.match(utilsSource, /export function applyMascotPosition\(value, documentRef = document\)/);
   assert.match(utilsSource, /setAttribute\(MASCOT_POSITION_ATTR, normalizeMascotPosition\(value\)\)/);
   assert.match(constantsSource, /export const MASCOT_POSITION_LABELS/);
-  assert.match(clientEntrySource, /form\.change\('mascotPosition', next\)/);
+  assert.match(settingsSectionsSource, /form\.change\('mascotPosition', next\)/);
   assert.match(clientEntrySource, /applyMascotPosition\(state\.settings\.mascotPositionMode === 'dynamic' && state\.activity === 'thinking' \? 'middle-right' : state\.settings\.mascotPosition\)/);
   assert.ok((await read('../lib/index.js')).includes('mascotPosition:'), 'host schema 缺 mascotPosition');
   assert.ok((await read('../lib/client.js')).includes('dsh-fairy-mascot-position'), '客户端 bundle 没带上位置设置项');
@@ -1168,7 +1171,7 @@ test('大眼站位模式：动态（空载居中 · 思考让位）与静态模�
   // 解析只发生在客户端 Stage 投影：static 逐字节保持既有行为，dynamic 按活动态取锚点。
   assert.match(serverSource, /mascotPositionMode: z\.union\(\[z\.const\('static'\), z\.const\('dynamic'\)\]\)\.default\('static'\)/, 'host schema 缺 mascotPositionMode');
   assert.match(constantsSource, /mascotPositionMode: 'static'/, '客户端默认表缺 mascotPositionMode');
-  assert.match(clientEntrySource, /form\.change\('mascotPositionMode', next\)/);
+  assert.match(settingsSectionsSource, /form\.change\('mascotPositionMode', next\)/);
   assert.match(clientEntrySource, /data-dsh-fairy-mascot-position-mode/, '动态模式必须把模式属性投影到吉祥物根');
   assert.match(styleSource, /data-dsh-fairy-mascot-position-mode="dynamic"\] \.dsh-fairy-float\{transition:translate/, '动态模式缺位移过渡');
   const normalizer = await read('../src/client/settings-normalizer.cjs');
@@ -1184,7 +1187,7 @@ test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲�
   assert.ok(utilsSource.includes('PALETTE_ATTR'), '属性同步缺调色盘分支');
   assert.ok(clientEntrySource.includes('removeAttribute(PALETTE_ATTR)'), 'dispose 缺调色盘清理');
   assert.ok(styleSource.includes('data-dsh-fairy-palette="ink"') && styleSource.includes('data-dsh-fairy-palette="ember"'), '缺两个调色盘令牌块');
-  assert.match(clientEntrySource, /form\.change\('palette', next\)/);
+  assert.match(settingsSectionsSource, /form\.change\('palette', next\)/);
   assert.ok((await read('../lib/index.js')).includes('palette:'), 'host schema 缺 palette');
   assert.ok((await read('../lib/client.js')).includes('dsh-fairy-visual-palette'), '客户端 bundle 没带上调色盘设置项');
   const dock = await read('../src/client/composer-dock.js');
@@ -1207,10 +1210,29 @@ test('调色盘设置项：设置卡写入 + 属性管线 + 令牌块（作曲�
   }
 });
 
+test('设置卡拆分：HDD 视觉 / 大眼睛主视觉 / Fairy 身份 三张独立卡', async () => {
+  // 需求：原「HDD 视觉与 Fairy 身份」一张卡混三组设置，拆成三张独立设置卡方便管理；
+  // 写盘仍按字段各回各的命名空间（fairy-visual / fairy-identity），每卡只写自己组的键。
+  assert.match(clientEntrySource, /id: 'dsh-fairy-visual', order: 45, label: \(\) => 'HDD 视觉'/);
+  assert.match(clientEntrySource, /id: 'dsh-fairy-mascot', order: 46, label: \(\) => '大眼睛主视觉'/);
+  assert.match(clientEntrySource, /id: 'dsh-fairy-identity', order: 47, label: \(\) => 'Fairy 身份'/);
+  assert.match(settingsSectionsSource, /function VisualSection\(/);
+  assert.match(settingsSectionsSource, /function MascotSection\(/);
+  assert.match(settingsSectionsSource, /function IdentitySection\(/);
+  assert.match(settingsSectionsSource, /const VISUAL_CARD_FIELDS = \['enabled', 'theme', 'powerMode', 'contentFade', 'palette'\]/);
+  assert.match(settingsSectionsSource, /const MASCOT_CARD_FIELDS = \['mascotVisible', 'mascotPosition', 'mascotPositionMode', 'mascotScale', 'mascotAnimationSpeed'\]/);
+  assert.match(settingsSectionsSource, /const IDENTITY_CARD_FIELDS = \['mode', 'customName', 'secondAssistant', 'household'\]/);
+  assert.match(settingsSectionsSource, /changedFields\(draft, readCurrent\(\), fields\)/);
+  assert.doesNotMatch(clientEntrySource, /HDD 视觉与 Fairy 身份/);
+  assert.doesNotMatch(settingsSectionsSource, /HDD 视觉与 Fairy 身份/);
+  const bundleSource = await read('../lib/client.js');
+  assert.ok(bundleSource.includes('大眼睛主视觉') && bundleSource.includes('Fairy 身份'), '客户端 bundle 没带上拆分后的设置卡');
+});
+
 test('创作工坊：设置分区 + 只读状态端点 + 设计指令复制', async () => {
   // 需求：设计 DSH UI 的工作台要有可见入口（设置里的「创作工坊」分区），
   // 状态来自宿主只读端点；设计技能与 pen 接线可自检；一键复制设计指令。
-  assert.match(clientEntrySource, /id: 'dsh-fairy-workshop', order: 46, label: \(\) => '创作工坊'/);
+  assert.match(clientEntrySource, /id: 'dsh-fairy-workshop', order: 48, label: \(\) => '创作工坊'/);
   const workshop = await read('../src/client/workshop.js');
   assert.match(workshop, /fetch\('\/fairy-visual\/workshop'/);
   assert.match(workshop, /navigator\.clipboard/);

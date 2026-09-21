@@ -2,7 +2,7 @@
 //
 // 属性管线不变：hdd=属性缺省（DOM 与既有状态一致）、ink/ember 落 data-dsh-fairy-palette，
 // 由 CSS 令牌层消费；应用在 utils.syncDocumentMode（设置快照驱动）。控件本体（可改值）
-// 在设置卡「HDD 视觉与 Fairy 身份」的「皮肤（调色盘）」行；这里只摆出硬件条并标记当前项，
+// 在设置卡「HDD 视觉」的「皮肤（调色盘）」行；这里只摆出硬件条并标记当前项，
 // 指针事件由样式层整体关闭。
 const { PALETTES } = require('./constants.js');
 

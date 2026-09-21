@@ -23,10 +23,13 @@ It uses the documented client contracts:
   before `body > #root` only while HDD is enabled. It is a plain paint owner,
   not a React root or a second stage; `#root` stays above it at z-index 1.
 - `settings.section` and `ctx.settingsScope` for the settings UI and durable
-  preference transport. Two sections are registered: `dsh-fairy-visual` (order
-  45,「HDD 视觉与 Fairy 身份」) carries the HDD/theme/mascot toggles plus the
-  皮肤（调色盘）、大眼睛位置/大小/速度 rows; `dsh-fairy-workshop` (order 46,
-  「创作工坊」) is the design-workbench entry (OpenDesign / 花叔Design / pen.dev)
+  preference transport. Four sections are registered: `dsh-fairy-visual` (order
+  45,「HDD 视觉」) carries the HDD/theme/power/content-fade toggles plus the
+  皮肤（调色盘）row; `dsh-fairy-mascot` (order 46,「大眼睛主视觉」) carries the
+  显示开关与位置/站位模式/大小/速度 rows; `dsh-fairy-identity` (order 47,
+  「Fairy 身份」) carries the 识别模式与自定义称呼/第二助手/家庭成员 rows（写
+  `fairy-identity` 命名空间）; `dsh-fairy-workshop` (order 48,「创作工坊」) is
+  the design-workbench entry (OpenDesign / 花叔Design / pen.dev)
   whose status comes from the read-only host endpoint `/fairy-visual/workshop`.
   The composer dock no longer renders the floating mascot control strips —
   those settings live in the card and apply through the controller/attribute

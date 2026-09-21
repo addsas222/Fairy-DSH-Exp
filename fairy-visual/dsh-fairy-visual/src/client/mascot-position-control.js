@@ -2,7 +2,7 @@
 //
 // 定位语义不变：锚点作用于吉祥物根（#dsh-fairy-root）的 data-dsh-fairy-mascot-position，
 // 由 CSS 翻译成内层 float 的 translate 位移——应用在 utils.applyMascotPosition（设置快照驱动）；
-// 控件本体（可改值）在设置卡「HDD 视觉与 Fairy 身份」。这里只负责在作曲栏摆出硬件条、
+// 控件本体（可改值）在设置卡「大眼睛主视觉」。这里只负责在作曲栏摆出硬件条、
 // 点亮当前锚点；指针事件由样式层整体关闭。
 const { MASCOT_POSITION_LABELS, MASCOT_POSITIONS } = require('./constants.js');
 

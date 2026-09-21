@@ -183,392 +183,6 @@ window.__ModuleLoader__.load({
 	}));
 
 //#endregion
-//#region ../../fairy-contracts/client-ask-kit.cjs
-	var require_client_ask_kit = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		/**
-		* 归一化"提问件"套件 —— 设置卡里向用户要输入的那些行。
-		*
-		* 为什么要它：六个包的设置卡原本各写一套 input/select/checkbox、
-		* 各写一套加载/保存/状态/禁用逻辑，文案与行为都不一致（"已保存。"
-		* vs "已保存，下一次…"、只有部分包处理只读会话）。这里收成一份：
-		*
-		*  - 外观：优先用官方冻结原语（`Input`/`Button`/`StateDot`），其余用官方
-		*    设计令牌（`var(--dsw-alias-*)`），与官方设置面同色同尺。
-		*  - 操作逻辑：一份 useAskForm 管住 draft → 保存 → 复读 → 状态文案，
-		*    忙时禁用、只读会话停用、Enter 提交、不轮询。
-		*
-		* 契约：本文件是**唯一真源**。手写 bundle 的包由
-		* `fairy-system/sync-ask-kit.js` 把 `createAskKit` 内联进 `lib/client.js`
-		* 的标记区，`verify-build` 校验不漂移；有 `src/` 的包直接 require。
-		*
-		* @module dsh-fairy-contracts/client-ask-kit
-		*/
-		/** 归一化状态文案：全仓只此一份，改文案就改这里。 */
-		const ASK_TEXT = {
-			loading: "正在读取…",
-			saved: "已保存。",
-			unchanged: "没有需要保存的改动。",
-			saving: "保存中…",
-			testing: "测试中…",
-			save: "保存",
-			test: "测试",
-			readOnly: "当前会话不可写入主机设置，保存已停用。",
-			saveFailed: (why) => `保存失败：${why}`
-		};
-		/** 官方设计令牌（与设置面同一套变量，缺变量时回落到中性色）。 */
-		const ASK_STYLE = {
-			root: {
-				display: "grid",
-				gap: 12,
-				padding: 16
-			},
-			copy: {
-				margin: 0,
-				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))",
-				fontSize: 12,
-				lineHeight: "18px"
-			},
-			panel: {
-				display: "grid",
-				gap: 10,
-				padding: 12,
-				borderRadius: 8,
-				border: "1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))",
-				background: "var(--dsw-alias-bg-layer-2, rgba(130,130,130,0.09))"
-			},
-			row: {
-				display: "grid",
-				gap: 4
-			},
-			label: {
-				fontSize: 12,
-				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))"
-			},
-			input: {
-				width: "100%",
-				boxSizing: "border-box",
-				padding: "6px 8px",
-				borderRadius: 6,
-				border: "1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))",
-				background: "var(--dsw-alias-bg-layer-1, transparent)",
-				color: "var(--dsw-alias-label-primary, rgba(225,225,225,0.95))",
-				fontSize: 13
-			},
-			actions: {
-				display: "flex",
-				gap: 8,
-				alignItems: "center",
-				flexWrap: "wrap"
-			},
-			status: {
-				margin: 0,
-				fontSize: 12,
-				lineHeight: "18px",
-				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))"
-			},
-			line: {
-				display: "flex",
-				gap: 8,
-				alignItems: "center",
-				fontSize: 12
-			},
-			pre: {
-				margin: 0,
-				padding: 10,
-				borderRadius: 6,
-				overflowX: "auto",
-				background: "var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.24))",
-				color: "var(--dsw-alias-label-primary, rgba(225,225,225,0.95))",
-				fontSize: 12,
-				lineHeight: "18px"
-			}
-		};
-		/** 错误文案：长栈与 HTML 不进界面。 */
-		function describeError(error) {
-			const message = typeof error?.message === "string" ? error.message : String(error);
-			return message.length > 320 ? `${message.slice(0, 320)}…` : message;
-		}
-		/**
-		* 造一套归一化提问件。
-		*
-		* @param spec - `{ React, jsx, jsxs, primitives }`：`primitives` 即
-		*   `require('@deepseek-ai/dsh-client-ui-primitives')`，只认官方确实导出的
-		*   那些名字（`Input`/`Button`/`StateDot`），其余留空则退化为同色令牌的原生件。
-		* @returns 归一化组件与一份统一的读写逻辑。
-		*/
-		function createAskKit({ React, jsx, jsxs, primitives = {} }) {
-			const { Input, Button, StateDot } = primitives;
-			const { useState, useCallback, useEffect, useRef } = React;
-			function AskSection({ title, description, ariaLabel, children }) {
-				return jsxs("section", {
-					style: ASK_STYLE.root,
-					"aria-label": ariaLabel ?? title,
-					children: [jsxs("div", {
-						style: ASK_STYLE.row,
-						children: [jsx("h2", {
-							style: {
-								margin: 0,
-								fontSize: 14
-							},
-							children: title
-						}), ...(description ?? []).map((line, index) => jsx("p", {
-							style: ASK_STYLE.copy,
-							children: line
-						}, `${index}:${line}`))]
-					}), children]
-				});
-			}
-			/** 一行提问：标签 + 控件 + 可选补充说明。 */
-			function AskRow({ id, label, hint, children }) {
-				return jsxs("div", {
-					style: ASK_STYLE.row,
-					children: [
-						jsx("label", {
-							style: ASK_STYLE.label,
-							htmlFor: id,
-							children: label
-						}),
-						children,
-						hint ? jsx("p", {
-							style: ASK_STYLE.copy,
-							children: hint
-						}) : null
-					]
-				});
-			}
-			/**
-			* 文本类提问（text/password/url/搜索框…）。官方 `Input` 有就用官方的，
-			* 没有就退回同令牌的原生 input —— 两者的 class 与尺寸一致。
-			*/
-			function AskText({ id, type = "text", value, placeholder, disabled, onChange, autoComplete }) {
-				const props = {
-					id,
-					type,
-					value,
-					placeholder,
-					disabled,
-					autoComplete
-				};
-				if (typeof Input === "function") return jsx(Input, {
-					...props,
-					onChange: (event) => onChange(event.target.value)
-				});
-				return jsx("input", {
-					"data-ask": "text",
-					...props,
-					style: ASK_STYLE.input,
-					onChange: (event) => onChange(event.target.value)
-				});
-			}
-			/** 选择类提问：官方没有 Select 原语，用同令牌原生件保证一致。 */
-			function AskSelect({ id, value, options, disabled, onChange }) {
-				return jsx("select", {
-					"data-ask": "select",
-					id,
-					style: ASK_STYLE.input,
-					value,
-					disabled,
-					onChange: (event) => onChange(event.target.value),
-					children: (options ?? []).map((option) => jsx("option", {
-						value: option.value,
-						children: option.label
-					}, option.value))
-				});
-			}
-			/** 开关类提问：一整行可点，标签在左，方块在右。 */
-			function AskToggle({ id, label, checked, disabled, onChange, hint }) {
-				return jsxs("div", {
-					style: {
-						...ASK_STYLE.row,
-						gap: 2
-					},
-					children: [jsxs("label", {
-						style: {
-							display: "flex",
-							gap: 8,
-							alignItems: "center",
-							fontSize: 13
-						},
-						htmlFor: id,
-						children: [jsx("input", {
-							"data-ask": "toggle",
-							id,
-							type: "checkbox",
-							checked: checked === true,
-							disabled,
-							onChange: (event) => onChange(event.target.checked)
-						}), jsx("span", { children: label })]
-					}), hint ? jsx("p", {
-						style: {
-							...ASK_STYLE.copy,
-							marginLeft: 24
-						},
-						children: hint
-					}) : null]
-				});
-			}
-			/** 动作行：主按钮 + 次按钮 + 一行状态；忙时整体禁用。 */
-			function AskActions({ busy, status, primary, secondary, onPrimary, onSecondary, writable = true }) {
-				const locked = busy !== null || !writable;
-				return jsxs("div", {
-					style: ASK_STYLE.actions,
-					children: [
-						jsx(Button, {
-							variant: "primary",
-							size: "sm",
-							disabled: locked,
-							onClick: onPrimary,
-							children: busy === "save" ? ASK_TEXT.saving : primary ?? ASK_TEXT.save
-						}),
-						secondary ? jsx(Button, {
-							variant: "outline",
-							size: "sm",
-							disabled: locked,
-							onClick: onSecondary,
-							children: busy === "test" ? ASK_TEXT.testing : secondary
-						}) : null,
-						jsx("p", {
-							style: ASK_STYLE.status,
-							children: status
-						})
-					]
-				});
-			}
-			/** 结果行：一处画点与文字，成功/失败同一套观感。 */
-			function AskResult({ ok, text }) {
-				if (!text) return null;
-				return jsxs("div", {
-					style: ASK_STYLE.line,
-					children: [typeof StateDot === "function" ? jsx(StateDot, {
-						state: ok ? "done" : "error",
-						size: 10
-					}) : null, jsx("span", {
-						style: ok ? void 0 : { color: "var(--dsw-alias-label-error, #e06c6c)" },
-						children: text
-					})]
-				});
-			}
-			/**
-			* 一份统一的读取/保存/测试逻辑。
-			*
-			* - `load()` 读当前值（通常是 GET 一个 state 端点）；`save(draft)` 落盘。
-			* - 只有真改过的字段才写：草稿与已存值相等即视为"没有需要保存的改动"。
-			* - `writable=false`（只读会话）时保存按钮停用并给出同一句说明。
-			* - 不轮询：挂载读一次、保存后复读一次。
-			*
-			* @param options - `{ load, save, onSaved, initial }`。
-			* @returns 归一化的表单状态机。
-			*/
-			function useAskForm({ load, save, onSaved, initial = {} }) {
-				const [stored, setStored] = useState(null);
-				const [draft, setDraft] = useState(initial);
-				const [error, setError] = useState(false);
-				const [busy, setBusy] = useState(null);
-				const [status, setStatus] = useState(ASK_TEXT.loading);
-				const [reloadToken, setReloadToken] = useState(0);
-				const alive = useRef(true);
-				const loadRef = useRef(load);
-				loadRef.current = load;
-				useEffect(() => {
-					alive.current = true;
-					let cancelled = false;
-					setStatus(ASK_TEXT.loading);
-					Promise.resolve().then(() => loadRef.current()).then((value) => {
-						if (!cancelled) {
-							setStored(value);
-							setError(false);
-							setStatus("");
-						}
-					}).catch((cause) => {
-						if (!cancelled) {
-							setError(true);
-							setStatus(readFailedText(cause));
-						}
-					});
-					return () => {
-						cancelled = true;
-						alive.current = false;
-					};
-				}, [reloadToken]);
-				return {
-					stored,
-					draft,
-					change: useCallback((key, value) => {
-						setDraft((current) => ({
-							...current,
-							[key]: value
-						}));
-						setStatus("");
-					}, []),
-					submit: useCallback(async () => {
-						setBusy("save");
-						setStatus("");
-						try {
-							const outcome = await save(draft, stored);
-							if (outcome?.changed === false) {
-								setStatus(ASK_TEXT.unchanged);
-								return outcome;
-							}
-							setDraft(initial);
-							setStatus(ASK_TEXT.saved);
-							setReloadToken((token) => token + 1);
-							onSaved?.(outcome);
-							return outcome;
-						} catch (cause) {
-							setStatus(ASK_TEXT.saveFailed(describeError(cause)));
-							throw cause;
-						} finally {
-							setBusy(null);
-						}
-					}, [
-						draft,
-						stored,
-						save,
-						onSaved,
-						initial
-					]),
-					run: useCallback(async (kind, task) => {
-						setBusy(kind);
-						try {
-							return await task();
-						} finally {
-							setBusy(null);
-						}
-					}, []),
-					busy,
-					status,
-					error,
-					readOnly: () => setStatus(ASK_TEXT.readOnly),
-					reload: () => setReloadToken((token) => token + 1)
-				};
-			}
-			return {
-				ASK_TEXT,
-				ASK_STYLE,
-				AskSection,
-				AskRow,
-				AskText,
-				AskSelect,
-				AskToggle,
-				AskActions,
-				AskResult,
-				useAskForm,
-				describeError
-			};
-		}
-		/** 读取失败的文案：不吐栈，只说明读不到。 */
-		function readFailedText(error) {
-			return `暂时读不到设置（按已保存的值继续）：${describeError(error)}`;
-		}
-		module.exports = {
-			createAskKit,
-			ASK_TEXT,
-			ASK_STYLE,
-			describeError
-		};
-	}));
-
-//#endregion
 //#region src/client/constants.js
 	var constants_exports = /* @__PURE__ */ __exportAll({
 		DEFAULT: () => DEFAULT,
@@ -5709,14 +5323,14 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/sidebar-geometry-manager.js
 	var require_sidebar_geometry_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$4 = require("react");
+		const React$5 = require("react");
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { claimGeometryLifecycle } = require_geometry_lifecycle();
 		const { mutationTouchesSurface, roundedRectPath } = require_surface_utils();
 		const { OFFICIAL_SELECTORS, OFFICIAL_ATTRIBUTES, sidebarResizeHandle } = require_dom_adapter();
 		function install(_lifecycle = null) {
 			function SidebarBoardCutout({ enabled }) {
-				React$4.useLayoutEffect(() => {
+				React$5.useLayoutEffect(() => {
 					const lifecycle = claimGeometryLifecycle(document, "sidebar-board-cutout");
 					let structureObserver = null;
 					let layoutObserver = null;
@@ -5844,7 +5458,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/scrollbars-manager.js
 	var require_scrollbars_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$3 = require("react");
+		const React$4 = require("react");
 		const { createLifecycleScope } = require_lifecycle();
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { createPointerDrag } = require_pointer_drag();
@@ -5852,7 +5466,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const { HDD_SCROLL_TARGET_SELECTOR, hddScrollTargets } = require_dom_adapter();
 		function install(_lifecycle = null) {
 			function HddOverlayScrollbars({ enabled }) {
-				React$3.useLayoutEffect(() => {
+				React$4.useLayoutEffect(() => {
 					if (!enabled || !document.body) return void 0;
 					const lifecycle = claimScrollbarLifecycle(document);
 					const host = document.createElement("div");
@@ -6096,8 +5710,8 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 //#endregion
 //#region src/client/hero-projection-manager.js
 	var require_hero_projection_manager = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$2 = require("react");
-		const { jsx: jsx$2, jsxs: jsxs$2 } = require("react/jsx-runtime");
+		const React$3 = require("react");
+		const { jsx: jsx$3, jsxs: jsxs$3 } = require("react/jsx-runtime");
 		const { MODE_ATTR, HERO_PLACEHOLDERS } = (init_constants(), __toCommonJS(constants_exports));
 		const { createManagedMutationObserver } = require_dom_observer_manager();
 		const { mutationTouchesSurface, mutationTouchesHeroSurface } = require_surface_utils();
@@ -6105,10 +5719,10 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		let heroMaskInstanceSeed = 0;
 		function install(_lifecycle = null, { Toggle, useController }) {
 			function HeroToggleHost({ controller }) {
-				const hostRef = React$2.useRef(null);
-				const [positioned, setPositioned] = React$2.useState(false);
+				const hostRef = React$3.useRef(null);
+				const [positioned, setPositioned] = React$3.useState(false);
 				const { sessionId } = useController(controller);
-				React$2.useLayoutEffect(() => {
+				React$3.useLayoutEffect(() => {
 					const host = hostRef.current;
 					if (!host) return;
 					let frame = 0;
@@ -6192,27 +5806,27 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						host.style.removeProperty("top");
 					};
 				}, [sessionId]);
-				return jsx$2("div", {
+				return jsx$3("div", {
 					ref: hostRef,
 					className: "dsh-fairy-hero-toggle-host",
 					"data-positioned": String(positioned),
 					hidden: !positioned,
-					children: jsx$2(Toggle, { controller })
+					children: jsx$3(Toggle, { controller })
 				});
 			}
 			function HeroHost({ controller }) {
 				const state = useController(controller);
-				const stateRef = React$2.useRef(state);
+				const stateRef = React$3.useRef(state);
 				stateRef.current = state;
-				const hostRef = React$2.useRef(null);
-				const placeholderRef = React$2.useRef({
+				const hostRef = React$3.useRef(null);
+				const placeholderRef = React$3.useRef({
 					key: null,
 					text: null
 				});
-				const heroMaskIdRef = React$2.useRef(null);
+				const heroMaskIdRef = React$3.useRef(null);
 				if (!heroMaskIdRef.current) heroMaskIdRef.current = `dsh-fairy-hero-mask-${++heroMaskInstanceSeed}`;
 				const heroMaskId = heroMaskIdRef.current;
-				React$2.useLayoutEffect(() => {
+				React$3.useLayoutEffect(() => {
 					const host = hostRef.current;
 					if (!host) return;
 					let frame = 0;
@@ -6369,19 +5983,19 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 						clearHero(true);
 					};
 				}, []);
-				return jsxs$2("div", {
+				return jsxs$3("div", {
 					ref: hostRef,
 					className: "dsh-fairy-hero-host",
-					children: [jsxs$2("span", {
+					children: [jsxs$3("span", {
 						className: "dsh-fairy-hero-main",
-						children: [jsxs$2("svg", {
+						children: [jsxs$3("svg", {
 							className: "dsh-fairy-hero-projection-svg",
 							width: "100%",
 							height: "220",
 							"aria-hidden": "true",
 							children: [
-								jsxs$2("defs", { children: [
-									jsx$2("mask", {
+								jsxs$3("defs", { children: [
+									jsx$3("mask", {
 										id: `${heroMaskId}-2`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6390,13 +6004,13 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$2("g", { children: [jsx$2("rect", {
+										children: jsxs$3("g", { children: [jsx$3("rect", {
 											x: "0",
 											y: "0",
 											width: "100%",
 											height: "220",
 											fill: "white"
-										}), jsx$2("text", {
+										}), jsx$3("text", {
 											className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-2",
 											x: "50%",
 											y: "114",
@@ -6404,7 +6018,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 											children: "HOLLOW DEEP DIVE SYSTEM"
 										})] })
 									}),
-									jsx$2("mask", {
+									jsx$3("mask", {
 										id: `${heroMaskId}-3`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6413,22 +6027,22 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$2("g", { children: [
-											jsx$2("rect", {
+										children: jsxs$3("g", { children: [
+											jsx$3("rect", {
 												x: "0",
 												y: "0",
 												width: "100%",
 												height: "220",
 												fill: "white"
 											}),
-											jsx$2("text", {
+											jsx$3("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-3",
 												x: "50%",
 												y: "174",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$2("text", {
+											jsx$3("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-2-for-3",
 												x: "50%",
 												y: "150",
@@ -6437,7 +6051,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 											})
 										] })
 									}),
-									jsx$2("mask", {
+									jsx$3("mask", {
 										id: `${heroMaskId}-4`,
 										maskType: "luminance",
 										maskUnits: "userSpaceOnUse",
@@ -6446,29 +6060,29 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										y: "0",
 										width: "100%",
 										height: "220",
-										children: jsxs$2("g", { children: [
-											jsx$2("rect", {
+										children: jsxs$3("g", { children: [
+											jsx$3("rect", {
 												x: "0",
 												y: "0",
 												width: "100%",
 												height: "220",
 												fill: "white"
 											}),
-											jsx$2("text", {
+											jsx$3("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-1-for-4",
 												x: "50%",
 												y: "246",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$2("text", {
+											jsx$3("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-2-for-4",
 												x: "50%",
 												y: "222",
 												fill: "black",
 												children: "HOLLOW DEEP DIVE SYSTEM"
 											}),
-											jsx$2("text", {
+											jsx$3("text", {
 												className: "dsh-fairy-hero-mask-text dsh-fairy-hero-mask-text-3-for-4",
 												x: "50%",
 												y: "192",
@@ -6478,14 +6092,14 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 										] })
 									})
 								] }),
-								jsx$2("text", {
+								jsx$3("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-1",
 									x: "50%",
 									y: "66",
 									transform: "matrix(1 0 0 -1 0 132)",
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$2("text", {
+								jsx$3("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-2",
 									x: "50%",
 									y: "90",
@@ -6493,7 +6107,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 									mask: `url(#${heroMaskId}-2)`,
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$2("text", {
+								jsx$3("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-3",
 									x: "50%",
 									y: "120",
@@ -6501,7 +6115,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 									mask: `url(#${heroMaskId}-3)`,
 									children: "HOLLOW DEEP DIVE SYSTEM"
 								}),
-								jsx$2("text", {
+								jsx$3("text", {
 									className: "dsh-fairy-hero-projection-text dsh-fairy-hero-projection-text-4",
 									x: "50%",
 									y: "156",
@@ -6511,9 +6125,9 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 								})
 							]
 						}), "HOLLOW DEEP DIVE SYSTEM"]
-					}), jsx$2("span", {
+					}), jsx$3("span", {
 						className: "dsh-fairy-hero-sub",
-						children: Array.from("空洞深潜系统").map((character, index) => jsx$2("span", {
+						children: Array.from("空洞深潜系统").map((character, index) => jsx$3("span", {
 							className: "dsh-fairy-hero-sub-char",
 							children: character
 						}, index))
@@ -6522,11 +6136,11 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			}
 			function ActiveComposerPlaceholder({ controller }) {
 				const state = useController(controller);
-				const placeholderRef = React$2.useRef({
+				const placeholderRef = React$3.useRef({
 					key: null,
 					text: null
 				});
-				React$2.useLayoutEffect(() => {
+				React$3.useLayoutEffect(() => {
 					let frame = 0;
 					let textarea = null;
 					let originalPlaceholder = null;
@@ -6833,10 +6447,396 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 	}));
 
 //#endregion
+//#region ../../fairy-contracts/client-ask-kit.cjs
+	var require_client_ask_kit = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		/**
+		* 归一化"提问件"套件 —— 设置卡里向用户要输入的那些行。
+		*
+		* 为什么要它：六个包的设置卡原本各写一套 input/select/checkbox、
+		* 各写一套加载/保存/状态/禁用逻辑，文案与行为都不一致（"已保存。"
+		* vs "已保存，下一次…"、只有部分包处理只读会话）。这里收成一份：
+		*
+		*  - 外观：优先用官方冻结原语（`Input`/`Button`/`StateDot`），其余用官方
+		*    设计令牌（`var(--dsw-alias-*)`），与官方设置面同色同尺。
+		*  - 操作逻辑：一份 useAskForm 管住 draft → 保存 → 复读 → 状态文案，
+		*    忙时禁用、只读会话停用、Enter 提交、不轮询。
+		*
+		* 契约：本文件是**唯一真源**。手写 bundle 的包由
+		* `fairy-system/sync-ask-kit.js` 把 `createAskKit` 内联进 `lib/client.js`
+		* 的标记区，`verify-build` 校验不漂移；有 `src/` 的包直接 require。
+		*
+		* @module dsh-fairy-contracts/client-ask-kit
+		*/
+		/** 归一化状态文案：全仓只此一份，改文案就改这里。 */
+		const ASK_TEXT = {
+			loading: "正在读取…",
+			saved: "已保存。",
+			unchanged: "没有需要保存的改动。",
+			saving: "保存中…",
+			testing: "测试中…",
+			save: "保存",
+			test: "测试",
+			readOnly: "当前会话不可写入主机设置，保存已停用。",
+			saveFailed: (why) => `保存失败：${why}`
+		};
+		/** 官方设计令牌（与设置面同一套变量，缺变量时回落到中性色）。 */
+		const ASK_STYLE = {
+			root: {
+				display: "grid",
+				gap: 12,
+				padding: 16
+			},
+			copy: {
+				margin: 0,
+				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))",
+				fontSize: 12,
+				lineHeight: "18px"
+			},
+			panel: {
+				display: "grid",
+				gap: 10,
+				padding: 12,
+				borderRadius: 8,
+				border: "1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))",
+				background: "var(--dsw-alias-bg-layer-2, rgba(130,130,130,0.09))"
+			},
+			row: {
+				display: "grid",
+				gap: 4
+			},
+			label: {
+				fontSize: 12,
+				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))"
+			},
+			input: {
+				width: "100%",
+				boxSizing: "border-box",
+				padding: "6px 8px",
+				borderRadius: 6,
+				border: "1px solid var(--dsw-alias-border-l2, rgba(130,130,130,0.28))",
+				background: "var(--dsw-alias-bg-layer-1, transparent)",
+				color: "var(--dsw-alias-label-primary, rgba(225,225,225,0.95))",
+				fontSize: 13
+			},
+			actions: {
+				display: "flex",
+				gap: 8,
+				alignItems: "center",
+				flexWrap: "wrap"
+			},
+			status: {
+				margin: 0,
+				fontSize: 12,
+				lineHeight: "18px",
+				color: "var(--dsw-alias-label-secondary, rgba(180,180,180,0.85))"
+			},
+			line: {
+				display: "flex",
+				gap: 8,
+				alignItems: "center",
+				fontSize: 12
+			},
+			pre: {
+				margin: 0,
+				padding: 10,
+				borderRadius: 6,
+				overflowX: "auto",
+				background: "var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.24))",
+				color: "var(--dsw-alias-label-primary, rgba(225,225,225,0.95))",
+				fontSize: 12,
+				lineHeight: "18px"
+			}
+		};
+		/** 错误文案：长栈与 HTML 不进界面。 */
+		function describeError(error) {
+			const message = typeof error?.message === "string" ? error.message : String(error);
+			return message.length > 320 ? `${message.slice(0, 320)}…` : message;
+		}
+		/**
+		* 造一套归一化提问件。
+		*
+		* @param spec - `{ React, jsx, jsxs, primitives }`：`primitives` 即
+		*   `require('@deepseek-ai/dsh-client-ui-primitives')`，只认官方确实导出的
+		*   那些名字（`Input`/`Button`/`StateDot`），其余留空则退化为同色令牌的原生件。
+		* @returns 归一化组件与一份统一的读写逻辑。
+		*/
+		function createAskKit({ React, jsx, jsxs, primitives = {} }) {
+			const { Input, Button, StateDot } = primitives;
+			const { useState, useCallback, useEffect, useRef } = React;
+			function AskSection({ title, description, ariaLabel, children }) {
+				return jsxs("section", {
+					style: ASK_STYLE.root,
+					"aria-label": ariaLabel ?? title,
+					children: [jsxs("div", {
+						style: ASK_STYLE.row,
+						children: [jsx("h2", {
+							style: {
+								margin: 0,
+								fontSize: 14
+							},
+							children: title
+						}), ...(description ?? []).map((line, index) => jsx("p", {
+							style: ASK_STYLE.copy,
+							children: line
+						}, `${index}:${line}`))]
+					}), children]
+				});
+			}
+			/** 一行提问：标签 + 控件 + 可选补充说明。 */
+			function AskRow({ id, label, hint, children }) {
+				return jsxs("div", {
+					style: ASK_STYLE.row,
+					children: [
+						jsx("label", {
+							style: ASK_STYLE.label,
+							htmlFor: id,
+							children: label
+						}),
+						children,
+						hint ? jsx("p", {
+							style: ASK_STYLE.copy,
+							children: hint
+						}) : null
+					]
+				});
+			}
+			/**
+			* 文本类提问（text/password/url/搜索框…）。官方 `Input` 有就用官方的，
+			* 没有就退回同令牌的原生 input —— 两者的 class 与尺寸一致。
+			*/
+			function AskText({ id, type = "text", value, placeholder, disabled, onChange, autoComplete }) {
+				const props = {
+					id,
+					type,
+					value,
+					placeholder,
+					disabled,
+					autoComplete
+				};
+				if (typeof Input === "function") return jsx(Input, {
+					...props,
+					onChange: (event) => onChange(event.target.value)
+				});
+				return jsx("input", {
+					"data-ask": "text",
+					...props,
+					style: ASK_STYLE.input,
+					onChange: (event) => onChange(event.target.value)
+				});
+			}
+			/** 选择类提问：官方没有 Select 原语，用同令牌原生件保证一致。 */
+			function AskSelect({ id, value, options, disabled, onChange }) {
+				return jsx("select", {
+					"data-ask": "select",
+					id,
+					style: ASK_STYLE.input,
+					value,
+					disabled,
+					onChange: (event) => onChange(event.target.value),
+					children: (options ?? []).map((option) => jsx("option", {
+						value: option.value,
+						children: option.label
+					}, option.value))
+				});
+			}
+			/** 开关类提问：一整行可点，标签在左，方块在右。 */
+			function AskToggle({ id, label, checked, disabled, onChange, hint }) {
+				return jsxs("div", {
+					style: {
+						...ASK_STYLE.row,
+						gap: 2
+					},
+					children: [jsxs("label", {
+						style: {
+							display: "flex",
+							gap: 8,
+							alignItems: "center",
+							fontSize: 13
+						},
+						htmlFor: id,
+						children: [jsx("input", {
+							"data-ask": "toggle",
+							id,
+							type: "checkbox",
+							checked: checked === true,
+							disabled,
+							onChange: (event) => onChange(event.target.checked)
+						}), jsx("span", { children: label })]
+					}), hint ? jsx("p", {
+						style: {
+							...ASK_STYLE.copy,
+							marginLeft: 24
+						},
+						children: hint
+					}) : null]
+				});
+			}
+			/** 动作行：主按钮 + 次按钮 + 一行状态；忙时整体禁用。 */
+			function AskActions({ busy, status, primary, secondary, onPrimary, onSecondary, writable = true }) {
+				const locked = busy !== null || !writable;
+				return jsxs("div", {
+					style: ASK_STYLE.actions,
+					children: [
+						jsx(Button, {
+							variant: "primary",
+							size: "sm",
+							disabled: locked,
+							onClick: onPrimary,
+							children: busy === "save" ? ASK_TEXT.saving : primary ?? ASK_TEXT.save
+						}),
+						secondary ? jsx(Button, {
+							variant: "outline",
+							size: "sm",
+							disabled: locked,
+							onClick: onSecondary,
+							children: busy === "test" ? ASK_TEXT.testing : secondary
+						}) : null,
+						jsx("p", {
+							style: ASK_STYLE.status,
+							children: status
+						})
+					]
+				});
+			}
+			/** 结果行：一处画点与文字，成功/失败同一套观感。 */
+			function AskResult({ ok, text }) {
+				if (!text) return null;
+				return jsxs("div", {
+					style: ASK_STYLE.line,
+					children: [typeof StateDot === "function" ? jsx(StateDot, {
+						state: ok ? "done" : "error",
+						size: 10
+					}) : null, jsx("span", {
+						style: ok ? void 0 : { color: "var(--dsw-alias-label-error, #e06c6c)" },
+						children: text
+					})]
+				});
+			}
+			/**
+			* 一份统一的读取/保存/测试逻辑。
+			*
+			* - `load()` 读当前值（通常是 GET 一个 state 端点）；`save(draft)` 落盘。
+			* - 只有真改过的字段才写：草稿与已存值相等即视为"没有需要保存的改动"。
+			* - `writable=false`（只读会话）时保存按钮停用并给出同一句说明。
+			* - 不轮询：挂载读一次、保存后复读一次。
+			*
+			* @param options - `{ load, save, onSaved, initial }`。
+			* @returns 归一化的表单状态机。
+			*/
+			function useAskForm({ load, save, onSaved, initial = {} }) {
+				const [stored, setStored] = useState(null);
+				const [draft, setDraft] = useState(initial);
+				const [error, setError] = useState(false);
+				const [busy, setBusy] = useState(null);
+				const [status, setStatus] = useState(ASK_TEXT.loading);
+				const [reloadToken, setReloadToken] = useState(0);
+				const alive = useRef(true);
+				const loadRef = useRef(load);
+				loadRef.current = load;
+				useEffect(() => {
+					alive.current = true;
+					let cancelled = false;
+					setStatus(ASK_TEXT.loading);
+					Promise.resolve().then(() => loadRef.current()).then((value) => {
+						if (!cancelled) {
+							setStored(value);
+							setError(false);
+							setStatus("");
+						}
+					}).catch((cause) => {
+						if (!cancelled) {
+							setError(true);
+							setStatus(readFailedText(cause));
+						}
+					});
+					return () => {
+						cancelled = true;
+						alive.current = false;
+					};
+				}, [reloadToken]);
+				return {
+					stored,
+					draft,
+					change: useCallback((key, value) => {
+						setDraft((current) => ({
+							...current,
+							[key]: value
+						}));
+						setStatus("");
+					}, []),
+					submit: useCallback(async () => {
+						setBusy("save");
+						setStatus("");
+						try {
+							const outcome = await save(draft, stored);
+							if (outcome?.changed === false) {
+								setStatus(ASK_TEXT.unchanged);
+								return outcome;
+							}
+							setDraft(initial);
+							setStatus(ASK_TEXT.saved);
+							setReloadToken((token) => token + 1);
+							onSaved?.(outcome);
+							return outcome;
+						} catch (cause) {
+							setStatus(ASK_TEXT.saveFailed(describeError(cause)));
+							throw cause;
+						} finally {
+							setBusy(null);
+						}
+					}, [
+						draft,
+						stored,
+						save,
+						onSaved,
+						initial
+					]),
+					run: useCallback(async (kind, task) => {
+						setBusy(kind);
+						try {
+							return await task();
+						} finally {
+							setBusy(null);
+						}
+					}, []),
+					busy,
+					status,
+					error,
+					readOnly: () => setStatus(ASK_TEXT.readOnly),
+					reload: () => setReloadToken((token) => token + 1)
+				};
+			}
+			return {
+				ASK_TEXT,
+				ASK_STYLE,
+				AskSection,
+				AskRow,
+				AskText,
+				AskSelect,
+				AskToggle,
+				AskActions,
+				AskResult,
+				useAskForm,
+				describeError
+			};
+		}
+		/** 读取失败的文案：不吐栈，只说明读不到。 */
+		function readFailedText(error) {
+			return `暂时读不到设置（按已保存的值继续）：${describeError(error)}`;
+		}
+		module.exports = {
+			createAskKit,
+			ASK_TEXT,
+			ASK_STYLE,
+			describeError
+		};
+	}));
+
+//#endregion
 //#region src/client/workshop.js
 	var require_workshop = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-		const React$1 = require("react");
-		const { jsx: jsx$1, jsxs: jsxs$1 } = require("react/jsx-runtime");
+		const React$2 = require("react");
+		const { jsx: jsx$2, jsxs: jsxs$2 } = require("react/jsx-runtime");
 		const { createAskKit } = require_client_ask_kit();
 		const uiPrimitives$1 = require("@deepseek-ai/dsh-client-ui-primitives");
 		/** 创作工坊：设计 DSH UI 的工作台入口；状态来自宿主只读端点 /fairy-visual/workshop。 */
@@ -6847,9 +6847,9 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 			"3) 三个方向给我选，选定后落成 fairy-visual 改动并在本实例验证。"
 		].join("\n");
 		const askKit = createAskKit({
-			React: React$1,
-			jsx: jsx$1,
-			jsxs: jsxs$1,
+			React: React$2,
+			jsx: jsx$2,
+			jsxs: jsxs$2,
 			primitives: uiPrimitives$1
 		});
 		/** MCP 行的四种状态由宿主算：没接 / 接了但写下的路径已失效（换盘、重装）/ 正常 / 未知。 */
@@ -6873,9 +6873,9 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		}
 		function Workshop() {
 			const { ASK_TEXT, AskSection, AskResult, AskActions } = askKit;
-			const [status, setStatus] = React$1.useState(null);
-			const [copyStatus, setCopyStatus] = React$1.useState("");
-			React$1.useEffect(() => {
+			const [status, setStatus] = React$2.useState(null);
+			const [copyStatus, setCopyStatus] = React$2.useState("");
+			React$2.useEffect(() => {
 				let cancelled = false;
 				fetch("/fairy-visual/workshop", { headers: { Accept: "application/json" } }).then((response) => response.json()).then((value) => {
 					if (!cancelled) setStatus(value);
@@ -6898,35 +6898,35 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				clipboard.writeText(WORKSHOP_BRIEF).then(() => setCopyStatus("设计指令已复制——粘进会话即可开工。"), (error) => setCopyStatus(`复制失败：${error?.message || error}`));
 			};
 			const rows = [];
-			if (status === null) rows.push(jsx$1(AskResult, {
+			if (status === null) rows.push(jsx$2(AskResult, {
 				ok: true,
 				text: ASK_TEXT.loading
 			}, "workshop-loading"));
-			else if (status.ok === false) rows.push(jsx$1(AskResult, {
+			else if (status.ok === false) rows.push(jsx$2(AskResult, {
 				ok: false,
 				text: `读取失败：${status.error || "未知错误"}`
 			}, "workshop-error"));
 			else {
 				const skills = Array.isArray(status.skills) ? status.skills : [];
 				const penInstalled = Boolean(status.pen?.installed);
-				rows.push(jsx$1(AskResult, {
+				rows.push(jsx$2(AskResult, {
 					ok: penInstalled,
 					text: penInstalled ? `pen.dev：已安装（${status.pen.path}）` : "pen.dev：未安装——先到 pen.dev 官网安装"
 				}, "workshop-pen"));
 				const mcp = describeMcp(status.mcp);
-				rows.push(jsx$1(AskResult, {
+				rows.push(jsx$2(AskResult, {
 					ok: mcp.ok,
 					text: mcp.text
 				}, "workshop-mcp"));
-				rows.push(jsx$1(AskResult, {
+				rows.push(jsx$2(AskResult, {
 					ok: skills.includes("huashu-design"),
 					text: `设计技能：${skills.length ? skills.join("、") : "技能槽位为空"}`
 				}, "workshop-skills"));
 			}
-			return jsxs$1(AskSection, {
+			return jsxs$2(AskSection, {
 				title: "创作工坊",
 				description: ["用 OpenDesign、花叔Design 与 pen.dev 设计 DSH UI；设计会话由 Fairy 本体驱动，MCP 只是笔刷。"],
-				children: [...rows, jsx$1(AskActions, {
+				children: [...rows, jsx$2(AskActions, {
 					busy: null,
 					status: copyStatus,
 					primary: "复制设计指令",
@@ -6938,6 +6938,407 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		module.exports = {
 			Workshop,
 			WORKSHOP_BRIEF
+		};
+	}));
+
+//#endregion
+//#region src/client/settings-sections.js
+	var require_settings_sections = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+		const React$1 = require("react");
+		const { jsx: jsx$1, jsxs: jsxs$1 } = require("react/jsx-runtime");
+		const { createAskKit } = require_client_ask_kit();
+		const uiPrimitives = require("@deepseek-ai/dsh-client-ui-primitives");
+		const { PALETTES, MASCOT_POSITIONS, MASCOT_POSITION_LABELS } = (init_constants(), __toCommonJS(constants_exports));
+		const { SPEED_STOPS } = require_settings_normalizer();
+		const { setControllerSetting, settingError } = require_settings_write();
+		/** 归一化提问件：真源是 fairy-contracts/client-ask-kit.cjs，构建时内联。 */
+		const askKit = createAskKit({
+			React: React$1,
+			jsx: jsx$1,
+			jsxs: jsxs$1,
+			primitives: uiPrimitives
+		});
+		const useController = (controller) => React$1.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+		/** 设置卡拆成三张后各自负责的字段：视觉两组写回 `fairy-visual`，身份字段写回 `fairy-identity`。 */
+		const VISUAL_CARD_FIELDS = [
+			"enabled",
+			"theme",
+			"powerMode",
+			"contentFade",
+			"palette"
+		];
+		const MASCOT_CARD_FIELDS = [
+			"mascotVisible",
+			"mascotPosition",
+			"mascotPositionMode",
+			"mascotScale",
+			"mascotAnimationSpeed"
+		];
+		const IDENTITY_CARD_FIELDS = [
+			"mode",
+			"customName",
+			"secondAssistant",
+			"household"
+		];
+		const VISUAL_FIELDS = [...VISUAL_CARD_FIELDS, ...MASCOT_CARD_FIELDS];
+		const IDENTITY_TEXT_FIELDS = ["customName", "secondAssistant"];
+		const IDENTITY_MODE_OPTIONS = [
+			{
+				value: "ling",
+				label: "铃"
+			},
+			{
+				value: "zhe",
+				label: "哲"
+			},
+			{
+				value: "custom",
+				label: "自定义"
+			}
+		];
+		/** 眼睛大小的可选档位（存储仍是 0.55–1 连续值；卡片把任意存量值吸附到最近档）。 */
+		const MASCOT_SCALE_STOPS = Object.freeze([
+			.55,
+			.7,
+			.85,
+			1
+		]);
+		const nearestScaleStop = (value) => {
+			const numeric = Number(value);
+			if (!Number.isFinite(numeric)) return 1;
+			return MASCOT_SCALE_STOPS.reduce((best, stop) => Math.abs(stop - numeric) < Math.abs(best - numeric) ? stop : best, MASCOT_SCALE_STOPS[0]);
+		};
+		const PALETTE_OPTIONS = [
+			{
+				value: "hdd",
+				label: "岩（默认）"
+			},
+			{
+				value: "ink",
+				label: "墨"
+			},
+			{
+				value: "ember",
+				label: "炭"
+			}
+		];
+		const MASCOT_POSITION_OPTIONS = MASCOT_POSITIONS.map((anchor) => ({
+			value: anchor,
+			label: MASCOT_POSITION_LABELS[anchor]
+		}));
+		const MASCOT_POSITION_MODE_OPTIONS = [{
+			value: "static",
+			label: "静态（固定锚点）"
+		}, {
+			value: "dynamic",
+			label: "动态（空载居中 · 思考移到右中）"
+		}];
+		const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({
+			value: String(stop),
+			label: `${Math.round(stop * 100)}%${stop === 1 ? "（默认）" : ""}`
+		}));
+		const MASCOT_SPEED_OPTIONS = SPEED_STOPS.map((rate) => ({
+			value: String(rate),
+			label: `${rate}×${rate === 1 ? "（默认）" : ""}`
+		}));
+		/** 家庭成员的线上形态：顿号/逗号分隔、最多 12 项（与逐键写盘时一致）。 */
+		const parseHousehold = (text) => String(text ?? "").split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
+		const sameHousehold = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
+		/** 两处命名空间在卡片里的稳定形态：草稿只覆盖其中的几个字段。 */
+		const askShape = (visual, identity) => ({
+			enabled: visual.enabled === true,
+			theme: visual.theme === "light" ? "light" : "dark",
+			mascotVisible: visual.mascotVisible === true,
+			powerMode: visual.powerMode === "low-power" ? "low-power" : "normal",
+			contentFade: visual.contentFade === true,
+			palette: PALETTES.includes(visual.palette) ? visual.palette : "hdd",
+			mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : "center",
+			mascotPositionMode: visual.mascotPositionMode === "dynamic" ? "dynamic" : "static",
+			mascotScale: nearestScaleStop(visual.mascotScale),
+			mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
+			mode: identity.mode || "ling",
+			customName: typeof identity.customName === "string" ? identity.customName : "",
+			secondAssistant: typeof identity.secondAssistant === "string" ? identity.secondAssistant : "",
+			household: Array.isArray(identity.household) ? identity.household.join("、") : ""
+		});
+		/** 草稿里相对当前值真改过的字段：只有这些会被写盘。`fields` 限定本卡负责的键。 */
+		function changedFields(draft, current, fields) {
+			const wanted = (field) => !fields || fields.includes(field);
+			const visual = VISUAL_FIELDS.filter((field) => wanted(field) && draft[field] !== void 0 && draft[field] !== current[field]).map((field) => [field, draft[field]]);
+			const identity = [];
+			if (wanted("mode") && draft.mode !== void 0 && draft.mode !== current.mode) identity.push(["mode", draft.mode]);
+			for (const field of IDENTITY_TEXT_FIELDS) if (wanted(field) && draft[field] !== void 0 && draft[field] !== current[field]) identity.push([field, draft[field]]);
+			if (wanted("household") && draft.household !== void 0 && !sameHousehold(parseHousehold(draft.household), parseHousehold(current.household))) identity.push(["household", parseHousehold(draft.household)]);
+			return {
+				visual,
+				identity
+			};
+		}
+		/** 写盘失败先留诊断再抛出，交给提问件把原因写进状态行。 */
+		const writeSetting = (scope, field, value) => setControllerSetting(scope, field, value).catch((error) => {
+			settingError(field, error);
+			throw error;
+		});
+		/** 主机身份设置桥的缓存订阅：三张设置卡共用同一套读法。 */
+		function useIdentityBridge(identitySettings) {
+			const readIdentity = () => identitySettings.getSnapshot()?.value || {};
+			const [identityValue, setIdentityValue] = React$1.useState(readIdentity);
+			React$1.useEffect(() => {
+				const refresh = () => setIdentityValue(readIdentity());
+				refresh();
+				return identitySettings.subscribe(refresh);
+			}, [identitySettings]);
+			return {
+				identityValue,
+				readIdentity
+			};
+		}
+		/** 三张设置卡共用一套表单机：读全量形状，保存时只写本卡字段组里真改过的键。 */
+		function useCardForm({ controller, identitySettings, fields }) {
+			const { useAskForm } = askKit;
+			const state = useController(controller);
+			const { identityValue, readIdentity } = useIdentityBridge(identitySettings);
+			const writable = identitySettings.getSnapshot()?.writable !== false;
+			const live = askShape(state.settings, identityValue);
+			const readCurrent = () => askShape(controller.getSnapshot().settings, readIdentity());
+			const form = useAskForm({
+				load: readCurrent,
+				save: async (draft) => {
+					const { visual, identity } = changedFields(draft, readCurrent(), fields);
+					if (!visual.length && !identity.length) return { changed: false };
+					for (const [field, value] of visual) await writeSetting(controller, field, value);
+					for (const [field, value] of identity) await writeSetting(identitySettings, field, value);
+					return { changed: true };
+				}
+			});
+			const value = (key) => form.draft[key] === void 0 ? live[key] : form.draft[key];
+			/** 失败已经进了状态行与诊断，这里只挡住重复抛出的未处理拒绝。 */
+			const submit = () => {
+				form.submit().catch(() => {});
+			};
+			/** 文本行失焦即落盘；草稿与当前值一致时不空跑一条状态文案。 */
+			const flush = () => {
+				const { visual, identity } = changedFields(form.draft, readCurrent(), fields);
+				if (form.busy === null && (visual.length || identity.length)) submit();
+			};
+			return {
+				form,
+				value,
+				writable,
+				submit,
+				flush
+			};
+		}
+		/** 「HDD 视觉」卡：整套界面皮肤的开关与呈现（启用/日间/低功耗/内容遮罩/调色盘）。 */
+		function VisualSection({ controller, identitySettings }) {
+			const { ASK_TEXT, AskSection, AskRow, AskSelect, AskToggle, AskActions } = askKit;
+			const { form, value, writable, submit } = useCardForm({
+				controller,
+				identitySettings,
+				fields: VISUAL_CARD_FIELDS
+			});
+			return jsxs$1(AskSection, {
+				title: "HDD 视觉",
+				description: ["HDD 视觉是整套界面皮肤。大眼睛的站位、大小与动画速度在「大眼睛主视觉」卡。"],
+				children: [
+					jsx$1(AskToggle, {
+						id: "dsh-fairy-visual-enabled",
+						label: "启用 HDD 视觉",
+						checked: value("enabled"),
+						disabled: !writable,
+						onChange: (next) => form.change("enabled", next)
+					}, "enabled"),
+					jsx$1(AskToggle, {
+						id: "dsh-fairy-visual-theme",
+						label: "HDD 日间模式",
+						checked: value("theme") === "light",
+						disabled: !writable,
+						onChange: (next) => form.change("theme", next ? "light" : "dark")
+					}, "theme"),
+					jsx$1(AskToggle, {
+						id: "dsh-fairy-visual-power",
+						label: "低功耗模式",
+						checked: value("powerMode") === "low-power",
+						disabled: !writable,
+						onChange: (next) => form.change("powerMode", next ? "low-power" : "normal")
+					}, "power"),
+					jsx$1(AskToggle, {
+						id: "dsh-fairy-visual-content-fade",
+						label: "内容遮罩",
+						hint: "开启时主视觉会遮住其下的正文（生成期间新文字会变淡）；关闭后正文始终可读。",
+						checked: value("contentFade"),
+						disabled: !writable,
+						onChange: (next) => form.change("contentFade", next)
+					}, "contentFade"),
+					jsx$1(AskRow, {
+						id: "dsh-fairy-visual-palette",
+						label: "皮肤（调色盘）：",
+						hint: "岩=现值默认；墨=冷灰蓝；炭=暖炭。",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-visual-palette",
+							value: value("palette"),
+							options: PALETTE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("palette", next)
+						})
+					}, "palette"),
+					jsx$1(AskActions, {
+						busy: form.busy,
+						status: writable ? form.status : ASK_TEXT.readOnly,
+						primary: ASK_TEXT.save,
+						onPrimary: submit,
+						writable
+					}, "actions")
+				]
+			});
+		}
+		/** 「大眼睛主视觉」卡：Fairy 大眼睛的显示、站位、大小与动画速度。 */
+		function MascotSection({ controller, identitySettings }) {
+			const { ASK_TEXT, AskSection, AskRow, AskSelect, AskToggle, AskActions } = askKit;
+			const { form, value, writable, submit } = useCardForm({
+				controller,
+				identitySettings,
+				fields: MASCOT_CARD_FIELDS
+			});
+			return jsxs$1(AskSection, {
+				title: "大眼睛主视觉",
+				description: ["Fairy 的大眼睛主视觉。启用 HDD 视觉与皮肤调色在「HDD 视觉」卡。"],
+				children: [
+					jsx$1(AskToggle, {
+						id: "dsh-fairy-visual-mascot",
+						label: "显示 Fairy 主视觉",
+						checked: value("mascotVisible"),
+						disabled: !writable,
+						onChange: (next) => form.change("mascotVisible", next)
+					}, "mascot"),
+					jsx$1(AskRow, {
+						id: "dsh-fairy-mascot-position",
+						label: "大眼睛位置：",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-mascot-position",
+							value: value("mascotPosition"),
+							options: MASCOT_POSITION_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotPosition", next)
+						})
+					}, "mascotPosition"),
+					jsx$1(AskRow, {
+						id: "dsh-fairy-mascot-position-mode",
+						label: "大眼站位模式：",
+						hint: "动态=空载居中，思考时移到右中；静态=始终用上方固定位置。",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-mascot-position-mode",
+							value: value("mascotPositionMode"),
+							options: MASCOT_POSITION_MODE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotPositionMode", next)
+						})
+					}, "mascotPositionMode"),
+					jsx$1(AskRow, {
+						id: "dsh-fairy-mascot-scale",
+						label: "大眼睛大小：",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-mascot-scale",
+							value: String(value("mascotScale")),
+							options: MASCOT_SCALE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotScale", Number(next))
+						})
+					}, "mascotScale"),
+					jsx$1(AskRow, {
+						id: "dsh-fairy-mascot-speed",
+						label: "大眼睛动画速度：",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-mascot-speed",
+							value: String(value("mascotAnimationSpeed")),
+							options: MASCOT_SPEED_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mascotAnimationSpeed", Number(next))
+						})
+					}, "mascotAnimationSpeed"),
+					jsx$1(AskActions, {
+						busy: form.busy,
+						status: writable ? form.status : ASK_TEXT.readOnly,
+						primary: ASK_TEXT.save,
+						onPrimary: submit,
+						writable
+					}, "actions")
+				]
+			});
+		}
+		/** 「Fairy 身份」卡：Fairy 如何识别主人（称呼模式 + 自定义身份信息），写 `fairy-identity` 命名空间。 */
+		function IdentitySection({ controller, identitySettings }) {
+			const { ASK_TEXT, AskSection, AskRow, AskText, AskSelect, AskActions } = askKit;
+			const { form, value, writable, submit, flush } = useCardForm({
+				controller,
+				identitySettings,
+				fields: IDENTITY_CARD_FIELDS
+			});
+			const customMode = value("mode") === "custom";
+			return jsxs$1(AskSection, {
+				title: "Fairy 身份",
+				description: ["Fairy 如何识别你。选「自定义」后可写自定义称呼、第二助手与家庭成员。"],
+				children: [
+					jsx$1(AskRow, {
+						id: "dsh-fairy-identity-mode",
+						label: "Fairy 当前将我识别为：",
+						children: jsx$1(AskSelect, {
+							id: "dsh-fairy-identity-mode",
+							value: value("mode"),
+							options: IDENTITY_MODE_OPTIONS,
+							disabled: !writable,
+							onChange: (next) => form.change("mode", next)
+						})
+					}, "mode"),
+					jsx$1("div", {
+						onBlur: flush,
+						children: customMode ? [
+							jsx$1(AskRow, {
+								id: "dsh-fairy-identity-custom-name",
+								label: "自定义称呼：",
+								children: jsx$1(AskText, {
+									id: "dsh-fairy-identity-custom-name",
+									value: value("customName"),
+									disabled: !writable,
+									onChange: (next) => form.change("customName", next.slice(0, 40))
+								})
+							}, "customName"),
+							jsx$1(AskRow, {
+								id: "dsh-fairy-identity-second-assistant",
+								label: "第二助手（可选）：",
+								children: jsx$1(AskText, {
+									id: "dsh-fairy-identity-second-assistant",
+									value: value("secondAssistant"),
+									disabled: !writable,
+									onChange: (next) => form.change("secondAssistant", next.slice(0, 40))
+								})
+							}, "secondAssistant"),
+							jsx$1(AskRow, {
+								id: "dsh-fairy-identity-household",
+								label: "家庭成员（可选，逗号分隔）：",
+								children: jsx$1(AskText, {
+									id: "dsh-fairy-identity-household",
+									value: value("household"),
+									disabled: !writable,
+									onChange: (next) => form.change("household", next.slice(0, 240))
+								})
+							}, "household")
+						] : null
+					}, "custom"),
+					jsx$1(AskActions, {
+						busy: form.busy,
+						status: writable ? form.status : ASK_TEXT.readOnly,
+						primary: ASK_TEXT.save,
+						onPrimary: submit,
+						writable
+					}, "actions")
+				]
+			});
+		}
+		module.exports = {
+			VisualSection,
+			MascotSection,
+			IdentitySection
 		};
 	}));
 
@@ -7452,9 +7853,7 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const React = require("react");
 		const { jsx, jsxs } = require("react/jsx-runtime");
 		const { createFairyDiagnostics } = require_client_diagnostics();
-		const { createAskKit } = require_client_ask_kit();
-		const uiPrimitives = require("@deepseek-ai/dsh-client-ui-primitives");
-		const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, PALETTES, MASCOT_POSITIONS, MASCOT_POSITION_LABELS, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = (init_constants(), __toCommonJS(constants_exports));
+		const { SETTINGS_NAMESPACE, STYLE_ID, MODE_ATTR, POWER_MODE_ATTR, THEME_ATTR, PALETTE_ATTR, POWER_TOGGLE_WIDTH, POWER_TOGGLE_HEIGHT, DEFAULT } = (init_constants(), __toCommonJS(constants_exports));
 		const IDENTITY_SETTINGS_NAMESPACE = "fairy-identity";
 		const { applyMascotPosition, deriveSessionActivity, syncDocumentMode } = (init_utils(), __toCommonJS(utils_exports));
 		const { injectStyles } = (init_style(), __toCommonJS(style_exports));
@@ -7473,10 +7872,11 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 		const { claimPowerModeGeometry } = require_power_mode();
 		const { createSelectionGuard } = require_selection_guard();
 		const { scheduleMascotScale, MASCOT_GEOMETRY_EVENT } = require_mascot_scale_control();
-		const { saveControllerSetting, setControllerSetting, settingError } = require_settings_write();
+		const { saveControllerSetting } = require_settings_write();
 		const { mutationTouchesSurface } = require_surface_utils();
-		const { migrateVisualSettings, normalizeSetting, SPEED_STOPS } = require_settings_normalizer();
+		const { migrateVisualSettings, normalizeSetting } = require_settings_normalizer();
 		const { Workshop } = require_workshop();
+		const { VisualSection, MascotSection, IdentitySection } = require_settings_sections();
 		const { createVisualTransitions } = require_visual_transitions();
 		const { OFFICIAL_SELECTORS, OFFICIAL_ATTRIBUTES, rootSlot, sidebar, conversation, conversationScroll, anyPhase, composerSeat, composerCard, conversationComposerDock, chatFlows, balanceAction, sidebarResizeHandle, reportMissingCapabilities } = require_dom_adapter();
 		const visualTransitions = createVisualTransitions({
@@ -8346,309 +8746,6 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 				}) : null]
 			});
 		}
-		/** 归一化提问件：真源是 fairy-contracts/client-ask-kit.cjs，构建时内联。 */
-		const askKit = createAskKit({
-			React,
-			jsx,
-			jsxs,
-			primitives: uiPrimitives
-		});
-		/** 本卡提问的视觉字段（写回 `fairy-visual`）与身份字段（写回 `fairy-identity`）。 */
-		const VISUAL_FIELDS = [
-			"enabled",
-			"theme",
-			"mascotVisible",
-			"powerMode",
-			"contentFade",
-			"palette",
-			"mascotPosition",
-			"mascotPositionMode",
-			"mascotScale",
-			"mascotAnimationSpeed"
-		];
-		const IDENTITY_TEXT_FIELDS = ["customName", "secondAssistant"];
-		const IDENTITY_MODE_OPTIONS = [
-			{
-				value: "ling",
-				label: "铃"
-			},
-			{
-				value: "zhe",
-				label: "哲"
-			},
-			{
-				value: "custom",
-				label: "自定义"
-			}
-		];
-		/** 眼睛大小的可选档位（存储仍是 0.55–1 连续值；卡片把任意存量值吸附到最近档）。 */
-		const MASCOT_SCALE_STOPS = Object.freeze([
-			.55,
-			.7,
-			.85,
-			1
-		]);
-		const nearestScaleStop = (value) => {
-			const numeric = Number(value);
-			if (!Number.isFinite(numeric)) return 1;
-			return MASCOT_SCALE_STOPS.reduce((best, stop) => Math.abs(stop - numeric) < Math.abs(best - numeric) ? stop : best, MASCOT_SCALE_STOPS[0]);
-		};
-		const PALETTE_OPTIONS = [
-			{
-				value: "hdd",
-				label: "岩（默认）"
-			},
-			{
-				value: "ink",
-				label: "墨"
-			},
-			{
-				value: "ember",
-				label: "炭"
-			}
-		];
-		const MASCOT_POSITION_OPTIONS = MASCOT_POSITIONS.map((anchor) => ({
-			value: anchor,
-			label: MASCOT_POSITION_LABELS[anchor]
-		}));
-		const MASCOT_POSITION_MODE_OPTIONS = [{
-			value: "static",
-			label: "静态（固定锚点）"
-		}, {
-			value: "dynamic",
-			label: "动态（空载居中 · 思考移到右中）"
-		}];
-		const MASCOT_SCALE_OPTIONS = MASCOT_SCALE_STOPS.map((stop) => ({
-			value: String(stop),
-			label: `${Math.round(stop * 100)}%${stop === 1 ? "（默认）" : ""}`
-		}));
-		const MASCOT_SPEED_OPTIONS = SPEED_STOPS.map((rate) => ({
-			value: String(rate),
-			label: `${rate}×${rate === 1 ? "（默认）" : ""}`
-		}));
-		/** 家庭成员的线上形态：顿号/逗号分隔、最多 12 项（与逐键写盘时一致）。 */
-		const parseHousehold = (text) => String(text ?? "").split(/[、,，]/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
-		const sameHousehold = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
-		/** 两处命名空间在卡片里的稳定形态：草稿只覆盖其中的几个字段。 */
-		const askShape = (visual, identity) => ({
-			enabled: visual.enabled === true,
-			theme: visual.theme === "light" ? "light" : "dark",
-			mascotVisible: visual.mascotVisible === true,
-			powerMode: visual.powerMode === "low-power" ? "low-power" : "normal",
-			contentFade: visual.contentFade === true,
-			palette: PALETTES.includes(visual.palette) ? visual.palette : "hdd",
-			mascotPosition: MASCOT_POSITIONS.includes(visual.mascotPosition) ? visual.mascotPosition : "center",
-			mascotPositionMode: visual.mascotPositionMode === "dynamic" ? "dynamic" : "static",
-			mascotScale: nearestScaleStop(visual.mascotScale),
-			mascotAnimationSpeed: SPEED_STOPS.includes(visual.mascotAnimationSpeed) ? visual.mascotAnimationSpeed : 1,
-			mode: identity.mode || "ling",
-			customName: typeof identity.customName === "string" ? identity.customName : "",
-			secondAssistant: typeof identity.secondAssistant === "string" ? identity.secondAssistant : "",
-			household: Array.isArray(identity.household) ? identity.household.join("、") : ""
-		});
-		/** 草稿里相对当前值真改过的字段：只有这些会被写盘。 */
-		function changedFields(draft, current) {
-			const visual = VISUAL_FIELDS.filter((field) => draft[field] !== void 0 && draft[field] !== current[field]).map((field) => [field, draft[field]]);
-			const identity = [];
-			if (draft.mode !== void 0 && draft.mode !== current.mode) identity.push(["mode", draft.mode]);
-			for (const field of IDENTITY_TEXT_FIELDS) if (draft[field] !== void 0 && draft[field] !== current[field]) identity.push([field, draft[field]]);
-			if (draft.household !== void 0 && !sameHousehold(parseHousehold(draft.household), parseHousehold(current.household))) identity.push(["household", parseHousehold(draft.household)]);
-			return {
-				visual,
-				identity
-			};
-		}
-		/** 写盘失败先留诊断再抛出，交给提问件把原因写进状态行。 */
-		const writeSetting = (scope, field, value) => setControllerSetting(scope, field, value).catch((error) => {
-			settingError(field, error);
-			throw error;
-		});
-		function Settings({ controller, identitySettings }) {
-			const { ASK_TEXT, AskSection, AskRow, AskText, AskSelect, AskToggle, AskActions, useAskForm } = askKit;
-			const state = useController(controller);
-			const readIdentity = () => identitySettings.getSnapshot()?.value || {};
-			const [identityValue, setIdentityValue] = React.useState(readIdentity);
-			React.useEffect(() => {
-				const refresh = () => setIdentityValue(readIdentity());
-				refresh();
-				return identitySettings.subscribe(refresh);
-			}, [identitySettings]);
-			const writable = identitySettings.getSnapshot()?.writable !== false;
-			const live = askShape(state.settings, identityValue);
-			const readCurrent = () => askShape(controller.getSnapshot().settings, readIdentity());
-			const form = useAskForm({
-				load: readCurrent,
-				save: async (draft) => {
-					const { visual, identity } = changedFields(draft, readCurrent());
-					if (!visual.length && !identity.length) return { changed: false };
-					for (const [field, value] of visual) await writeSetting(controller, field, value);
-					for (const [field, value] of identity) await writeSetting(identitySettings, field, value);
-					return { changed: true };
-				}
-			});
-			const value = (key) => form.draft[key] === void 0 ? live[key] : form.draft[key];
-			/** 失败已经进了状态行与诊断，这里只挡住重复抛出的未处理拒绝。 */
-			const submit = () => {
-				form.submit().catch(() => {});
-			};
-			/** 文本行失焦即落盘；草稿与当前值一致时不空跑一条状态文案。 */
-			const flush = () => {
-				const { visual, identity } = changedFields(form.draft, readCurrent());
-				if (form.busy === null && (visual.length || identity.length)) submit();
-			};
-			const customMode = value("mode") === "custom";
-			return jsxs(AskSection, {
-				title: "HDD 视觉与 Fairy 身份",
-				children: [
-					jsx(AskToggle, {
-						id: "dsh-fairy-visual-enabled",
-						label: "启用 HDD 视觉",
-						checked: value("enabled"),
-						disabled: !writable,
-						onChange: (next) => form.change("enabled", next)
-					}, "enabled"),
-					jsx(AskToggle, {
-						id: "dsh-fairy-visual-theme",
-						label: "HDD 日间模式",
-						checked: value("theme") === "light",
-						disabled: !writable,
-						onChange: (next) => form.change("theme", next ? "light" : "dark")
-					}, "theme"),
-					jsx(AskToggle, {
-						id: "dsh-fairy-visual-mascot",
-						label: "显示 Fairy 主视觉",
-						checked: value("mascotVisible"),
-						disabled: !writable,
-						onChange: (next) => form.change("mascotVisible", next)
-					}, "mascot"),
-					jsx(AskToggle, {
-						id: "dsh-fairy-visual-power",
-						label: "低功耗模式",
-						checked: value("powerMode") === "low-power",
-						disabled: !writable,
-						onChange: (next) => form.change("powerMode", next ? "low-power" : "normal")
-					}, "power"),
-					jsx(AskToggle, {
-						id: "dsh-fairy-visual-content-fade",
-						label: "内容遮罩",
-						hint: "开启时主视觉会遮住其下的正文（生成期间新文字会变淡）；关闭后正文始终可读。",
-						checked: value("contentFade"),
-						disabled: !writable,
-						onChange: (next) => form.change("contentFade", next)
-					}, "contentFade"),
-					jsx(AskRow, {
-						id: "dsh-fairy-visual-palette",
-						label: "皮肤（调色盘）：",
-						hint: "岩=现值默认；墨=冷灰蓝；炭=暖炭。",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-visual-palette",
-							value: value("palette"),
-							options: PALETTE_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("palette", next)
-						})
-					}, "palette"),
-					jsx(AskRow, {
-						id: "dsh-fairy-mascot-position",
-						label: "大眼睛位置：",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-mascot-position",
-							value: value("mascotPosition"),
-							options: MASCOT_POSITION_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("mascotPosition", next)
-						})
-					}, "mascotPosition"),
-					jsx(AskRow, {
-						id: "dsh-fairy-mascot-position-mode",
-						label: "大眼站位模式：",
-						hint: "动态=空载居中，思考时移到右中；静态=始终用上方固定位置。",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-mascot-position-mode",
-							value: value("mascotPositionMode"),
-							options: MASCOT_POSITION_MODE_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("mascotPositionMode", next)
-						})
-					}, "mascotPositionMode"),
-					jsx(AskRow, {
-						id: "dsh-fairy-mascot-scale",
-						label: "大眼睛大小：",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-mascot-scale",
-							value: String(value("mascotScale")),
-							options: MASCOT_SCALE_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("mascotScale", Number(next))
-						})
-					}, "mascotScale"),
-					jsx(AskRow, {
-						id: "dsh-fairy-mascot-speed",
-						label: "大眼睛动画速度：",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-mascot-speed",
-							value: String(value("mascotAnimationSpeed")),
-							options: MASCOT_SPEED_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("mascotAnimationSpeed", Number(next))
-						})
-					}, "mascotAnimationSpeed"),
-					jsx(AskRow, {
-						id: "dsh-fairy-identity-mode",
-						label: "Fairy 当前将我识别为：",
-						children: jsx(AskSelect, {
-							id: "dsh-fairy-identity-mode",
-							value: value("mode"),
-							options: IDENTITY_MODE_OPTIONS,
-							disabled: !writable,
-							onChange: (next) => form.change("mode", next)
-						})
-					}, "mode"),
-					jsx("div", {
-						onBlur: flush,
-						children: customMode ? [
-							jsx(AskRow, {
-								id: "dsh-fairy-identity-custom-name",
-								label: "自定义称呼：",
-								children: jsx(AskText, {
-									id: "dsh-fairy-identity-custom-name",
-									value: value("customName"),
-									disabled: !writable,
-									onChange: (next) => form.change("customName", next.slice(0, 40))
-								})
-							}, "customName"),
-							jsx(AskRow, {
-								id: "dsh-fairy-identity-second-assistant",
-								label: "第二助手（可选）：",
-								children: jsx(AskText, {
-									id: "dsh-fairy-identity-second-assistant",
-									value: value("secondAssistant"),
-									disabled: !writable,
-									onChange: (next) => form.change("secondAssistant", next.slice(0, 40))
-								})
-							}, "secondAssistant"),
-							jsx(AskRow, {
-								id: "dsh-fairy-identity-household",
-								label: "家庭成员（可选，逗号分隔）：",
-								children: jsx(AskText, {
-									id: "dsh-fairy-identity-household",
-									value: value("household"),
-									disabled: !writable,
-									onChange: (next) => form.change("household", next.slice(0, 240))
-								})
-							}, "household")
-						] : null
-					}, "custom"),
-					jsx(AskActions, {
-						busy: form.busy,
-						status: writable ? form.status : ASK_TEXT.readOnly,
-						primary: ASK_TEXT.save,
-						onPrimary: submit,
-						writable
-					}, "actions")
-				]
-			});
-		}
 		function apply(ctx) {
 			return diagnostics.guard("apply", () => {
 				const settings = ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE });
@@ -8683,15 +8780,33 @@ html[data-dsh-fairy-visual][data-dsh-fairy-theme="light"] [data-dsh-fairy-mascot
 					name: "settings.section",
 					id: "dsh-fairy-visual",
 					order: 45,
-					label: () => "HDD 视觉与 Fairy 身份"
-				}, () => jsx(Settings, {
+					label: () => "HDD 视觉"
+				}, () => jsx(VisualSection, {
+					controller,
+					identitySettings
+				})));
+				ctx.slots.inject("settings.section", () => ctx.slots.register({
+					name: "settings.section",
+					id: "dsh-fairy-mascot",
+					order: 46,
+					label: () => "大眼睛主视觉"
+				}, () => jsx(MascotSection, {
+					controller,
+					identitySettings
+				})));
+				ctx.slots.inject("settings.section", () => ctx.slots.register({
+					name: "settings.section",
+					id: "dsh-fairy-identity",
+					order: 47,
+					label: () => "Fairy 身份"
+				}, () => jsx(IdentitySection, {
 					controller,
 					identitySettings
 				})));
 				ctx.slots.inject("settings.section", () => ctx.slots.register({
 					name: "settings.section",
 					id: "dsh-fairy-workshop",
-					order: 46,
+					order: 48,
 					label: () => "创作工坊"
 				}, () => jsx(Workshop, {})));
 			}, { surface: "client" });
